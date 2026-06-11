@@ -1,0 +1,488 @@
+services:
+  # SOURCE: PostgreSQL (CDC-ready) — Bước 2-3
+  postgres:
+    image: postgres:16-alpine
+    container_name: bigdata-source-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      REPLICATION_USER: ${REPLICATION_USER}
+      REPLICATION_PASSWORD: ${REPLICATION_PASSWORD}
+      APP_USER: ${APP_USER}
+      APP_PASSWORD: ${APP_PASSWORD}
+    ports:
+      - "5432:5432"
+    command:
+      - "postgres"
+      - "-c"
+      - "wal_level=logical"
+      - "-c"
+      - "max_replication_slots=5"
+      - "-c"
+      - "max_wal_senders=10"
+      - "-c"
+      - "max_worker_processes=8"
+      - "-c"
+      - "shared_buffers=256MB"
+      - "-c"
+      - "wal_keep_size=512MB"
+      - "-c"
+      - "log_min_duration_statement=500"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - bigdata-net
+
+  # EVENT BACKBONE: Kafka broker (KRaft mode, single node)
+  kafka:
+    image: confluentinc/cp-kafka:7.7.1
+    container_name: bigdata-kafka
+    restart: unless-stopped
+    ports:
+      - "29092:29092"   # listener cho host (tools chạy trên Windows kết nối qua đây)
+    environment:
+      # --- KRaft: node này vừa là broker vừa là controller ---
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"   # ID cố định cho KRaft cluster
+
+      # --- Listeners: 2 cổng - nội bộ (kafka:9092) và host (localhost:29092) ---
+      KAFKA_LISTENERS: "PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092,CONTROLLER://0.0.0.0:9093"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,CONTROLLER:PLAINTEXT"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
+
+      # --- Single node: mọi replication factor = 1 ---
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"   # cho Debezium tự tạo topic
+
+      # --- Giới hạn heap cho laptop ---
+      KAFKA_HEAP_OPTS: "-Xmx512M -Xms512M"
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks:
+      - bigdata-net
+
+  # INGEST: Kafka Connect + Debezium PostgreSQL connector — Bước 5
+  kafka-connect:
+    build:
+      context: ./kafka-connect
+      dockerfile: Dockerfile
+    image: bigdata-kafka-connect:latest
+    container_name: bigdata-kafka-connect
+    restart: unless-stopped
+    ports:
+      - "8083:8083"   # REST API để đăng ký connector
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      BOOTSTRAP_SERVERS: "kafka:9092"
+      GROUP_ID: "bigdata-connect-cluster"
+      CONFIG_STORAGE_TOPIC: "_connect_configs"
+      OFFSET_STORAGE_TOPIC: "_connect_offsets"
+      STATUS_STORAGE_TOPIC: "_connect_status"
+      CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      STATUS_STORAGE_REPLICATION_FACTOR: 1
+      # JSON converter mặc định cho worker (connector vẫn override sang Avro riêng)
+      KEY_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+      VALUE_CONVERTER: "org.apache.kafka.connect.json.JsonConverter"
+      CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE: "false"
+      CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
+      # BẬT converter Apicurio: nạp JAR Avro converter vào classpath.
+      # Thiếu dòng này => "Class io.apicurio...AvroConverter could not be found"
+      # ENABLE_APICURIO_CONVERTERS: "true"
+      CONNECT_KEY_CONVERTER: "io.confluent.connect.avro.AvroConverter"
+      CONNECT_VALUE_CONVERTER: "io.confluent.connect.avro.AvroConverter"
+      KAFKA_HEAP_OPTS: "-Xmx512M -Xms512M"
+    networks:
+      - bigdata-net
+
+  # Kafka UI: xem topic + message bằng giao diện (rất hữu ích để học)
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: bigdata-kafka-ui
+    restart: unless-stopped
+    ports:
+      - "8080:8080"   # mở http://localhost:8080 trên browser
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_CLUSTERS_0_NAME: "bigdata-local"
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: "kafka:9092"
+      KAFKA_CLUSTERS_0_KAFKACONNECT_0_NAME: "debezium"
+      KAFKA_CLUSTERS_0_KAFKACONNECT_0_ADDRESS: "http://kafka-connect:8083"
+      # Cho Kafka UI biết Schema Registry để decode Avro message trong giao diện.
+      # /apis/ccompat/v6 = endpoint tương thích Confluent của Apicurio
+      KAFKA_CLUSTERS_0_SCHEMAREGISTRY: "http://schema-registry:8081"
+      DYNAMIC_CONFIG_ENABLED: "true"
+    networks:
+      - bigdata-net
+
+  # SCHEMA REGISTRY: Apicurio (in-memory) — Bước 5.5
+  # Lưu Avro schema tập trung. Converter đã bundle sẵn trong image Debezium.
+  # apicurio:
+  #   image: apicurio/apicurio-registry-mem:2.6.2.Final
+  #   container_name: bigdata-apicurio
+  #   restart: unless-stopped
+  #   ports:
+  #     - "8081:8080"   # http://localhost:8081 → UI + API của Apicurio
+  #   networks:
+  #     - bigdata-net
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.7.1
+    container_name: bigdata-schema-registry
+    restart: unless-stopped
+    depends_on:
+      - kafka
+    ports:
+      - "8081:8081"
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_LISTENERS: "http://0.0.0.0:8081"
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: "kafka:9092"
+    networks:
+      - bigdata-net
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    container_name: bigdata-clickhouse
+    restart: unless-stopped
+    ports:
+      - "8123:8123"   
+    environment:
+      CLICKHOUSE_DB: metrics
+      CLICKHOUSE_USER: admin
+      CLICKHOUSE_PASSWORD: phantruong1
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - clickhouse_logs:/var/log/clickhouse-server
+    networks:
+      - bigdata-net
+
+  minio:
+    image: minio/minio:RELEASE.2024-12-18T13-15-44Z
+    container_name: bigdata-minio
+    restart: unless-stopped
+    ports:
+      - "9000:9000"   # S3 API endpoint (Flink dùng)
+      - "9001:9001"   # Web Console (browser)
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - bigdata-net
+
+  # Tự động tạo bucket "flink-checkpoints" lúc khởi động
+  minio-init:
+    image: minio/mc:RELEASE.2024-11-21T17-21-54Z
+    container_name: bigdata-minio-init
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+        sleep 5;
+        mc alias set local http://minio:9000 minioadmin minioadmin;
+        mc mb -p local/flink-checkpoints || true;
+        mc mb -p local/flink-savepoints || true;
+        echo 'MinIO buckets created';
+        exit 0;
+      "
+    networks:
+      - bigdata-net
+
+  
+  grafana:
+    image: grafana/grafana:11.4.0
+    container_name: bigdata-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_INSTALL_PLUGINS: grafana-clickhouse-datasource
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - bigdata-net
+
+
+
+  # FLINK CLUSTER — JobManager + 2 TaskManagers — Phase A
+  jobmanager:
+    build:
+      context: ./flink
+      dockerfile: Dockerfile
+    image: bigdata-pyflink:1.18.1
+    container_name: bigdata-flink-jobmanager
+    restart: unless-stopped
+    ports:
+      - "8082:8081"   # Flink Web UI (8081 đã dùng cho Apicurio nên remap)
+    command: jobmanager
+    environment:
+      FLINK_PROPERTIES: |-
+        jobmanager.rpc.address: jobmanager
+        jobmanager.memory.process.size: 1024m
+        state.checkpoints.dir: s3a://flink-checkpoints/checkpoints
+        state.savepoints.dir: s3a://flink-savepoints/savepoints
+        s3.endpoint: http://minio:9000
+        s3.access-key: minioadmin
+        s3.secret-key: minioadmin
+        s3.path.style.access: true
+        rest.flamegraph.enabled: true
+    volumes:
+      - ./flink/jobs:/opt/flink/jobs
+      - flink_checkpoints:/tmp/flink-checkpoints
+    networks:
+      - bigdata-net
+
+  taskmanager-1:
+    image: bigdata-pyflink:1.18.1
+    container_name: bigdata-flink-taskmanager-1
+    restart: unless-stopped
+    depends_on:
+      - jobmanager
+    command: taskmanager
+    environment:
+      FLINK_PROPERTIES: |-
+        jobmanager.rpc.address: jobmanager
+        taskmanager.numberOfTaskSlots: 2
+        taskmanager.memory.process.size: 1280m
+        state.checkpoints.dir: s3a://flink-checkpoints/checkpoints
+        state.savepoints.dir: s3a://flink-savepoints/savepoints
+        s3.endpoint: http://minio:9000
+        s3.access-key: minioadmin
+        s3.secret-key: minioadmin
+        s3.path.style.access: true
+
+        
+    volumes:
+      - ./flink/jobs:/opt/flink/jobs
+      - flink_checkpoints:/tmp/flink-checkpoints
+    networks:
+      - bigdata-net
+
+  taskmanager-2:
+    image: bigdata-pyflink:1.18.1
+    container_name: bigdata-flink-taskmanager-2
+    restart: unless-stopped
+    depends_on:
+      - jobmanager
+    command: taskmanager
+    environment:
+      FLINK_PROPERTIES: |-
+        jobmanager.rpc.address: jobmanager
+        taskmanager.numberOfTaskSlots: 2
+        taskmanager.memory.process.size: 1280m
+        state.checkpoints.dir: s3a://flink-checkpoints/checkpoints
+        state.savepoints.dir: s3a://flink-savepoints/savepoints
+        s3.endpoint: http://minio:9000
+        s3.access-key: minioadmin
+        s3.secret-key: minioadmin
+        s3.path.style.access: true
+    volumes:
+      - ./flink/jobs:/opt/flink/jobs
+      - flink_checkpoints:/tmp/flink-checkpoints
+    networks:
+      - bigdata-net
+  fraud-notifier:
+    build: ./fraud-notifier
+    container_name: bigdata-fraud-notifier
+    environment:
+      EMAIL_FROM: ${EMAIL_FROM}
+      EMAIL_TO: ${EMAIL_TO}
+      EMAIL_PASSWORD: ${EMAIL_PASSWORD}
+    depends_on:
+      - kafka
+    networks:
+      - bigdata-net
+    restart: unless-stopped
+
+  # Data Generator
+  generator:
+    build:
+      context: ./generator
+      dockerfile: Dockerfile
+    container_name: bigdata-generator
+    profiles: ["generator"]   # KHÔNG tự chạy với `docker compose up`
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PG_HOST: postgres
+      PG_PORT: 5432
+      PG_DB: ${POSTGRES_DB}
+      PG_USER: ${APP_USER}
+      PG_PASSWORD: ${APP_PASSWORD}
+      TARGET_RPS: "150"
+      PEAK_RPS: "800"
+      DURATION_SEC: "900"
+      BURST_PROBABILITY: "0.015"
+      PROB_TRANSFER: "0.20"
+      PROB_FAILURE: "0.05"
+    restart: "no"
+    networks:
+      - bigdata-net
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+    container_name: bigdata-elasticsearch
+    restart: unless-stopped
+    ports:
+      - "9200:9200"    # REST API
+    environment:
+      - discovery.type=single-node       # Không cluster discovery, dev mode
+      - xpack.security.enabled=false     # Tắt auth cho lab (production phải enable)
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m   # Heap 512MB (đủ cho lab)
+      - bootstrap.memory_lock=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    networks:
+      - bigdata-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.15.3
+    container_name: bigdata-kibana
+    restart: unless-stopped
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - SERVER_PUBLICBASEURL=http://localhost:5601
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - bigdata-net
+    
+  spark-master:
+    image: apache/spark:3.5.0
+    container_name: bigdata-spark-master
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master --host 0.0.0.0 --port 7077 --webui-port 8080
+    ports:
+      - "8090:8080"
+      - "7077:7077"
+    volumes:
+      - ./spark/jobs:/opt/spark-jobs
+    networks:
+      - bigdata-net
+
+  spark-worker:
+    image: apache/spark:3.5.0
+    container_name: bigdata-spark-worker
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077 --webui-port 8081 --cores 2 --memory 2g
+    ports:
+      - "8091:8081"
+    depends_on:
+      - spark-master
+    volumes:
+      - ./spark/jobs:/opt/spark-jobs
+    networks:
+      - bigdata-net
+
+  iceberg-rest:
+    image: tabulario/iceberg-rest:1.6.0
+    container_name: bigdata-iceberg-rest
+    ports:
+      - "8181:8181"
+    environment:
+      - AWS_ACCESS_KEY_ID=minioadmin
+      - AWS_SECRET_ACCESS_KEY=minioadmin
+      - AWS_REGION=us-east-1
+      - CATALOG_WAREHOUSE=s3://data-lake-iceberg/
+      - CATALOG_IO__IMPL=org.apache.iceberg.aws.s3.S3FileIO
+      - CATALOG_S3_ENDPOINT=http://minio:9000
+      - CATALOG_S3_PATH__STYLE__ACCESS=true
+    depends_on:
+      - minio
+    networks:
+      - bigdata-net
+  
+  trino:
+    image: trinodb/trino:432
+    container_name: bigdata-trino
+    ports:
+      - "8085:8080"
+    volumes:
+      - ./trino/etc/catalog:/etc/trino/catalog
+      - ./trino/etc/jvm.config:/etc/trino/jvm.config
+      - ./trino/etc/config.properties:/etc/trino/config.properties
+    depends_on:
+      - postgres
+      - clickhouse
+      - minio
+    networks:
+      - bigdata-net
+
+  dlq-processor:
+    build: ./dlq-processor
+    container_name: bigdata-dlq-processor
+    depends_on:
+      - kafka
+    networks:
+      - bigdata-net
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    name: bigdata_postgres_data
+  flink_checkpoints:
+    name: bigdata_flink_checkpoints
+  clickhouse_data:
+    name: bigdata_clickhouse_data
+  clickhouse_logs:
+    name: bigdata_clickhouse_logs
+  minio_data:
+    name: bigdata_minio_data
+  grafana_data:
+    name: bigdata_grafana_data
+  elasticsearch_data:
+    name: bigdata_elasticsearch_data
+
+networks:
+  bigdata-net:
+    name: bigdata-net
+    driver: bridge
+  
