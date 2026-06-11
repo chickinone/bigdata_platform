@@ -1,4 +1,3 @@
-
 # Fintech Real-time CDC & Lakehouse Platform
 
 <p align="center">
@@ -29,9 +28,6 @@ Dự án phù hợp để trình bày năng lực về **Data Engineering, CDC, 
 ---
 
 ## 2. Kiến trúc tổng quan
-
-> 📸 **Ảnh cần chèn:** `docs/images/01-architecture-overview.png`  
-> Gợi ý chụp/tạo ảnh: sơ đồ tổng thể toàn bộ pipeline từ PostgreSQL → Kafka → các lane xử lý → serving/lakehouse/monitoring.
 
 ```mermaid
 flowchart LR
@@ -90,10 +86,11 @@ flowchart LR
     end
 ```
 
-Dự án hiện có sẵn file `data_flow.png` trong thư mục gốc. Có thể dùng file này làm hình kiến trúc ban đầu hoặc thay bằng ảnh mới rõ hơn.
 
 ```md
-![Data Flow](data_flow.png)
+<p align="center">
+  <img src="assets/images/data_flow.png" alt="Data Flow" />
+</p>
 ```
 
 ---
@@ -133,9 +130,9 @@ bankdb.public.transactions
 bankdb.public.transfers
 ```
 
-> 📸 **Ảnh cần chèn:** `docs/images/02-kafka-topics.png`  
-> Gợi ý chụp: Kafka UI hiển thị các topic `bankdb.public.*`, `metrics.*`, `fraud-alerts`.
-
+<p align="center">
+  <img src="assets/images/kafka.png" alt="Kafka topics" />
+</p>
 ### 4.2 Lane 1 — Real-time Metrics
 
 Flink đọc topic `bankdb.public.transactions`, xử lý event-time và ghi kết quả ra các topic metrics:
@@ -158,9 +155,9 @@ metrics.topn
 
 Grafana kết nối ClickHouse để dựng dashboard realtime.
 
-> 📸 **Ảnh cần chèn:** `docs/images/03-grafana-dashboard.png`  
-> Gợi ý chụp: dashboard Grafana gồm transaction count, success rate, failed count, top accounts, volume theo thời gian.
-
+<p align="center">
+  <img src="assets/images/dashboard.png" alt="Grafana realtime dashboard" />
+</p>
 ### 4.3 Lane 3 — Fraud Detection
 
 Flink Fraud job đọc transaction stream và phát hiện hai nhóm cảnh báo:
@@ -178,9 +175,6 @@ fraud-alerts
 
 Sau đó fraud alert có thể được đẩy sang Elasticsearch để điều tra trên Kibana và được Fraud Notifier gửi cảnh báo qua email.
 
-> 📸 **Ảnh cần chèn:** `docs/images/04-fraud-alerts-kibana.png`  
-> Gợi ý chụp: Kibana Discover hoặc Dashboard hiển thị index fraud alert.
-
 ### 4.4 Lakehouse — Bronze, Silver, Gold
 
 Kafka Connect S3 Sink ghi CDC event vào MinIO dạng Parquet ở **Bronze layer**.
@@ -191,11 +185,9 @@ Spark batch jobs xử lý tiếp:
 - `build_gold_layer.py`: đọc Silver, tạo các bảng phân tích Gold như daily summary, customer lifetime metrics.
 - `silver_to_iceberg.py`: ghi Silver vào Iceberg table, tạo snapshot và demo time travel.
 
-> 📸 **Ảnh cần chèn:** `docs/images/05-minio-buckets.png`  
-> Gợi ý chụp: MinIO Console hiển thị bucket `data-lake-bronze`, `data-lake-silver`, `data-lake-gold`, `data-lake-iceberg`.
-
-> 📸 **Ảnh cần chèn:** `docs/images/06-iceberg-history.png`  
-> Gợi ý chụp: log Spark hoặc Trino query hiển thị Iceberg snapshots/history.
+<p align="center">
+  <img src="assets/images/MinIO.png" alt="MinIO buckets" />
+</p>
 
 ---
 
@@ -274,7 +266,17 @@ bigdata-platform/
 │       ├── catalog/
 │       ├── config.properties
 │       └── jvm.config
-├── data_flow.png
+├── assets/
+│   └── images/
+│       ├── DLQ.png
+│       ├── MinIO.png
+│       ├── dashboard.png
+│       ├── data_flow.png
+│       ├── fault.png
+│       ├── flink.png
+│       ├── kafka.png
+│       ├── postgres_source.png
+│       └── start.png
 ├── docker-compose.yml
 └── README.md
 ```
@@ -353,9 +355,9 @@ Xem log một service:
 docker logs -f bigdata-kafka-connect
 ```
 
-> 📸 **Ảnh cần chèn:** `docs/images/07-docker-containers.png`  
-> Gợi ý chụp: Docker Desktop hoặc terminal `docker compose ps` cho thấy các service đang running/healthy.
-
+<p align="center">
+  <img src="assets/images/start.png" alt="Docker containers started" />
+</p>
 ### 9.2 Khởi tạo ClickHouse schema
 
 Trong compose hiện tại, thư mục `clickhouse/init` chưa được mount vào entrypoint của ClickHouse, vì vậy có thể cần chạy schema thủ công.
@@ -398,9 +400,9 @@ Kiểm tra connector:
 curl http://localhost:8083/connectors/postgres-source-connector/status
 ```
 
-> 📸 **Ảnh cần chèn:** `docs/images/08-kafka-connect-source-status.png`  
-> Gợi ý chụp: Kafka Connect connector status `RUNNING`.
-
+<p align="center">
+  <img src="assets/images/postgres_source.png" alt="PostgreSQL source connector status" />
+</p>
 ### 9.4 Đăng ký Elasticsearch Sink Connectors
 
 ```bash
@@ -440,9 +442,6 @@ Các tham số mặc định trong compose:
 | `PROB_TRANSFER` | `0.20` | Tỷ lệ transfer. |
 | `PROB_FAILURE` | `0.05` | Tỷ lệ giao dịch thất bại. |
 
-> 📸 **Ảnh cần chèn:** `docs/images/09-generator-log.png`  
-> Gợi ý chụp: log generator hiển thị actual RPS, số transaction, transfer, failed/rejected.
-
 ### 9.7 Chạy Flink realtime metrics job
 
 Chạy job tổng hợp dashboard:
@@ -466,9 +465,9 @@ Kiểm tra Flink jobs:
 docker exec -it bigdata-flink-jobmanager flink list
 ```
 
-> 📸 **Ảnh cần chèn:** `docs/images/10-flink-jobs.png`  
-> Gợi ý chụp: Flink Web UI tại `http://localhost:8082` hiển thị job đang RUNNING.
-
+<p align="center">
+  <img src="assets/images/flink.png" alt="Flink running jobs" />
+</p>
 ### 9.8 Chạy Flink fraud detection job
 
 ```bash
@@ -513,9 +512,6 @@ docker exec -it bigdata-spark-master /opt/spark/bin/spark-submit \
   /opt/spark-jobs/silver_to_iceberg.py
 ```
 
-> 📸 **Ảnh cần chèn:** `docs/images/11-spark-silver-gold-log.png`  
-> Gợi ý chụp: log Spark hiển thị số dòng Bronze/Silver/Gold và output path.
-
 ### 9.10 Query bằng Trino
 
 Mở Trino CLI/container shell:
@@ -531,9 +527,6 @@ SHOW CATALOGS;
 SHOW SCHEMAS FROM postgres;
 SHOW TABLES FROM clickhouse.metrics;
 ```
-
-> 📸 **Ảnh cần chèn:** `docs/images/12-trino-query.png`  
-> Gợi ý chụp: terminal query Trino từ PostgreSQL/ClickHouse/Iceberg.
 
 ---
 
@@ -656,9 +649,6 @@ Các panel nên có:
 - Top 10 accounts theo transaction count/volume.
 - Alert count nếu kết nối thêm fraud alert metrics.
 
-> 📸 **Ảnh cần chèn:** `docs/images/13-grafana-panel-detail.png`  
-> Gợi ý chụp: một dashboard hoàn chỉnh, có filter time range và nhiều panel.
-
 ### 13.2 Kibana dashboard
 
 Các view nên có:
@@ -668,9 +658,6 @@ Các view nên có:
 - Alert type distribution.
 - High-risk accounts.
 - Failed transactions gần nhất.
-
-> 📸 **Ảnh cần chèn:** `docs/images/14-kibana-dashboard-detail.png`  
-> Gợi ý chụp: Kibana Discover hoặc Lens dashboard về fraud alert.
 
 ---
 
@@ -690,9 +677,13 @@ Hệ thống có các điểm theo dõi chính:
 | MinIO Console | File Parquet theo layer và partition. |
 | DLQ Processor | Phân loại lỗi connector nếu DLQ topics được cấu hình. |
 
-> 📸 **Ảnh cần chèn:** `docs/images/15-observability-overview.png`  
-> Gợi ý chụp: ghép các màn hình Flink UI, Kafka UI, Grafana, Kibana, MinIO.
+<p align="center">
+  <img src="assets/images/fault.png" alt="Fault handling and observability" />
+</p>
 
+<p align="center">
+  <img src="assets/images/DLQ.png" alt="Dead-letter queue processor" />
+</p>
 ---
 
 ## 15. Troubleshooting
@@ -797,25 +788,19 @@ Các điểm cần cải thiện nếu production hóa:
 
 ---
 
-## 18. Checklist ảnh cần bổ sung
+## 18. Checklist ảnh đã có trong README
 
-| Vị trí | File ảnh đề xuất | Nội dung ảnh |
+| Vị trí | File ảnh | Nội dung ảnh |
 |---|---|---|
-| Kiến trúc tổng quan | `docs/images/01-architecture-overview.png` | Sơ đồ toàn bộ pipeline. |
-| Kafka topics | `docs/images/02-kafka-topics.png` | Kafka UI hiển thị topic CDC/metrics/fraud. |
-| Grafana dashboard | `docs/images/03-grafana-dashboard.png` | Dashboard realtime từ ClickHouse. |
-| Fraud alerts | `docs/images/04-fraud-alerts-kibana.png` | Kibana fraud alert. |
-| MinIO buckets | `docs/images/05-minio-buckets.png` | Bronze/Silver/Gold/Iceberg buckets. |
-| Iceberg history | `docs/images/06-iceberg-history.png` | Snapshot/history/time travel. |
-| Docker containers | `docs/images/07-docker-containers.png` | Các service đang running. |
-| Kafka Connect status | `docs/images/08-kafka-connect-source-status.png` | Connector status RUNNING. |
-| Generator log | `docs/images/09-generator-log.png` | RPS và số transaction sinh ra. |
-| Flink jobs | `docs/images/10-flink-jobs.png` | Flink UI job running/checkpoint. |
-| Spark logs | `docs/images/11-spark-silver-gold-log.png` | Spark build Silver/Gold. |
-| Trino query | `docs/images/12-trino-query.png` | Query từ Trino CLI/UI. |
-| Grafana detail | `docs/images/13-grafana-panel-detail.png` | Panel chi tiết. |
-| Kibana detail | `docs/images/14-kibana-dashboard-detail.png` | Dashboard/Discover chi tiết. |
-| Observability | `docs/images/15-observability-overview.png` | Tổng quan monitoring. |
+| Kiến trúc tổng quan | `assets/images/data_flow.png` | Sơ đồ toàn bộ pipeline. |
+| Kafka topics | `assets/images/kafka.png` | Kafka UI hiển thị topic CDC/metrics/fraud. |
+| Grafana dashboard | `assets/images/dashboard.png` | Dashboard realtime từ ClickHouse. |
+| MinIO buckets | `assets/images/MinIO.png` | Bucket/layer dữ liệu trên MinIO. |
+| Docker containers | `assets/images/start.png` | Các service đã khởi động. |
+| Kafka Connect source | `assets/images/postgres_source.png` | Trạng thái PostgreSQL source connector. |
+| Flink jobs | `assets/images/flink.png` | Flink job running/checkpoint. |
+| Observability/Fault | `assets/images/fault.png` | Theo dõi lỗi hoặc trạng thái bất thường. |
+| DLQ Processor | `assets/images/DLQ.png` | Dead-letter queue / DLQ processor. |
 
 ---
 
