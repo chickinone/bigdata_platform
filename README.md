@@ -1,3 +1,4 @@
+
 # Fintech Real-time CDC & Lakehouse Platform
 
 <p align="center">
