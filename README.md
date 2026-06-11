@@ -28,70 +28,9 @@ Dự án phù hợp để trình bày năng lực về **Data Engineering, CDC, 
 ---
 
 ## 2. Kiến trúc tổng quan
-
-```mermaid
-flowchart LR
-    subgraph Source[Source System]
-        PG[(PostgreSQL bankdb)]
-        GEN[Data Generator]
-        GEN --> PG
-    end
-
-    subgraph Ingestion[CDC & Event Backbone]
-        DBZ[Debezium PostgreSQL Connector]
-        KAFKA[(Kafka KRaft)]
-        SR[Schema Registry]
-        UI[Kafka UI]
-        PG -->|WAL / Logical Replication| DBZ
-        DBZ -->|Avro CDC Events| KAFKA
-        DBZ --> SR
-        UI --> KAFKA
-    end
-
-    subgraph Streaming[Real-time Processing]
-        FLINK1[Flink Lane 1\nReal-time Metrics]
-        FLINK3[Flink Lane 3\nFraud Detection]
-        KAFKA --> FLINK1
-        KAFKA --> FLINK3
-    end
-
-    subgraph Serving[Serving & Dashboard]
-        CH[(ClickHouse)]
-        GRAFANA[Grafana]
-        ES[(Elasticsearch)]
-        KIBANA[Kibana]
-        FLINK1 -->|metrics.* topics| KAFKA
-        KAFKA -->|Kafka Engine / MV| CH
-        CH --> GRAFANA
-        FLINK3 -->|fraud-alerts| KAFKA
-        KAFKA --> ES
-        ES --> KIBANA
-    end
-
-    subgraph Lakehouse[Batch & Lakehouse]
-        S3SINK[Kafka Connect S3 Sink]
-        MINIO[(MinIO Object Storage)]
-        SPARK[Spark Batch Jobs]
-        ICEBERG[(Apache Iceberg)]
-        TRINO[Trino SQL Engine]
-        KAFKA --> S3SINK
-        S3SINK -->|Bronze Parquet| MINIO
-        MINIO --> SPARK
-        SPARK -->|Silver / Gold| MINIO
-        SPARK --> ICEBERG
-        ICEBERG --> TRINO
-        MINIO --> TRINO
-        CH --> TRINO
-        PG --> TRINO
-    end
-```
-
-
-```md
 <p align="center">
   <img src="assets/images/data_flow.png" alt="Data Flow" />
 </p>
-```
 
 ---
 
