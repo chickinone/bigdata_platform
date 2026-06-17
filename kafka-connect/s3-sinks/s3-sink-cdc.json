@@ -1,0 +1,43 @@
+{
+  "name": "s3-sink-cdc",
+  "config": {
+    "connector.class": "io.confluent.connect.s3.S3SinkConnector",
+    "tasks.max": "2",
+
+    "topics": "bankdb.public.customers,bankdb.public.accounts,bankdb.public.transactions,bankdb.public.transfers",
+
+    "s3.bucket.name": "${env:S3_BUCKET_BRONZE}",
+    "s3.region": "${env:S3_REGION}",
+    "store.url": "${env:S3_ENDPOINT}",
+    "aws.access.key.id": "${env:S3_ACCESS_KEY}",
+    "aws.secret.access.key": "${env:S3_SECRET_KEY}",
+    "s3.path.style.access.enabled": "${env:S3_PATH_STYLE_ACCESS}",
+
+    "storage.class": "io.confluent.connect.s3.storage.S3Storage",
+    "format.class": "io.confluent.connect.s3.format.parquet.ParquetFormat",
+    "parquet.codec": "snappy",
+
+    "key.converter": "io.confluent.connect.avro.AvroConverter",
+    "key.converter.schema.registry.url": "${env:SCHEMA_REGISTRY_URL}",
+    "value.converter": "io.confluent.connect.avro.AvroConverter",
+    "value.converter.schema.registry.url": "${env:SCHEMA_REGISTRY_URL}",
+
+    "flush.size": "1000",
+    "rotate.interval.ms": "300000",
+    "rotate.schedule.interval.ms": "600000",
+
+    "partitioner.class": "io.confluent.connect.storage.partitioner.TimeBasedPartitioner",
+    "partition.duration.ms": "3600000",
+    "path.format": "'year'=YYYY/'month'=MM/'day'=dd/'hour'=HH",
+    "timestamp.extractor": "Record",
+    "locale": "en-US",
+    "timezone": "UTC",
+
+    "schema.compatibility": "NONE",
+
+    "transforms": "unwrap",
+    "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
+    "transforms.unwrap.drop.tombstones": "false",
+    "transforms.unwrap.delete.handling.mode": "rewrite"
+  }
+}

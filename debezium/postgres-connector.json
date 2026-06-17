@@ -1,0 +1,45 @@
+{
+  "name": "postgres-source-connector",
+  "config": {
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "tasks.max": "1",
+
+    "database.hostname": "${env:POSTGRES_HOST}",
+    "database.port": "${env:POSTGRES_PORT}",
+    "database.user": "${env:REPLICATION_USER}",
+    "database.password": "${env:REPLICATION_PASSWORD}",
+    "database.dbname": "${env:POSTGRES_DB}",
+
+    "plugin.name": "pgoutput",
+    "slot.name": "debezium_slot",
+    "publication.name": "dbz_publication",
+    "publication.autocreate.mode": "disabled",
+
+    "topic.prefix": "bankdb",
+    "table.include.list": "public.customers,public.accounts,public.transactions,public.transfers",
+
+    "snapshot.mode": "initial",
+    "decimal.handling.mode": "string",
+    "time.precision.mode": "adaptive",
+    "heartbeat.interval.ms": "10000",
+    "tombstones.on.delete": "false",
+
+    "key.converter": "io.confluent.connect.avro.AvroConverter",
+    "key.converter.schema.registry.url": "${env:SCHEMA_REGISTRY_URL}",
+    "key.converter.apicurio.registry.auto-register": "true",
+    "key.converter.apicurio.registry.find-latest": "true",
+    "key.converter.apicurio.registry.as-confluent": "true",
+    "key.converter.apicurio.registry.id-handler": "io.apicurio.registry.serde.Legacy4ByteIdHandler",
+
+    "value.converter": "io.confluent.connect.avro.AvroConverter",
+    "value.converter.schema.registry.url": "${env:SCHEMA_REGISTRY_URL}",
+    "value.converter.apicurio.registry.auto-register": "true",
+    "value.converter.apicurio.registry.find-latest": "true",
+    "value.converter.apicurio.registry.as-confluent": "true",
+    "value.converter.apicurio.registry.id-handler": "io.apicurio.registry.serde.Legacy4ByteIdHandler",
+
+    "schema.name.adjustment.mode": "avro"
+
+    
+  }
+}
