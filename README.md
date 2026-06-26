@@ -571,22 +571,7 @@ data-lake-iceberg
 ```
 
 ---
-
-## 13. Dashboard gợi ý
-
-### 13.1 Grafana dashboard
-
-Các panel nên có:
-
-- Transaction count theo thời gian.
-- Total transaction volume theo thời gian.
-- Success rate.
-- Failed transaction count.
-- Breakdown theo transaction type.
-- Top 10 accounts theo transaction count/volume.
-- Alert count nếu kết nối thêm fraud alert metrics.
-
-### 13.2 Kibana dashboard
+### 13 Kibana dashboard
 
 Kibana dùng để search/investigation trên dữ liệu đã được Kafka Connect ghi vào Elasticsearch.
 Các index chính:
@@ -605,7 +590,7 @@ Kibana dashboard trong dự án này tập trung vào **điều tra giao dịch 
   <img src="assets/images/dashboard_els.png" alt="Kibana fraud investigation dashboard" />
 </p>
 
-#### 13.2.1 Tạo Data Views
+#### 13.1.1 Tạo Data Views
 
 Mở Kibana:
 
@@ -635,7 +620,7 @@ Kiểm tra index đã có dữ liệu:
 curl.exe http://localhost:9200/_cat/indices?v
 ```
 
-#### 13.2.2 Search customers/accounts/transactions/transfers
+#### 13.1.2 Search customers/accounts/transactions/transfers
 
 Các bảng tra cứu nên tạo bằng **Discover saved search** thay vì Lens, vì mục tiêu là xem document chi tiết và filter theo field.
 
@@ -673,7 +658,7 @@ Sau khi chọn field và filter xong, bấm `Save` để lưu thành saved searc
 Dashboard → Add from library
 ```
 
-#### 13.2.3 Fraud alerts theo thời gian
+#### 13.1.3 Fraud alerts theo thời gian
 
 Nếu data view `fraud-alerts` có time field hợp lệ, tạo Lens:
 
@@ -695,7 +680,7 @@ Rows: alert_type.keyword, severity.keyword, account_id
 Metric: Count
 ```
 
-#### 13.2.4 Alert type distribution
+#### 13.1.4 Alert type distribution
 
 Tạo Lens:
 
@@ -713,7 +698,7 @@ VELOCITY_FRAUD
 FAILED_STORM
 ```
 
-#### 13.2.5 High-risk accounts
+#### 13.1.5 High-risk accounts
 
 Tạo bằng `Discover`:
 
@@ -735,7 +720,7 @@ Save as: Suspicious Accounts
 
 Ghi chú: `balance` trong Elasticsearch có thể đang được map dạng text/keyword tùy connector schema, vì vậy nếu filter `balance > 10000` không chạy đúng thì ưu tiên filter theo `status`.
 
-#### 13.2.6 Failed transactions gần nhất
+#### 13.1.6 Failed transactions gần nhất
 
 Tạo bằng `Discover`:
 
@@ -764,17 +749,7 @@ Y-axis: Count of records
 Save as: Failed Transactions Over Time
 ```
 
-#### 13.2.7 Transfers Search
 
-Tạo bằng `Discover`:
-
-```text
-Data view: bankdb.public.transfers
-KQL: status.keyword : "failed"
-Columns: transfer_id, from_account_id, to_account_id, amount, currency, status, failure_reason, initiated_at, completed_at, updated_at
-Sort: updated_at descending
-Save as: Transfers Search
-```
 
 Nếu muốn xem toàn bộ transfer lifecycle, để trống KQL và chỉ sort theo `updated_at`.
 
