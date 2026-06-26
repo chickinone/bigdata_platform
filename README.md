@@ -246,10 +246,6 @@ bigdata-platform/
 ## 8. Cấu hình môi trường
 
 Tạo file `.env` tại thư mục gốc project.
-
-> ⚠️ **Không commit `.env` thật lên GitHub.**  
-> File `.env` có thể chứa mật khẩu database và Gmail App Password. Nên tạo `.env.example` để public, còn `.env` thật đưa vào `.gitignore`.
-
 Ví dụ `.env.example`:
 
 ```env
@@ -749,13 +745,3 @@ Các điểm cần cải thiện nếu production hóa:
 Data Engineering Project — Fintech CDC, Streaming & Lakehouse Platform
 
 ---
-
-## 20. Ghi chú
-
-README này được viết theo hướng **professional portfolio/project documentation**. Khi đưa lên GitHub, nên bổ sung thêm:
-
-- Ảnh dashboard thật.
-- File `.env.example` đã ẩn secret.
-- `.gitignore` loại bỏ `.env`, logs, local data.
-- Export Grafana dashboard JSON nếu có.
-- Mô tả kết quả benchmark nếu muốn chứng minh throughput.
