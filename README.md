@@ -210,11 +210,13 @@ bigdata-platform/
 │       ├── DLQ.png
 │       ├── MinIO.png
 │       ├── dashboard.png
+│       ├── dashboard_els.png
 │       ├── data_flow.png
 │       ├── fault.png
 │       ├── flink.png
 │       ├── kafka.png
 │       ├── postgres_source.png
+│       ├── search.png
 │       └── start.png
 ├── docker-compose.yml
 └── README.md
@@ -586,13 +588,218 @@ Các panel nên có:
 
 ### 13.2 Kibana dashboard
 
-Các view nên có:
+Kibana dùng để search/investigation trên dữ liệu đã được Kafka Connect ghi vào Elasticsearch.
+Các index chính:
 
-- Search customers/accounts/transactions/transfers.
-- Fraud alerts theo thời gian.
-- Alert type distribution.
-- High-risk accounts.
-- Failed transactions gần nhất.
+```text
+bankdb.public.customers
+bankdb.public.accounts
+bankdb.public.transactions
+bankdb.public.transfers
+fraud-alerts
+```
+
+Kibana dashboard trong dự án này tập trung vào **điều tra giao dịch lỗi và fraud alert**, khác với Grafana dashboard vốn dùng để theo dõi realtime metrics từ ClickHouse.
+
+<p align="center">
+  <img src="assets/images/dashboard_els.png" alt="Kibana fraud investigation dashboard" />
+</p>
+
+#### 13.2.1 Tạo Data Views
+
+Mở Kibana:
+
+```text
+http://localhost:5601
+```
+
+Vào:
+
+```text
+Stack Management → Data Views → Create data view
+```
+
+Tạo các data view sau:
+
+| Data view | Time field khuyến nghị | Mục đích |
+|---|---|---|
+| `bankdb.public.customers` | `updated_at` hoặc `created_at` | Tra cứu customer, KYC, risk score. |
+| `bankdb.public.accounts` | `updated_at` hoặc `opened_at` | Tra cứu account, balance, status. |
+| `bankdb.public.transactions` | `created_at` | Phân tích transaction và giao dịch lỗi. |
+| `bankdb.public.transfers` | `updated_at` hoặc `initiated_at` | Theo dõi lifecycle chuyển tiền. |
+| `fraud-alerts` | Không chọn time field nếu Kibana chưa nhận `*_ms` là date | Điều tra cảnh báo fraud. |
+
+Kiểm tra index đã có dữ liệu:
+
+```powershell
+curl.exe http://localhost:9200/_cat/indices?v
+```
+
+#### 13.2.2 Search customers/accounts/transactions/transfers
+
+Các bảng tra cứu nên tạo bằng **Discover saved search** thay vì Lens, vì mục tiêu là xem document chi tiết và filter theo field.
+
+Vào `Discover`, chọn lần lượt các data view:
+
+```text
+bankdb.public.customers
+bankdb.public.accounts
+bankdb.public.transactions
+bankdb.public.transfers
+```
+
+Các field nên pin trong bảng:
+
+| View | Field nên hiển thị |
+|---|---|
+| Customers | `customer_id`, `full_name`, `email`, `country_code`, `kyc_status`, `risk_score`, `updated_at` |
+| Accounts | `account_id`, `customer_id`, `account_number`, `account_type`, `currency`, `balance`, `status`, `updated_at` |
+| Transactions | `transaction_id`, `account_id`, `transaction_type`, `amount`, `currency`, `status`, `merchant_category`, `created_at` |
+| Transfers | `transfer_id`, `from_account_id`, `to_account_id`, `amount`, `currency`, `status`, `failure_reason`, `updated_at` |
+
+Query/filter hay dùng:
+
+```text
+status: "failed"
+transaction_type: "withdrawal"
+amount > 1000
+risk_score >= 80
+status: "frozen"
+```
+
+Sau khi chọn field và filter xong, bấm `Save` để lưu thành saved search rồi đưa vào dashboard bằng:
+
+```text
+Dashboard → Add from library
+```
+
+#### 13.2.3 Fraud alerts theo thời gian
+
+Nếu data view `fraud-alerts` có time field hợp lệ, tạo Lens:
+
+```text
+Dashboard → Create visualization → Lens
+Data view: fraud-alerts
+Chart: Bar vertical hoặc Line
+X-axis: date histogram theo time field
+Y-axis: Count
+Breakdown: alert_type.keyword
+```
+
+Nếu Kibana chưa nhận `window_start_ms`, `window_end_ms`, `detected_at_ms` là date, dùng tạm table investigation:
+
+```text
+Data view: fraud-alerts
+Chart: Data table
+Rows: alert_type.keyword, severity.keyword, account_id
+Metric: Count
+```
+
+#### 13.2.4 Alert type distribution
+
+Tạo Lens:
+
+```text
+Data view: fraud-alerts
+Chart: Donut hoặc Pie
+Slice by: alert_type.keyword
+Metric: Count
+```
+
+Các alert hiện tại từ Flink:
+
+```text
+VELOCITY_FRAUD
+FAILED_STORM
+```
+
+#### 13.2.5 High-risk accounts
+
+Tạo bằng `Discover`:
+
+```text
+Data view: bankdb.public.customers
+KQL: risk_score >= 80
+Columns: customer_id, full_name, email, country_code, kyc_status, risk_score, created_at, updated_at
+Save as: High-risk Customers
+```
+
+Nếu muốn xem account có trạng thái bất thường, tạo thêm saved search:
+
+```text
+Data view: bankdb.public.accounts
+KQL: status.keyword: "frozen" OR status.keyword: "suspended"
+Columns: account_id, customer_id, account_number, account_type, currency, balance, status, opened_at, updated_at
+Save as: Suspicious Accounts
+```
+
+Ghi chú: `balance` trong Elasticsearch có thể đang được map dạng text/keyword tùy connector schema, vì vậy nếu filter `balance > 10000` không chạy đúng thì ưu tiên filter theo `status`.
+
+#### 13.2.6 Failed transactions gần nhất
+
+Tạo bằng `Discover`:
+
+```text
+Data view: bankdb.public.transactions
+KQL: status.keyword : "failed"
+Columns: transaction_id, account_id, transaction_type, amount, currency, merchant_category, description, created_at, status
+Sort: created_at descending
+Save as: Latest Failed Transactions
+```
+
+Kết quả search failed transactions:
+
+<p align="center">
+  <img src="assets/images/search.png" alt="Kibana Discover failed transactions" />
+</p>
+
+Tạo thêm chart tổng hợp bằng `Lens`:
+
+```text
+Data view: bankdb.public.transactions
+Chart: Bar vertical
+Filter: status.keyword : "failed"
+X-axis: date histogram created_at
+Y-axis: Count of records
+Save as: Failed Transactions Over Time
+```
+
+#### 13.2.7 Transfers Search
+
+Tạo bằng `Discover`:
+
+```text
+Data view: bankdb.public.transfers
+KQL: status.keyword : "failed"
+Columns: transfer_id, from_account_id, to_account_id, amount, currency, status, failure_reason, initiated_at, completed_at, updated_at
+Sort: updated_at descending
+Save as: Transfers Search
+```
+
+Nếu muốn xem toàn bộ transfer lifecycle, để trống KQL và chỉ sort theo `updated_at`.
+
+#### 13.2.8 Layout dashboard đề xuất
+
+Tạo dashboard mới:
+
+```text
+Dashboard → Create dashboard
+```
+
+Sắp xếp panel:
+
+| Hàng | Panel |
+|---|---|
+| 1 | Alert Type Distribution, Failed Transactions Over Time |
+| 2 | Fraud Alerts Investigation, Latest Failed Transactions |
+| 3 | High-risk Customers, Suspicious Accounts |
+| 4 | Transfers Search, Search customers/accounts |
+
+Dashboard này nên dùng cho luồng demo điều tra:
+
+```text
+Fraud alert → account_id → failed transactions → account/customer detail → transfer lifecycle
+```
 
 ---
 
@@ -730,6 +937,8 @@ Các điểm cần cải thiện nếu production hóa:
 | Kiến trúc tổng quan | `assets/images/data_flow.png` | Sơ đồ toàn bộ pipeline. |
 | Kafka topics | `assets/images/kafka.png` | Kafka UI hiển thị topic CDC/metrics/fraud. |
 | Grafana dashboard | `assets/images/dashboard.png` | Dashboard realtime từ ClickHouse. |
+| Kibana dashboard | `assets/images/dashboard_els.png` | Dashboard điều tra fraud/failed transactions trên Kibana. |
+| Kibana Discover search | `assets/images/search.png` | Search failed transactions trong Elasticsearch bằng Kibana Discover. |
 | MinIO buckets | `assets/images/MinIO.png` | Bucket/layer dữ liệu trên MinIO. |
 | Docker containers | `assets/images/start.png` | Các service đã khởi động. |
 | Kafka Connect source | `assets/images/postgres_source.png` | Trạng thái PostgreSQL source connector. |

@@ -22,7 +22,6 @@ log = logging.getLogger('fraud-notifier')
 
 TOPIC = 'fraud-alerts'
 
-# Gmail SMTP config — load từ environment
 SMTP_HOST = os.getenv('SMTP_HOST', 'smtp.gmail.com')
 SMTP_PORT = int(os.getenv('SMTP_PORT', '587'))
 EMAIL_FROM = os.getenv('EMAIL_FROM', '')
@@ -42,11 +41,9 @@ SEVERITY_FALLBACK = {
     'LARGE_AMOUNT': 'HIGH',
 }
 
-# Email throttle: max 1 email/account mỗi 5 phút
 LAST_EMAIL_BY_ACCOUNT = {}
 EMAIL_COOLDOWN_SEC = 300
 
-# Severity nào sẽ gửi email
 EMAIL_ON_SEVERITY = {'HIGH', 'MEDIUM'}
 
 CLICKHOUSE_URL = (
