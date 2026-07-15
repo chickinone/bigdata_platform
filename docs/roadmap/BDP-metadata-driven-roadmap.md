@@ -128,14 +128,20 @@ metadata/
     batch/             # spark bronze->silver->gold
     serving/           # clickhouse mv, es sinks, s3 sink
   quality/             # rule chất lượng theo dataset
-platform/
+dataplatform/          # KHÔNG đặt tên `platform/` — trùng module stdlib, xem ADR-0016
+  registry.py          # đọc + validate contract
+  cli.py               # check / write / show
+  schemas/             # JSON Schema để validate chính metadata
   generators/          # code render artifact từ metadata
   deployers/           # code áp artifact (idempotent)
-  schemas/             # JSON Schema để validate chính metadata
   runtime/
     flink_runner/      # engine Flink SQL tổng quát đọc pipeline spec
     spark_runner/      # engine Spark medallion tổng quát
 ```
+
+> **Đã sửa so với bản đầu:** thư mục này ban đầu được đề xuất là `platform/`. Đó là tên của một module
+> chuẩn trong Python — biến nó thành package sẽ che mất stdlib và làm hỏng mọi thư viện gọi
+> `import platform`. Xem [ADR-0016](../decisions/0016-rename-platform-to-dataplatform.md).
 
 ---
 

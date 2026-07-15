@@ -1,0 +1,8 @@
+# Phụ thuộc của control plane (dataplatform/) — chỉ dùng lúc phát triển,
+# không đi vào runtime của bất kỳ service nào trong docker-compose.
+#
+#   pip install -r requirements-dev.txt
+#   python -m dataplatform.cli check
+
+PyYAML>=6.0          # đọc dataset contract
+jsonschema>=4.0      # validate contract theo dataplatform/schemas/*.json

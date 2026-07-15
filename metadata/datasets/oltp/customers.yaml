@@ -1,0 +1,36 @@
+# Dimension chậm thay đổi. Chứa PII -> mọi cột PII đánh dấu tường minh để
+# sau này catalog/lineage trả lời được câu "PII nằm ở đâu?" mà không cần đọc code.
+urn: bank.public.customers
+kind: source_table
+layer: oltp
+owner: team-core-banking
+description: Khách hàng - thông tin định danh, trạng thái KYC, điểm rủi ro.
+
+source:
+  type: cdc_debezium
+  connection: postgres_main
+  schema_name: public
+  table: customers
+  # DEFAULT: dimension chậm đổi, before-image không đáng giá WAL. Xem ADR-0004.
+  replica_identity: default
+  topic: bankdb.public.customers
+
+primary_key: customer_id
+
+columns:
+  - { name: customer_id,  type: long,   nullable: false, pk: true }
+  - { name: full_name,    type: string, nullable: false, pii: true }
+  - { name: email,        type: string, nullable: false, pii: true }
+  - { name: phone,        type: string, pii: true }
+  - { name: country_code, type: string, nullable: false }
+  - { name: kyc_status,   type: string, nullable: false, description: "pending|verified|rejected|expired" }
+  - { name: risk_score,   type: int,    nullable: false, description: "0-100. >=80 coi la rui ro cao." }
+  - { name: created_at,   type: timestamp, nullable: false }
+  # updated_at la khoa dedup ve current state o Silver (enrich_transactions.py).
+  - { name: updated_at,   type: timestamp, nullable: false, description: "Khoá dedup về current state ở Silver." }
+
+sinks:
+  elasticsearch: { enabled: true }
+  s3_bronze:     { enabled: true }
+
+tags: [banking, dimension, pii]

@@ -1,0 +1,30 @@
+# KHONG phai bang nguon. Day la stream do chinh Flink Lane 3 sinh ra.
+# Contract nay ton tai de chung minh mo hinh chiu duoc dataset KHAC KHUON:
+# no khong co CDC, khong co PK, khong co envelope Debezium, va vi vay ES sink
+# cua no phai co hinh dang khac han 4 cai kia.
+urn: bank.alerts.fraud_alerts
+kind: stream
+layer: alert
+owner: team-fraud
+description: >-
+  Cảnh báo gian lận do Flink Lane 3 phát ra. Hình dạng message KHÁC NHAU theo
+  alert_type (VELOCITY_FRAUD vs FAILED_STORM) nên không khai columns - đây là
+  JSON tự do, không phải bảng có schema cố định.
+
+source:
+  # app_json: ung dung tu ghi thang JSON chuoi (SimpleStringSchema), khong qua
+  # Debezium, khong co Avro, khong co envelope {op,ts_ms,after}.
+  # Chinh truong nay lai generator sang mot khuon config hoan toan khac.
+  type: app_json
+  topic: fraud-alerts
+
+# KHONG co primary_key: alert khong co khoa tu nhien.
+# Hau qua truc tiep: ES phai tu sinh _id -> chi append duoc, khong upsert duoc.
+# Generator suy ra dieu do TU VIEC THIEU truong nay, khong can ai khai them.
+
+sinks:
+  elasticsearch: { enabled: true }
+  # KHONG co s3_bronze: fraud-alerts khong nam trong s3-sink-cdc topics.
+  # Alert la du lieu phai sinh, khong phai du lieu nguon can luu tru lau dai.
+
+tags: [fraud, alert, generated]

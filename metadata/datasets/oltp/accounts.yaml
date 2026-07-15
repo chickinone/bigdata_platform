@@ -1,0 +1,37 @@
+# Semi-dimension. balance doi lien tuc -> day la 1 trong 2 bang duy nhat can FULL.
+urn: bank.public.accounts
+kind: source_table
+layer: oltp
+owner: team-core-banking
+description: Tài khoản ngân hàng - số dư cập nhật liên tục.
+
+source:
+  type: cdc_debezium
+  connection: postgres_main
+  schema_name: public
+  table: accounts
+  # FULL: "so du doi tu bao nhieu sang bao nhieu" la cau hoi audit cot loi cua
+  # ngan hang, va khong tra loi duoc neu thieu before-image. Gia phai tra la WAL
+  # phinh to hon. Chap nhan co y thuc - xem ADR-0004.
+  replica_identity: full
+  topic: bankdb.public.accounts
+
+primary_key: account_id
+
+columns:
+  - { name: account_id,     type: long,   nullable: false, pk: true }
+  - { name: customer_id,    type: long,   nullable: false, description: "FK -> customers" }
+  - { name: account_number, type: string, nullable: false, pii: true }
+  - { name: account_type,   type: string, nullable: false, description: "checking|savings|credit|investment" }
+  - { name: currency,       type: string, nullable: false }
+  - { name: balance,        type: "decimal(19,4)", nullable: false, encoded_as: string, description: "Ly do bang nay dung REPLICA IDENTITY FULL." }
+  - { name: status,         type: string, nullable: false, description: "active|frozen|closed|suspended" }
+  - { name: opened_at,      type: timestamp, nullable: false }
+  - { name: closed_at,      type: timestamp }
+  - { name: updated_at,     type: timestamp, nullable: false, description: "Khoá dedup về current state ở Silver." }
+
+sinks:
+  elasticsearch: { enabled: true }
+  s3_bronze:     { enabled: true }
+
+tags: [banking, dimension]

@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bigdata-platform/schemas/dataset.schema.json",
+  "title": "Dataset contract",
+  "description": "Khai báo MỘT thực thể dữ liệu đúng một lần. Mọi artifact của thực thể đó (connector JSON, DDL Flink, DDL ClickHouse...) đều được sinh ra từ file này.",
+
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["urn", "kind", "layer", "owner", "source"],
+
+  "properties": {
+    "urn": {
+      "description": "Định danh duy nhất toàn hệ thống. Quy ước: <domain>.<schema>.<table>",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$"
+    },
+
+    "kind": {
+      "description": "Bản chất của dataset. Quyết định generator nào áp dụng được cho nó.",
+      "enum": ["source_table", "stream", "olap_table", "lake_table", "index"]
+    },
+
+    "layer": {
+      "description": "Vị trí trong kiến trúc dữ liệu.",
+      "enum": ["oltp", "bronze", "silver", "gold", "metric", "alert"]
+    },
+
+    "owner": {
+      "description": "Đội chịu trách nhiệm. Bắt buộc — dataset không có chủ là dataset không ai sửa khi hỏng.",
+      "type": "string",
+      "minLength": 1
+    },
+
+    "description": { "type": "string" },
+
+    "source": {
+      "description": "Dữ liệu của dataset này nằm ở đâu và tới Kafka bằng cách nào.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "topic"],
+      "properties": {
+        "type": {
+          "description": "cdc_debezium = Debezium đọc WAL, message có envelope {op,ts_ms,before,after} mã hoá Avro. app_json = ứng dụng tự ghi thẳng JSON, không envelope.",
+          "enum": ["cdc_debezium", "app_json"]
+        },
+        "topic": {
+          "description": "Tên topic Kafka. Với CDC, quy ước là <topic.prefix>.<schema>.<table>.",
+          "type": "string",
+          "minLength": 1
+        },
+        "connection": { "type": "string" },
+        "schema_name": { "type": "string" },
+        "table": { "type": "string" },
+        "replica_identity": {
+          "description": "full = Postgres ghi cả row cũ vào WAL (cần cho audit thay đổi). default = chỉ ghi PK. Xem ADR-0004.",
+          "enum": ["default", "full"]
+        }
+      }
+    },
+
+    "primary_key": {
+      "description": "Cột khoá chính. Bắt buộc nếu muốn upsert (ES sink dùng nó làm _id). Thiếu nó thì chỉ append được.",
+      "type": "string"
+    },
+
+    "columns": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "type"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "type": {
+            "description": "Kiểu LOGIC, độc lập engine. Mỗi generator tự dịch sang kiểu của engine mình.",
+            "type": "string",
+            "pattern": "^(long|int|string|boolean|timestamp|date|double|decimal\\(\\d+,\\d+\\))$"
+          },
+          "nullable": { "type": "boolean", "default": true },
+          "pk": { "type": "boolean", "default": false },
+          "encoded_as": {
+            "description": "Kiểu THỰC TẾ trên Kafka khi khác kiểu logic. decimal + encoded_as=string là hệ quả của decimal.handling.mode=string (ADR-0003) — generator dựa vào đây để chèn CAST.",
+            "enum": ["string"]
+          },
+          "pii": { "type": "boolean", "default": false },
+          "description": { "type": "string" }
+        }
+      }
+    },
+
+    "sinks": {
+      "description": "Dataset này cần đổ đi đâu. Vắng mặt = không sinh sink nào.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "elasticsearch": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean", "default": true }
+          }
+        },
+        "s3_bronze": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean", "default": true }
+          }
+        }
+      }
+    },
+
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+
+  "allOf": [
+    {
+      "$comment": "Ràng buộc chéo: CDC thì bắt buộc phải khai schema/table/replica_identity, vì generator cần chúng để dựng publication SQL và table.include.list.",
+      "if": {
+        "properties": { "source": { "properties": { "type": { "const": "cdc_debezium" } } } }
+      },
+      "then": {
+        "properties": {
+          "source": { "required": ["schema_name", "table", "replica_identity"] }
+        },
+        "required": ["primary_key", "columns"]
+      }
+    }
+  ]
+}

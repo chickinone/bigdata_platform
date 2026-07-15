@@ -1,0 +1,37 @@
+# Fact co lifecycle (state machine). Bang thu 2 can FULL.
+urn: bank.public.transfers
+kind: source_table
+layer: oltp
+owner: team-core-banking
+description: Chuyển tiền giữa hai tài khoản - có state machine, dùng cho CEP.
+
+source:
+  type: cdc_debezium
+  connection: postgres_main
+  schema_name: public
+  table: transfers
+  # FULL: khong co before-image thi khong phan biet duoc 'processing -> failed'
+  # voi 'pending -> failed' - hai tinh huong nghiep vu rat khac nhau. Xem ADR-0004.
+  replica_identity: full
+  topic: bankdb.public.transfers
+
+primary_key: transfer_id
+
+columns:
+  - { name: transfer_id,     type: long,   nullable: false, pk: true }
+  - { name: from_account_id, type: long,   nullable: false }
+  - { name: to_account_id,   type: long,   nullable: false }
+  - { name: amount,          type: "decimal(19,4)", nullable: false, encoded_as: string }
+  - { name: currency,        type: string, nullable: false }
+  - { name: status,          type: string, nullable: false, description: "pending|processing|completed|failed|cancelled" }
+  - { name: reference_code,  type: string, nullable: false }
+  - { name: failure_reason,  type: string }
+  - { name: initiated_at,    type: timestamp, nullable: false }
+  - { name: completed_at,    type: timestamp }
+  - { name: updated_at,      type: timestamp, nullable: false }
+
+sinks:
+  elasticsearch: { enabled: true }
+  s3_bronze:     { enabled: true }
+
+tags: [banking, fact, lifecycle]

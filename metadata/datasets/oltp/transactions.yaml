@@ -1,0 +1,44 @@
+# Fact append-only, throughput cao nhất hệ thống (150-800 RPS).
+# Là nguồn của CẢ Lane 1 (metrics) lẫn Lane 3 (fraud) — xem docs/architecture/BDP-streaming-lanes.md
+urn: bank.public.transactions
+kind: source_table
+layer: oltp
+owner: team-core-banking
+description: Giao dịch ngân hàng - deposit, withdrawal, fee, interest, transfer in/out.
+
+source:
+  type: cdc_debezium
+  connection: postgres_main
+  schema_name: public
+  table: transactions
+  # DEFAULT vì bảng append-only, không bao giờ UPDATE -> before-image luôn rỗng.
+  # Trả giá WAL cho FULL ở đây là trả để lấy về không gì cả. Xem ADR-0004.
+  replica_identity: default
+  # Suy ra được từ topic.prefix(bankdb) + schema + table, nhưng khai tường minh
+  # để contract đọc được mà không cần biết quy ước trong đầu.
+  topic: bankdb.public.transactions
+
+primary_key: transaction_id
+
+columns:
+  - { name: transaction_id,   type: long,   nullable: false, pk: true }
+  - { name: account_id,       type: long,   nullable: false, description: "FK -> accounts. Khoá key_by của fraud detector." }
+  # encoded_as: string LÀ mấu chốt. Kiểu logic là decimal, nhưng trên Kafka nó là
+  # STRING vì decimal.handling.mode=string (ADR-0003). Generator đọc trường này
+  # để biết phải chèn CAST - thay vì trông chờ con người nhớ.
+  - { name: amount,           type: "decimal(19,4)", nullable: false, encoded_as: string }
+  - { name: balance_after,    type: "decimal(19,4)", nullable: false, encoded_as: string }
+  - { name: transaction_type, type: string, nullable: false, description: "deposit|withdrawal|fee|interest|transfer_in|transfer_out" }
+  - { name: currency,         type: string, nullable: false }
+  - { name: merchant_name,    type: string }
+  - { name: merchant_category, type: string }
+  - { name: description,      type: string }
+  - { name: status,           type: string, nullable: false, description: "pending|completed|failed|reversed. 'failed' kích hoạt Failed Storm detector." }
+  - { name: created_at,       type: timestamp, nullable: false }
+  - { name: posted_at,        type: timestamp, description: "NULL khi giao dịch còn pending. Là khoá partition year/month/day ở Silver." }
+
+sinks:
+  elasticsearch: { enabled: true }
+  s3_bronze:     { enabled: true }
+
+tags: [banking, fact, high-throughput]
