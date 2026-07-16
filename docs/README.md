@@ -65,6 +65,12 @@ mở link nào, đăng ký connector, chạy Flink/Spark job, kiểm tra dữ li
 |---|---|
 | [`roadmap/BDP-metadata-driven-roadmap.md`](roadmap/BDP-metadata-driven-roadmap.md) | Lộ trình 9 pha chuyển sang metadata-driven: kiến trúc đích, mô hình metadata, ví dụ contract, rủi ro, ước lượng. |
 
+## `reference/` — sổ tay dùng lại (không gắn dự án này)
+
+| Tài liệu | Nội dung |
+|---|---|
+| [`reference/metadata-driven-greenfield.md`](reference/metadata-driven-greenfield.md) | **Triển khai metadata-driven cho dự án MỚI** — khi nào NÊN/không nên, yêu cầu tiên quyết, kiến trúc, 4 quyết định đắt-nếu-sai, bậc thang trưởng thành, checklist ngày-0. |
+
 ## `decisions/` — Architecture Decision Records (ADR)
 
 Đánh số, chỉ thêm mới. Không sửa quyết định cũ — viết ADR mới để **supersede** nó. Viết ADR mới cho
