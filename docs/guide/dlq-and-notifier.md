@@ -1,180 +1,169 @@
-# DLQ processor & fraud-notifier — hai consumer phụ trợ
+# DLQ processor & fraud-notifier
 
-> Hai service Python nhỏ đọc Kafka và làm việc ngoài luồng dữ liệu chính. **Cả hai đều thiếu wiring** —
-> tài liệu này nói rõ thiếu gì và cần gì để chúng chạy thật.
-> Nguồn: [`dlq-processor/`](../../dlq-processor/), [`fraud-notifier/`](../../fraud-notifier/).
-> Xem [ADR-0012](../decisions/0012-dlq-processor-not-wired.md).
-> Cập nhật lần cuối: 2026-07-15.
-
----
-
-## 1. Tóm tắt tình trạng
-
-| Service | Code | Trạng thái thật |
-|---|---|---|
-| `dlq-processor` | Đầy đủ, hợp lý | ❌ **Không bao giờ nhận message** — không connector nào bật DLQ. Và bảng đích không tồn tại. |
-| `fraud-notifier` | Đầy đủ, hợp lý | ⚠️ **Email chạy được**; nhưng ghi ClickHouse luôn fail — bảng đích không tồn tại. |
-
-**Cả hai bảng ClickHouse mà chúng ghi vào đều không có trong init schema:**
-
-```bash
-$ grep -c "dlq_events\|notification_events" clickhouse/init/01_schema.sql
-0
-```
-
-[`clickhouse/init/01_schema.sql`](../../clickhouse/init/01_schema.sql) chỉ tạo `timeseries`, `kpi`,
-`breakdown`, `topn`. Không có `metrics.dlq_events`, không có `metrics.notification_events`.
-
-Cả hai service đều bọc lệnh ghi trong `try/except` và chỉ `log.error(...)`, nên chúng **không crash** —
-chúng thất bại âm thầm. Đó là lý do vấn đề này tồn tại lâu mà không lộ.
+> Luồng xử lý bản ghi lỗi của Kafka Connect: từ chỗ **biến mất không dấu vết** thành **dữ liệu truy
+> vấn được** trong ClickHouse. Thiết kế: [ADR-0017](../decisions/0017-dlq-flow-observe-then-park.md).
+> Nguồn: [`dlq-processor/`](../../dlq-processor/), [`clickhouse/init/03_dlq.sql`](../../clickhouse/init/03_dlq.sql).
+> Cập nhật lần cuối: 2026-07-16.
 
 ---
 
-## 2. DLQ processor
+## 1. Luồng đầy đủ
 
-### 2.1 Ý định thiết kế
-
-[`dlq_processor.py`](../../dlq-processor/dlq_processor.py) subscribe 6 topic DLQ, đọc header
-`__connect.errors.*` của Kafka Connect, phân loại lỗi rồi hành động:
-
-| Nhóm | Ví dụ exception | Hành động |
-|---|---|---|
-| `TRANSIENT` | `RetriableException`, `ConnectException`, `SocketTimeoutException`, ES `ResponseException` | **Tự động replay** về topic gốc |
-| `PERMANENT` | `DataException`, `SerializationException`, `SchemaException` | Log cảnh báo, cần người xem |
-| `UNKNOWN` | mọi thứ khác | Log cảnh báo |
-
-Đây là một thiết kế tốt: lỗi hạ tầng tạm thời thì thử lại, lỗi dữ liệu hỏng thì không thử lại vô ích.
-
-### 2.2 Vì sao nó không chạy
-
-**Vấn đề 1 — không ai sinh message DLQ.** Nó subscribe:
-```text
-dlq.es-sink-customers, dlq.es-sink-accounts, dlq.es-sink-transactions,
-dlq.es-sink-transfers, dlq.es-sink-fraud-alerts, dlq.s3-sink-cdc
-```
-Nhưng không file nào trong [`kafka-connect/`](../../kafka-connect/) có `errors.deadletterqueue.*`:
-```bash
-$ grep -rl "deadletterqueue" kafka-connect/ debezium/
-# không kết quả
-```
-Vì `AUTO_CREATE_TOPICS_ENABLE=true`, 6 topic này **được tạo rỗng** khi consumer subscribe — nên
-service báo "Connected to Kafka, monitoring 6 topics" và trông như đang khoẻ. Nó chỉ đang chờ mãi mãi.
-
-**Vấn đề 2 — bảng đích không tồn tại.** `dlq_processor.py:80` INSERT vào `metrics.dlq_events`, bảng
-này chưa từng được tạo.
-
-### 2.3 Cần gì để nó chạy thật
-
-**Bước 1 — tạo bảng:**
-```sql
-CREATE TABLE IF NOT EXISTS metrics.dlq_events (
-    dlq_topic       LowCardinality(String),
-    original_topic  LowCardinality(String),
-    connector_name  LowCardinality(String),
-    error_class     String,
-    error_stage     LowCardinality(String),
-    category        Enum8('TRANSIENT' = 1, 'PERMANENT' = 2, 'UNKNOWN' = 3),
-    offset          UInt64,
-    message_size    UInt32,
-    inserted_at     DateTime DEFAULT now()
-)
-ENGINE = MergeTree
-PARTITION BY toYYYYMMDD(inserted_at)
-ORDER BY (inserted_at, dlq_topic)
-TTL inserted_at + INTERVAL 30 DAY;
+```mermaid
+flowchart TD
+    SINK[Sink connector<br/>ES / S3] -->|bản ghi lỗi<br/>errors.tolerance=all| DLQT[[dlq.&lt;connector&gt;<br/>+ header __connect.errors.*]]
+    DLQT --> PROC[dlq-processor]
+    PROC -->|phân loại<br/>TRANSIENT/PERMANENT/UNKNOWN| EV[[dlq.events<br/>JSON đã enrich]]
+    EV --> CHK[metrics.dlq_events_kafka<br/>Kafka engine]
+    CHK --> MV[metrics.dlq_events_mv]
+    MV --> T[(metrics.dlq_events<br/>ReplacingMergeTree · TTL 30 ngày)]
+    T --> G[Grafana / SQL]
 ```
 
-**Bước 2 — bật DLQ ở từng sink connector:**
+**Vì sao đi qua Kafka thay vì để processor INSERT thẳng ClickHouse?** DLQ event là thứ ta cần nhất
+đúng lúc hệ thống đang hỏng. Nếu ClickHouse cũng đang sập mà ta INSERT thẳng, ta **mất bản ghi lỗi
+ngay tại thời điểm cần nó nhất**. Qua Kafka thì chúng nằm chờ. Đây cũng đúng pattern đã chốt ở
+[ADR-0007](../decisions/0007-clickhouse-kafka-engine-serving.md).
+
+---
+
+## 2. Cấu hình DLQ trên connector
+
+**Sinh tự động** từ contract — không sửa tay ([ADR-0015](../decisions/0015-metadata-registry-yaml-first.md)):
+
 ```json
 "errors.tolerance": "all",
 "errors.deadletterqueue.topic.name": "dlq.es-sink-transactions",
 "errors.deadletterqueue.topic.replication.factor": "1",
-"errors.deadletterqueue.context.headers.enable": "true"
+"errors.deadletterqueue.context.headers.enable": "true",
+"errors.log.enable": "true",
+"errors.log.include.messages": "false"
 ```
 
-Tên topic **phải khớp chính xác** danh sách `DLQ_TOPICS` hardcode trong Python — đây chính là metadata
-sprawl #12 ở [`../architecture/BDP-current-state.md`](../architecture/BDP-current-state.md) §3.
+| Cấu hình | Vì sao |
+|---|---|
+| `errors.tolerance: all` | Chuyển bản ghi lỗi sang DLQ thay vì để task **chết**. Mặc định `none` = một message hỏng làm đứng cả connector. |
+| `context.headers.enable: true` | **Bắt buộc.** Thiếu nó → không có header `__connect.errors.*` → mọi lỗi thành `UNKNOWN` → phân loại vô nghĩa. |
+| `errors.log.include.messages: false` | **Cố ý.** Nó in nội dung bản ghi ra log, mà `customers` chứa `full_name`/`email`/`phone`. Log không phải chỗ cho PII. |
 
-> `errors.deadletterqueue.context.headers.enable` là **bắt buộc**. Thiếu nó thì header
-> `__connect.errors.*` không được ghi, `parse_headers()` trả về rỗng, và **mọi** lỗi rơi vào nhóm
-> `UNKNOWN` → không có replay nào xảy ra.
+> ⚠️ **`errors.tolerance: all` chỉ an toàn khi có người nhìn.** Nó biến "task chết ồn ào" thành "bản
+> ghi lặng lẽ sang DLQ". Không ai xem `metrics.dlq_events` thì đây là **bước lùi** so với fail-fast.
+> Việc còn nợ: dashboard Grafana + cảnh báo khi DLQ tăng đột biến.
 
-**Bước 3 — cân nhắc rủi ro của auto-replay.** Replay TRANSIENT gửi message về **topic gốc**, tức là
-nó quay lại **mọi** consumer của topic đó, không riêng sink đã lỗi. Với `bankdb.public.transactions`,
-điều đó nghĩa là Flink sẽ **đếm lại giao dịch đó** vào metric. Ở production nên replay vào topic retry
-riêng, không phải topic gốc.
-
-### 2.4 Kiểm tra
-
-```bash
-docker logs -f bigdata-dlq-processor        # in stats mỗi 30 giây
-docker exec -it bigdata-kafka kafka-console-consumer --bootstrap-server kafka:9092 \
-  --topic dlq.es-sink-transactions --from-beginning
-```
-
-Muốn ép ra lỗi để thử: dừng Elasticsearch (`docker compose stop elasticsearch`) trong khi CDC đang
-chảy — ES sink sẽ lỗi và (nếu đã bật DLQ) đẩy message vào `dlq.es-sink-*`.
+Danh sách 6 topic DLQ nằm ở [`dlq-processor/dlq_topics.json`](../../dlq-processor/dlq_topics.json) —
+**file sinh tự động**, đừng sửa tay. Sinh lại: `python -m dataplatform.cli write`.
 
 ---
 
-## 3. Fraud notifier
+## 3. Ba nhóm lỗi
+
+| Nhóm | Ví dụ | Ý nghĩa | Hành động |
+|---|---|---|---|
+| `TRANSIENT` | `ConnectException`, `SocketTimeoutException`, ES `ResponseException` | Hạ tầng tạm thời — sửa xong thì phát lại có ý nghĩa | `PARKED` |
+| `PERMANENT` | `DataException`, `SerializationException`, `SchemaException` | Dữ liệu/schema hỏng — thử lại bao nhiêu lần cũng hỏng y hệt | `PARKED` |
+| `UNKNOWN` | mọi thứ khác | Chưa phân loại được | `PARKED` |
+
+## 4. ⚠️ Vì sao KHÔNG tự động phát lại
+
+Bản trước của `dlq_processor.py` tự động replay lỗi TRANSIENT về **topic gốc**. Đó là **ba lỗi chồng
+nhau**, và bật nó lên sẽ **chủ động làm hỏng dữ liệu**:
+
+| Lỗi | Hậu quả |
+|---|---|
+| Replay về topic gốc | `bankdb.public.transactions` cũng là nguồn của Flink → giao dịch **bị đếm lại** → sai dashboard |
+| Mất `key` | ES `extractKey` cần key làm `_id` → fail lại → quay về DLQ → **vòng lặp vô tận** |
+| Không giới hạn số lần | ES sập 1 tiếng → replay quay vòng cháy CPU |
+
+Đích phát lại **đúng** phải là topic chỉ connector đó đọc. Topic gốc không thoả. Topic retry riêng thì
+vướng: ES sink lấy **tên index** từ tên topic, S3 sink lấy **đường dẫn partition** từ tên topic → mỗi
+connector cần `RegexRouter` riêng. Đó là việc riêng, chưa làm.
+
+Mất mát ít hơn tưởng: Kafka Connect **đã tự retry vài lần trước khi** đẩy vào DLQ, nên phần lớn lỗi
+thoáng qua đã được xử lý trước khi tới đây.
+
+---
+
+## 5. Truy vấn
+
+```sql
+-- Lỗi gần nhất
+SELECT detected_at, connector_name, category, error_class, error_stage, error_message
+FROM metrics.dlq_events ORDER BY detected_at DESC LIMIT 20;
+
+-- Đếm theo connector và nhóm
+SELECT connector_name, category, count() AS n
+FROM metrics.dlq_events GROUP BY connector_name, category ORDER BY n DESC;
+
+-- Lỗi dữ liệu cần người xem
+SELECT * FROM metrics.dlq_events WHERE category = 'PERMANENT' ORDER BY detected_at DESC;
+
+-- Nhóm UNKNOWN nhiều = nên bổ sung phân loại trong dlq_processor.py
+SELECT error_class, count() AS n FROM metrics.dlq_events
+WHERE category = 'UNKNOWN' GROUP BY error_class ORDER BY n DESC;
+```
+
+### 5.1 Hai vị trí — đừng trộn
+
+| Cột | Ý nghĩa |
+|---|---|
+| `dlq_partition`, `dlq_offset` | Vị trí trong **topic DLQ** → khoá chống trùng |
+| `original_partition`, `original_offset` | Vị trí trong **topic gốc** → **để tìm lại bản ghi mà phát lại** |
+
+Tìm lại bản ghi gốc đã lỗi:
+```bash
+docker exec -it bigdata-kafka kafka-console-consumer --bootstrap-server kafka:9092 \
+  --topic bankdb.public.transactions --partition 2 --offset 99 --max-messages 1
+```
+
+> `message_key` được lưu, **nội dung message thì không** — nó đã nằm nguyên trong topic DLQ. Chép sang
+> ClickHouse là nhân bản PII thêm một chỗ, giữ 30 ngày, không thêm giá trị điều tra.
+
+---
+
+## 6. Khởi tạo & vận hành
+
+```bash
+# 1. Tạo bảng (clickhouse/init KHÔNG tự chạy — xem clickhouse-grafana.md)
+docker exec -i bigdata-clickhouse clickhouse-client --user admin \
+  --password "$CLICKHOUSE_PASSWORD" --multiquery < clickhouse/init/03_dlq.sql
+
+# 2. Sinh lại config + bản kê nếu contract đổi, rồi rebuild
+python -m dataplatform.cli write
+docker compose up -d --build dlq-processor
+
+# 3. Theo dõi
+docker logs -f bigdata-dlq-processor
+```
+
+**Ép ra lỗi để thử:** dừng Elasticsearch (`docker compose stop elasticsearch`) trong khi CDC đang chảy
+→ ES sink lỗi → bản ghi vào `dlq.es-sink-*` → xuất hiện trong `metrics.dlq_events`.
+
+| Triệu chứng | Nguyên nhân |
+|---|---|
+| Processor chết lúc khởi động, báo thiếu `dlq_topics.json` | Chưa chạy `python -m dataplatform.cli write` |
+| Mọi lỗi đều `UNKNOWN` | Connector thiếu `context.headers.enable=true` |
+| `dlq_events` rỗng nhưng `dlq.events` có message | Bảng chưa tạo, hoặc cột lệch → MV bỏ dòng **không báo lỗi** |
+| `original_offset = -1` | Header không có → connector chưa bật `context.headers.enable` |
+
+---
+
+## 7. fraud-notifier — vẫn còn nợ
 
 [`fraud_notifier.py`](../../fraud-notifier/fraud_notifier.py) consume `fraud-alerts` → gửi email SMTP.
 
 | Cấu hình | Giá trị |
 |---|---|
-| Topic | `fraud-alerts` |
-| `group_id` | `fraud-notifier-v2` |
-| `auto_offset_reset` | `earliest` |
-| SMTP | `SMTP_HOST`/`SMTP_PORT` từ `.env` (mặc định Gmail `smtp.gmail.com:587`, STARTTLS) |
+| `group_id` / offset | `fraud-notifier-v2` / `earliest` |
 | Gửi khi severity | `HIGH` hoặc `MEDIUM` |
-| Cooldown | **300 giây mỗi account** — chống spam khi một account bắn liên tiếp |
+| Cooldown | **300 giây mỗi account** — chống spam |
+| SMTP | `.env`: `SMTP_HOST`/`SMTP_PORT`, Gmail cần **App Password** |
 
-**Phần chạy được:** đọc alert, format, gửi email — hoạt động nếu `.env` có `EMAIL_FROM`/`EMAIL_TO`/
-`EMAIL_PASSWORD` hợp lệ (Gmail cần **App Password**, không dùng được mật khẩu thường).
+**Phần chạy được:** đọc alert, format, gửi email.
 
-**Phần không chạy:** `write_to_clickhouse()` INSERT vào `metrics.notification_events` — bảng không tồn
-tại. Lỗi bị nuốt trong `try/except`, chỉ hiện trong log.
+**Phần chưa:** `write_to_clickhouse()` INSERT vào `metrics.notification_events` — **bảng không tồn
+tại**, lỗi bị nuốt trong `try/except`. Cùng loại lỗi với DLQ trước đây, chưa xử lý. ADR-0012 vẫn đúng
+ở điểm này.
 
-Tạo bảng nếu muốn ghi nhận lịch sử gửi:
-```sql
-CREATE TABLE IF NOT EXISTS metrics.notification_events (
-    alert_type   LowCardinality(String),
-    severity     LowCardinality(String),
-    account_id   UInt64,
-    action       LowCardinality(String),
-    inserted_at  DateTime DEFAULT now()
-)
-ENGINE = MergeTree
-PARTITION BY toYYYYMMDD(inserted_at)
-ORDER BY (inserted_at, account_id)
-TTL inserted_at + INTERVAL 90 DAY;
-```
-
-> Cột phải khớp **chính xác** câu INSERT trong `write_to_clickhouse()` — đọc code trước khi tạo bảng.
-> DDL trên dựng theo cách gọi hàm hiện tại, **chưa được kiểm chứng chạy thật**.
-
-### 3.1 Kiểm tra
-
-```bash
-docker logs -f bigdata-fraud-notifier
-```
-
-Không thấy email? Đi ngược từng chặng:
-1. Topic `fraud-alerts` có message không? (job Lane 3 đã submit chưa)
-2. Alert có `severity` là `HIGH`/`MEDIUM` không? (`LOW` **không** gửi mail)
-3. Account đó có đang trong cooldown 300 giây không?
-4. SMTP có xác thực được không? → log sẽ có lỗi `login`
-
----
-
-## 4. Vì sao ghi lại thay vì lặng lẽ sửa
-
-Cả hai service là **code đúng, thiếu wiring**. Ghi lại rõ ràng có ích hơn xoá đi:
-
-- Chúng cho thấy ý định thiết kế (phân loại lỗi, cooldown thông báo) — có giá trị tham khảo.
-- Việc vá là **nhỏ và rõ**: 2 bảng + vài dòng config cho mỗi connector.
-- Xoá đi rồi lại mất luôn phần thiết kế đã suy nghĩ kỹ.
-
-Việc này nằm ở **Pha 0** của [lộ trình](../roadmap/BDP-metadata-driven-roadmap.md) — vá khoảng trống
-chức năng **trước khi** tự động hoá, vì tự động hoá trên nền còn hỏng chỉ làm chỗ hỏng lan nhanh hơn.
+Không thấy email? Đi ngược: (1) topic `fraud-alerts` có message chưa (Lane 3 đã submit?) → (2) alert có
+`severity` `HIGH`/`MEDIUM` không (`LOW` **không** gửi) → (3) account có đang trong cooldown 300s? →
+(4) SMTP xác thực được không (xem log).

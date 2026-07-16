@@ -58,6 +58,12 @@ def render(ds: Dataset) -> dict:
     if ds.is_cdc:
         config.update(_cdc_transforms(ds))
 
+    # DLQ cho MỌI sink - chính sách nền tảng, xem generators/dlq.py.
+    # Import tại chỗ để tránh vòng lặp import (dlq.py cần connector_name từ đây).
+    from .dlq import dlq_config
+
+    config.update(dlq_config(connector_name(ds)))
+
     return {"name": connector_name(ds), "config": config}
 
 

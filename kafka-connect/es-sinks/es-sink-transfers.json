@@ -5,25 +5,27 @@
     "tasks.max": "1",
     "topics": "bankdb.public.transfers",
     "connection.url": "${env:ELASTICSEARCH_URL}",
-
     "key.converter": "io.confluent.connect.avro.AvroConverter",
     "key.converter.schema.registry.url": "${env:SCHEMA_REGISTRY_URL}",
     "value.converter": "io.confluent.connect.avro.AvroConverter",
     "value.converter.schema.registry.url": "${env:SCHEMA_REGISTRY_URL}",
-
     "type.name": "_doc",
     "key.ignore": "false",
     "schema.ignore": "true",
     "write.method": "upsert",
     "behavior.on.null.values": "delete",
     "behavior.on.malformed.documents": "warn",
-
     "transforms": "unwrap,extractKey",
     "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
     "transforms.unwrap.drop.tombstones": "false",
     "transforms.unwrap.delete.handling.mode": "none",
-
     "transforms.extractKey.type": "org.apache.kafka.connect.transforms.ExtractField$Key",
-    "transforms.extractKey.field": "transfer_id"
+    "transforms.extractKey.field": "transfer_id",
+    "errors.tolerance": "all",
+    "errors.deadletterqueue.topic.name": "dlq.es-sink-transfers",
+    "errors.deadletterqueue.topic.replication.factor": "1",
+    "errors.deadletterqueue.context.headers.enable": "true",
+    "errors.log.enable": "true",
+    "errors.log.include.messages": "false"
   }
 }

@@ -1,8 +1,13 @@
 # ADR-0012: DLQ processor tồn tại nhưng chưa được nối — ghi lại thay vì xoá
 
-- **Status:** Accepted *(ghi nhận nợ kỹ thuật)*
+- **Status:** **Superseded by [ADR-0017](0017-dlq-flow-observe-then-park.md)** *(2026-07-16 — DLQ đã được nối)*
 - **Date:** 2026-07-15 *(hồi tố)*
 - **Deciders:** Phan Trường
+
+> **Cập nhật 2026-07-16:** nợ kỹ thuật trong ADR này **đã được trả** cho phần DLQ —
+> [ADR-0017](0017-dlq-flow-observe-then-park.md) nối dây đầy đủ và sửa lỗi replay nguy hiểm mà ADR này
+> cảnh báo. Giữ lại ADR này vì nó ghi *vì sao* chuyện đó tồn tại lâu mà không lộ.
+> Phần `fraud-notifier` / `metrics.notification_events` **vẫn còn nguyên** — mục 3 dưới đây vẫn đúng.
 
 ## Bối cảnh
 

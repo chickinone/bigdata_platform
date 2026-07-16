@@ -1,0 +1,50 @@
+{
+  "_comment": "FILE SINH TỰ ĐỘNG - đừng sửa tay. Nguồn: metadata/datasets/*.yaml. Sinh lại: python -m dataplatform.cli write",
+  "connectors": [
+    {
+      "connector": "es-sink-accounts",
+      "dlq_topic": "dlq.es-sink-accounts",
+      "original_topics": [
+        "bankdb.public.accounts"
+      ]
+    },
+    {
+      "connector": "es-sink-customers",
+      "dlq_topic": "dlq.es-sink-customers",
+      "original_topics": [
+        "bankdb.public.customers"
+      ]
+    },
+    {
+      "connector": "es-sink-fraud-alerts",
+      "dlq_topic": "dlq.es-sink-fraud-alerts",
+      "original_topics": [
+        "fraud-alerts"
+      ]
+    },
+    {
+      "connector": "es-sink-transactions",
+      "dlq_topic": "dlq.es-sink-transactions",
+      "original_topics": [
+        "bankdb.public.transactions"
+      ]
+    },
+    {
+      "connector": "es-sink-transfers",
+      "dlq_topic": "dlq.es-sink-transfers",
+      "original_topics": [
+        "bankdb.public.transfers"
+      ]
+    },
+    {
+      "connector": "s3-sink-cdc",
+      "dlq_topic": "dlq.s3-sink-cdc",
+      "original_topics": [
+        "bankdb.public.accounts",
+        "bankdb.public.customers",
+        "bankdb.public.transactions",
+        "bankdb.public.transfers"
+      ]
+    }
+  ]
+}

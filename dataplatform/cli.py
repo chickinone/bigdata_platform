@@ -15,7 +15,7 @@ import json
 import sys
 from pathlib import Path
 
-from .generators import es_sink
+from .generators import dlq, es_sink, s3_sink
 from .registry import REPO_ROOT, ContractError, load_datasets
 
 # Ghi JSON với indent 2 + newline cuối file. Đây là QUY ƯỚC, không phải yêu cầu
@@ -30,7 +30,31 @@ def _serialize(payload: dict) -> str:
 
 def _collect() -> dict[str, dict]:
     datasets = load_datasets()
-    return es_sink.targets(datasets)
+    targets: dict[str, dict] = {}
+    targets.update(es_sink.targets(datasets))
+    targets.update(s3_sink.targets(datasets))
+    targets.update(dlq.targets(datasets))
+    return targets
+
+
+# Các khoá mà giá trị là DANH SÁCH ngăn bằng dấu phẩy, và thứ tự KHÔNG mang ý
+# nghĩa. Kafka Connect coi `topics` là một tập hợp — so sánh chúng như chuỗi sẽ
+# báo lệch giả chỉ vì generator sắp theo thứ tự khác người viết tay.
+SET_VALUED_KEYS = {"topics"}
+
+
+def _normalize(payload: dict) -> dict:
+    """Đưa config về dạng so sánh được theo NGỮ NGHĨA.
+
+    Đây là điểm tinh tế của `check`: "so sánh ngữ nghĩa" không chỉ là parse JSON,
+    mà còn là biết khoá nào bất biến theo thứ tự.
+    """
+    out = {"name": payload.get("name"), "config": dict(payload.get("config", {}))}
+    for key in SET_VALUED_KEYS:
+        if key in out["config"]:
+            items = [v.strip() for v in out["config"][key].split(",") if v.strip()]
+            out["config"][key] = sorted(items)
+    return out
 
 
 def _compare(rel_path: str, generated: dict) -> tuple[str, list[str]]:
@@ -48,10 +72,10 @@ def _compare(rel_path: str, generated: dict) -> tuple[str, list[str]]:
         return "MOI", []
 
     current = json.loads(path.read_text(encoding="utf-8"))
-    if current == generated:
+    if _normalize(current) == _normalize(generated):
         return "KHOP", []
 
-    return "KHAC", _diff_keys(current, generated)
+    return "KHAC", _diff_keys(_normalize(current), _normalize(generated))
 
 
 def _diff_keys(current: dict, generated: dict) -> list[str]:

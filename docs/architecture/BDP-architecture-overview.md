@@ -36,7 +36,11 @@ flowchart LR
     K -->|metrics.*| CH[(ClickHouse<br/>Kafka engine + MV)]
     K -->|fraud-alerts| ESSINK
     K -->|fraud-alerts| NOTIF[fraud-notifier<br/>Email SMTP]
-    K -.->|dlq.* — chưa nối| DLQ[dlq-processor]
+
+    ESSINK -->|bản ghi lỗi| KDLQ[[Kafka: dlq.*]]
+    S3SINK -->|bản ghi lỗi| KDLQ
+    KDLQ --> DLQ[dlq-processor<br/>phân loại + park]
+    DLQ -->|dlq.events| CH
 
     S3SINK -->|Parquet Bronze| MINIO[(MinIO / S3)]
     MINIO -->|đọc Bronze| SPARK[Spark<br/>enrich → gold → iceberg]
@@ -55,8 +59,10 @@ flowchart LR
     class PG,K,CH,MINIO,ES,ICE store;
 ```
 
-> Mũi tên `dlq.*` vẽ nét đứt vì **chưa có connector nào cấu hình dead-letter queue** — xem
-> [ADR-0012](../decisions/0012-dlq-processor-not-wired.md) và [`../guide/dlq-and-notifier.md`](../guide/dlq-and-notifier.md).
+> Nhánh DLQ đã được nối ([ADR-0017](../decisions/0017-dlq-flow-observe-then-park.md)): mọi sink bật
+> `errors.tolerance=all` + DLQ, bản ghi lỗi đi `dlq.<connector>` → `dlq-processor` phân loại →
+> `dlq.events` → ClickHouse `metrics.dlq_events`. **Không tự động phát lại** — xem
+> [`../guide/dlq-and-notifier.md`](../guide/dlq-and-notifier.md).
 
 ---
 
@@ -143,8 +149,8 @@ Ghi ở đây để không ai phải phát hiện lại bằng cách debug. Chi 
 2. **`minio-init` chỉ tạo `flink-checkpoints` và `flink-savepoints`.** Các bucket
    `data-lake-{bronze,silver,gold,iceberg}` **không** được tạo tự động — phải tạo trước khi chạy S3
    sink và Spark job.
-3. **Không connector nào bật DLQ**, nên 6 topic `dlq.*` mà `dlq-processor` subscribe không bao giờ có
-   message. Bảng `metrics.dlq_events` mà nó INSERT vào cũng **không** tồn tại trong init schema.
+3. ~~Không connector nào bật DLQ~~ — **đã xử lý** ([ADR-0017](../decisions/0017-dlq-flow-observe-then-park.md)).
+   Còn lại: `fraud-notifier` vẫn ghi vào `metrics.notification_events` — bảng này **chưa tồn tại**.
 4. **4 file `lane1_{timeseries,kpi,breakdown,topn}.py` là di sản** — logic của chúng đã được gộp vào
    `lane1_dashboard.py`. Chạy song song sẽ ghi trùng vào cùng topic metric.
    Xem [ADR-0006](../decisions/0006-one-flink-job-per-lane-statement-set.md).

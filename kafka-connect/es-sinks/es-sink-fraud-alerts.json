@@ -5,16 +5,20 @@
     "tasks.max": "1",
     "topics": "fraud-alerts",
     "connection.url": "${env:ELASTICSEARCH_URL}",
-
     "key.converter": "org.apache.kafka.connect.storage.StringConverter",
     "value.converter": "org.apache.kafka.connect.json.JsonConverter",
     "value.converter.schemas.enable": "false",
-
     "type.name": "_doc",
     "key.ignore": "true",
     "schema.ignore": "true",
     "write.method": "insert",
     "behavior.on.null.values": "ignore",
-    "behavior.on.malformed.documents": "warn"
+    "behavior.on.malformed.documents": "warn",
+    "errors.tolerance": "all",
+    "errors.deadletterqueue.topic.name": "dlq.es-sink-fraud-alerts",
+    "errors.deadletterqueue.topic.replication.factor": "1",
+    "errors.deadletterqueue.context.headers.enable": "true",
+    "errors.log.enable": "true",
+    "errors.log.include.messages": "false"
   }
 }

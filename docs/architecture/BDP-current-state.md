@@ -110,8 +110,9 @@ Xác minh trực tiếp từ code, không phải suy đoán.
 |---|---|---|---|
 | 1 | **ClickHouse init không tự chạy** | `docker-compose.yml` không mount `clickhouse/init/` vào `/docker-entrypoint-initdb.d` | Không bảng `metrics.*` → MV không tồn tại → Grafana rỗng. Phải chạy tay. |
 | 2 | **Bucket lake không được tạo** | `minio-init` chỉ `mc mb` cho `flink-checkpoints` và `flink-savepoints` | S3 sink fail cho tới khi tạo tay `data-lake-{bronze,silver,gold,iceberg}`. |
-| 3 | **DLQ chưa được nối** | Không file nào trong `kafka-connect/` hay `debezium/` có `errors.deadletterqueue.*` | 6 topic `dlq.*` không bao giờ có message → `dlq-processor` chạy vô ích. |
-| 4 | **`metrics.dlq_events` không tồn tại** | `dlq_processor.py:80` INSERT vào bảng này; `clickhouse/init/01_schema.sql` không tạo nó | Kể cả có DLQ, mọi lần ghi đều fail (đã bắt lỗi và chỉ log). |
+| 3 | ~~**DLQ chưa được nối**~~ | **ĐÃ XỬ LÝ** 2026-07-16 — [ADR-0017](../decisions/0017-dlq-flow-observe-then-park.md) | Mọi sink bật DLQ; lỗi chảy vào `metrics.dlq_events`. Kèm sửa lỗi replay làm hỏng metric. |
+| 4 | ~~**`metrics.dlq_events` không tồn tại**~~ | **ĐÃ XỬ LÝ** — [`clickhouse/init/03_dlq.sql`](../../clickhouse/init/03_dlq.sql) | Vẫn phải chạy tay như mọi init ClickHouse (mục 1). |
+| 4b | **`metrics.notification_events` không tồn tại** | `fraud_notifier.py:177` INSERT vào bảng này; không init nào tạo nó | Mọi lần ghi đều fail (nuốt trong `try/except`). **Còn nợ.** |
 | 5 | **4 job Flink trùng lặp** | `lane1_{timeseries,kpi,breakdown,topn}.py` đã được gộp vào `lane1_dashboard.py` | Chạy song song → ghi trùng vào cùng topic metric. |
 | 6 | **Print sink còn trong job fraud** | `lane3_fraud_detection.py` giữ `ds.print("LANE3-RAW")` | In **mọi** transaction ra log TaskManager ở 150 RPS. |
 
