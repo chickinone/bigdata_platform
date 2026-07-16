@@ -13,8 +13,16 @@
 > Khai báo mỗi thực thể **một lần** trong `metadata/datasets/*.yaml`, rồi để generator sinh ra mọi
 > file cấu hình của thực thể đó — thay vì chép tay cùng thông tin sang từng công cụ.
 
-**Trạng thái hiện tại:** mới phủ **Elasticsearch sink** (5/5 file). Các artifact khác (Debezium, S3
-sink, DDL Flink/ClickHouse) vẫn viết tay — sẽ làm theo lộ trình.
+**Trạng thái hiện tại — 7 artifact:**
+
+| Artifact | Số file | Ghi chú |
+|---|---|---|
+| ES sink connector | 5 | 1 dataset → 1 connector |
+| S3 sink connector (Bronze) | 1 | N dataset → 1 connector (gộp `topics`) |
+| Bản kê topic DLQ | 1 | `dlq-processor/dlq_topics.json` ([ADR-0017](../decisions/0017-dlq-flow-observe-then-park.md)) |
+
+Cấu hình DLQ của **cả 6 connector** cũng sinh từ đây. Còn viết tay: Debezium connector, publication
+SQL, DDL Flink/ClickHouse — sẽ làm theo lộ trình.
 
 ---
 
@@ -45,19 +53,25 @@ python -m dataplatform.cli write    # ghi bản sinh ĐÈ lên đĩa
 Kết quả `check` khi mọi thứ đúng:
 
 ```text
-Đối chiếu 5 artifact sinh từ metadata/ với file trên đĩa:
+Đối chiếu 7 artifact sinh từ metadata/ với file trên đĩa:
 
+  [KHỚP] dlq-processor/dlq_topics.json
   [KHỚP] kafka-connect/es-sinks/es-sink-accounts.json
   [KHỚP] kafka-connect/es-sinks/es-sink-customers.json
   [KHỚP] kafka-connect/es-sinks/es-sink-fraud-alerts.json
   [KHỚP] kafka-connect/es-sinks/es-sink-transactions.json
   [KHỚP] kafka-connect/es-sinks/es-sink-transfers.json
+  [KHỚP] kafka-connect/s3-sinks/s3-sink-cdc.json
 
-KẾT QUẢ: 5/5 artifact khớp tuyệt đối.
+KẾT QUẢ: 7/7 artifact khớp tuyệt đối.
 ```
 
 > `check` so **dict đã parse**, không so văn bản — dòng trống và thứ tự khoá không tính là lệch. Chỉ
 > ngữ nghĩa config mới tính. Xem [ADR-0015](../decisions/0015-metadata-registry-yaml-first.md).
+
+Nó còn biết khoá nào **bất biến theo thứ tự**: `topics` là danh sách ngăn phẩy nhưng Kafka Connect coi
+đó là một *tập hợp*, nên `check` so nó như set. Không có điều đó, generator sắp `topics` khác người
+viết tay sẽ báo lệch giả.
 
 ---
 
@@ -74,8 +88,19 @@ dataplatform/
   schemas/
     dataset.schema.json  # JSON Schema — định nghĩa "contract hợp lệ là gì"
   generators/
-    es_sink.py           # contract -> config ES sink connector
+    es_sink.py           # 1 dataset  -> 1 ES sink connector
+    s3_sink.py           # N dataset  -> 1 S3 sink connector (gộp `topics`)
+    dlq.py               # chính sách DLQ + bản kê topic cho dlq-processor
 ```
+
+Hai **hình dạng generator** khác nhau, đáng để ý:
+
+| Hình dạng | Ví dụ | Đặc điểm |
+|---|---|---|
+| 1 dataset → 1 file | `es_sink.py` | Chỉ cần nhìn một contract |
+| N dataset → 1 file | `s3_sink.py`, `dlq.py` | Phải nhìn **toàn bộ** registry để gộp |
+
+Hình dạng thứ hai là thứ Debezium `table.include.list` sẽ cần — nên `s3_sink.py` là bài tập dượt cho nó.
 
 Vì sao là `dataplatform/` chứ không `platform/`: tên sau trùng module chuẩn của Python và sẽ che mất
 stdlib. Xem [ADR-0016](../decisions/0016-rename-platform-to-dataplatform.md).
@@ -120,8 +145,9 @@ vì khai rời là cho phép chúng lệch nhau.
 
 | Giới hạn | Ghi chú |
 |---|---|
-| Chỉ sinh ES sink | Debezium, S3 sink, DDL Flink/ClickHouse vẫn viết tay. |
-| Chưa cắt chuyển | File viết tay vẫn là bản đang dùng; generator mới chỉ *chứng minh* tái tạo được. |
+| Chưa sinh Debezium + publication | `table.include.list` và `04_publication.sql` vẫn viết tay, và **phải khớp nhau** — sprawl #2/#3 còn nguyên. Việc kế tiếp. |
+| Chưa sinh DDL Flink/ClickHouse | Sprawl #6 (`ROW<...>` lặp 6 file) và #9 (12 khối schema metric) còn nguyên — Pha 3–4. |
+| Chưa cắt chuyển | File sinh ra **đã là** file trên đĩa, nhưng chưa xoá bước viết tay khỏi quy trình: sửa contract xong vẫn phải nhớ chạy `write`. Cần CI. |
 | Contract chưa đối chiếu ngược với DB thật | Nó khớp *artifact*, chưa chắc khớp *schema Postgres*. Việc của Pha 1. |
 | `columns` chưa được dùng | Tồn tại sẵn cho Flink/ClickHouse ở pha sau. |
 | Chưa có CI | `check` chạy tay. Cắm vào CI là việc kế tiếp. |

@@ -134,7 +134,7 @@ sập không làm Flink backpressure.
 | Search | kibana | `bigdata-kibana` | kibana:8.15.3 | Trực quan/điều tra. |
 | Query | trino | `bigdata-trino` | trinodb/trino:432 | Federation 3 catalog. |
 | Ops | fraud-notifier | `bigdata-fraud-notifier` | build | Consumer `fraud-alerts` → email SMTP. |
-| Ops | dlq-processor | `bigdata-dlq-processor` | build | Consumer DLQ → ClickHouse (**chưa nối**). |
+| Ops | dlq-processor | `bigdata-dlq-processor` | build | Consumer `dlq.*` → phân loại → `dlq.events` → ClickHouse ([ADR-0017](../decisions/0017-dlq-flow-observe-then-park.md)). |
 
 ---
 

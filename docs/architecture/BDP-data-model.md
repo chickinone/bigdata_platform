@@ -142,8 +142,34 @@ Ba quy ước ảnh hưởng tới mọi consumer hạ nguồn:
 → 4 metric × 3 = **12 khối schema viết tay**. Nếu cột lệch, MV **bỏ dữ liệu mà không báo lỗi**. Đây là
 động lực chính của [lộ trình metadata-driven](../roadmap/BDP-metadata-driven-roadmap.md).
 
-> `metrics.dlq_events` được `dlq-processor` INSERT vào nhưng **không tồn tại** trong init schema.
-> Xem [ADR-0012](../decisions/0012-dlq-processor-not-wired.md).
+### 3.1 `metrics.dlq_events` — lỗi cũng là dữ liệu
+
+Cùng database `metrics` nhưng **không phải metric**: đây là nơi lỗi của Kafka Connect trở thành dữ
+liệu truy vấn được ([ADR-0017](../decisions/0017-dlq-flow-observe-then-park.md)). Vẫn theo đúng pattern
+3 đối tượng như metric (`dlq_events` + `_kafka` + `_mv`), vì cùng lý do ở
+[ADR-0007](../decisions/0007-clickhouse-kafka-engine-serving.md).
+
+| Nhóm cột | Cột | Ý nghĩa |
+|---|---|---|
+| Định danh | `connector_name`, `dlq_topic`, `original_topic` | Lỗi ở đâu |
+| Phân loại | `category` (`TRANSIENT`/`PERMANENT`/`UNKNOWN`), `action` (`PARKED`) | Loại lỗi + đã làm gì |
+| Chẩn đoán | `error_class`, `error_stage`, `error_message` | Vì sao lỗi |
+| **Vị trí trong DLQ** | `dlq_partition`, `dlq_offset` | **Khoá chống trùng** (khoá tự nhiên của message Kafka) |
+| **Vị trí trong topic gốc** | `original_partition`, `original_offset` | **Để tìm lại bản ghi mà phát lại** |
+| Khác | `message_key`, `message_size`, `detected_at` | |
+
+Hai cặp vị trí **khác nhau, đừng trộn**. Bản đầu tiên chỉ lưu vị trí trong DLQ — tức là không có đường
+về để tìm bản ghi đã lỗi. Lỗi đó chỉ lộ ra khi chạy thử thật.
+
+Engine: `ReplacingMergeTree(inserted_at)` `ORDER BY (dlq_topic, dlq_partition, dlq_offset)`, TTL 30
+ngày. Processor là at-least-once nên restart có thể đọc lại — dedup làm việc đó vô hại.
+
+> **Nội dung message KHÔNG được lưu**, chỉ `message_key`. Nội dung gốc đã nằm nguyên trong topic DLQ;
+> chép sang ClickHouse là nhân bản PII (`customers` có `full_name`/`email`/`phone`) ra thêm một chỗ,
+> giữ 30 ngày, không thêm giá trị điều tra.
+
+> `metrics.notification_events` (fraud-notifier ghi vào) thì **vẫn chưa tồn tại** — cùng loại lỗi,
+> chưa xử lý. Xem [ADR-0012](../decisions/0012-dlq-processor-not-wired.md).
 
 ---
 

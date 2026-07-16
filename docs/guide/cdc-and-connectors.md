@@ -172,20 +172,30 @@ bảng đầy đủ. Ba điểm dễ vấp:
 
 ---
 
-## 7. DLQ — chưa được nối
+## 7. DLQ — đã nối, sinh tự động
 
-**Không connector nào** trong repo có `errors.deadletterqueue.topic.name`. Vì vậy 6 topic `dlq.*` mà
-`dlq-processor` subscribe **không bao giờ có message**. Xem
-[`dlq-and-notifier.md`](dlq-and-notifier.md) và [ADR-0012](../decisions/0012-dlq-processor-not-wired.md).
-
-Muốn bật, thêm vào từng sink config:
+**Cả 6 sink** đều bật dead-letter queue ([ADR-0017](../decisions/0017-dlq-flow-observe-then-park.md)).
+Khối config này **sinh từ contract**, đừng thêm tay:
 
 ```json
 "errors.tolerance": "all",
 "errors.deadletterqueue.topic.name": "dlq.es-sink-transactions",
 "errors.deadletterqueue.topic.replication.factor": "1",
-"errors.deadletterqueue.context.headers.enable": "true"
+"errors.deadletterqueue.context.headers.enable": "true",
+"errors.log.enable": "true",
+"errors.log.include.messages": "false"
 ```
 
-`context.headers.enable` là **bắt buộc** — `dlq_processor.py` đọc các header `__connect.errors.*` để
-phân loại lỗi. Thiếu nó thì mọi lỗi rơi vào nhóm `UNKNOWN`.
+Bản ghi lỗi đi: `dlq.<connector>` → `dlq-processor` phân loại → `dlq.events` → ClickHouse
+`metrics.dlq_events`. Chi tiết + cách truy vấn: [`dlq-and-notifier.md`](dlq-and-notifier.md).
+
+Hai điểm dễ vấp:
+
+- `context.headers.enable` là **bắt buộc** — `dlq_processor.py` đọc header `__connect.errors.*` để
+  phân loại. Thiếu nó thì **mọi** lỗi rơi vào nhóm `UNKNOWN`.
+- `errors.log.include.messages` **cố ý để `false`**: nó in nội dung bản ghi ra log Connect, mà
+  `customers` chứa `full_name`/`email`/`phone`. Log không phải chỗ cho PII.
+
+> ⚠️ `errors.tolerance: all` đổi hành vi khi lỗi: task **không chết** nữa, bản ghi hỏng lặng lẽ sang
+> DLQ. Điều đó chỉ an toàn **khi có người nhìn** `metrics.dlq_events`. Không ai xem thì đây là bước
+> lùi so với fail-fast.

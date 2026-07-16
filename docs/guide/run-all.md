@@ -77,15 +77,18 @@ docker exec -i bigdata-clickhouse clickhouse-client --user admin --password "$CL
   --multiquery < clickhouse/init/01_schema.sql
 docker exec -i bigdata-clickhouse clickhouse-client --user admin --password "$CLICKHOUSE_PASSWORD" \
   --multiquery < clickhouse/init/02_kafka_consumers.sql
+docker exec -i bigdata-clickhouse clickhouse-client --user admin --password "$CLICKHOUSE_PASSWORD" \
+  --multiquery < clickhouse/init/03_dlq.sql
 ```
 
 PowerShell:
 ```powershell
 Get-Content .\clickhouse\init\01_schema.sql | docker exec -i bigdata-clickhouse clickhouse-client --user admin --password $env:CLICKHOUSE_PASSWORD --multiquery
 Get-Content .\clickhouse\init\02_kafka_consumers.sql | docker exec -i bigdata-clickhouse clickhouse-client --user admin --password $env:CLICKHOUSE_PASSWORD --multiquery
+Get-Content .\clickhouse\init\03_dlq.sql | docker exec -i bigdata-clickhouse clickhouse-client --user admin --password $env:CLICKHOUSE_PASSWORD --multiquery
 ```
 
-Kiểm tra — kỳ vọng 12 bảng (4 target + 4 kafka + 4 MV):
+Kiểm tra — kỳ vọng **15 bảng** (4 metric × 3 + `dlq_events` × 3):
 ```bash
 docker exec bigdata-clickhouse clickhouse-client --user admin --password "$CLICKHOUSE_PASSWORD" \
   --query "SHOW TABLES FROM metrics"
@@ -216,7 +219,15 @@ docker exec -it bigdata-kafka kafka-console-consumer --bootstrap-server kafka:90
 curl.exe http://localhost:9200/_cat/indices?v
 
 # 8. Bronze có file Parquet? → MinIO Console http://localhost:9001
+
+# 9. Có connector nào đang lỗi? (task VẪN XANH khi có lỗi — errors.tolerance=all)
+docker exec -it bigdata-clickhouse clickhouse-client --user admin --password "$CLICKHOUSE_PASSWORD" \
+  --query "SELECT connector_name, category, count() FROM metrics.dlq_events GROUP BY 1,2"
 ```
+
+> **Bước 9 là bước dễ quên nhất.** Vì `errors.tolerance=all`, connector lỗi vẫn báo `RUNNING` — bản
+> ghi hỏng lặng lẽ sang DLQ. `curl .../connectors?expand=status` xanh **không** có nghĩa là không mất
+> dữ liệu. Chỗ duy nhất nhìn thấy là `metrics.dlq_events`.
 
 ---
 
@@ -255,4 +266,6 @@ curl.exe -X DELETE http://localhost:8083/connectors/postgres-source-connector   
 | Connector "already exists" | Đăng ký lại connector cũ | `curl -X DELETE .../connectors/<tên>` rồi POST lại |
 | Avro không decode được | Schema Registry chưa sẵn sàng, hoặc sai converter | Kiểm tra `curl http://localhost:8081/subjects` |
 | Spark OOM / treo | Docker thiếu RAM; hoặc join raw CDC chưa dedup | Tăng RAM lên 12 GB; giảm `TARGET_RPS`/`DURATION_SEC` |
-| `dlq-processor` không ghi gì | **Đúng như hiện trạng** — chưa connector nào bật DLQ | [`dlq-and-notifier.md`](dlq-and-notifier.md) |
+| `dlq-processor` chết lúc khởi động, báo thiếu `dlq_topics.json` | Chưa sinh bản kê topic DLQ | `python -m dataplatform.cli write` rồi `docker compose up -d --build dlq-processor` |
+| `metrics.dlq_events` rỗng dù connector đang lỗi | Chưa chạy `03_dlq.sql` (§3.2); hoặc connector thiếu `context.headers.enable` | [`dlq-and-notifier.md`](dlq-and-notifier.md) |
+| Connector lỗi nhưng task **không** chết | Đúng thiết kế — `errors.tolerance=all` đẩy bản ghi sang DLQ thay vì fail | Xem `metrics.dlq_events`, đừng chờ task đỏ |

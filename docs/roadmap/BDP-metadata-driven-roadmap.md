@@ -232,9 +232,18 @@ MV). **Cùng một spec đảm bảo schema Flink output == schema ClickHouse in
 
 **Mục tiêu:** làm sạch để có thể tự động hóa an toàn.
 
-1. **Vá các khoảng trống chức năng** ([`BDP-current-state.md`](../architecture/BDP-current-state.md) §4.1)
-   — mount ClickHouse init, tạo bucket lake trong `minio-init`, tạo bảng `metrics.dlq_events` hoặc bỏ
-   `dlq-processor`, gỡ print sink. Tự động hoá trên nền còn hỏng chỉ làm chỗ hỏng lan nhanh hơn.
+1. **Vá các khoảng trống chức năng** ([`BDP-current-state.md`](../architecture/BDP-current-state.md) §4.1).
+   Tự động hoá trên nền còn hỏng chỉ làm chỗ hỏng lan nhanh hơn.
+   - ✅ **Xong** — nối DLQ đầy đủ + tạo `metrics.dlq_events`
+     ([ADR-0017](../decisions/0017-dlq-flow-observe-then-park.md)). Kèm phát hiện: logic replay cũ
+     gửi bản ghi lỗi về **topic gốc**, làm Flink đếm lại giao dịch → bật DLQ nguyên trạng sẽ **hỏng
+     dữ liệu metric**. Đã bỏ auto-replay.
+   - ⬜ Mount `clickhouse/init` vào entrypoint (nay đã có **3** file init phải chạy tay).
+   - ⬜ Tạo bucket `data-lake-*` trong `minio-init`.
+   - ⬜ Tạo `metrics.notification_events` hoặc bỏ phần ghi ClickHouse của `fraud-notifier`.
+   - ⬜ Gỡ print sink trong `lane3_fraud_detection.py`.
+   - ⬜ **Dashboard + cảnh báo DLQ.** Nợ mới do ADR-0017 tạo ra: `errors.tolerance=all` khiến connector
+     lỗi vẫn báo `RUNNING`. Không ai nhìn `metrics.dlq_events` thì đây là **bước lùi** so với fail-fast.
 2. **Secrets:** chuyển sang **SOPS + age** (đơn giản, hợp Git) hoặc **Vault** (nếu cần động). Metadata
    chỉ tham chiếu `secret_ref`, không chứa giá trị. Thêm bước **quét secret trong CI**.
    *(`.env` đã được gitignore và chưa từng commit — đây là việc cải thiện, không phải xử lý sự cố.)*
@@ -269,14 +278,21 @@ MV). **Cùng một spec đảm bảo schema Flink output == schema ClickHouse in
 **Mục tiêu:** connector & topic sinh từ metadata. Đây là nơi trùng lặp nhiều và dễ tự động hóa nhất →
 làm trước để chứng minh giá trị.
 
-1. Generator sinh: `postgres-connector.json` (`table.include.list`), `04_publication.sql`,
-   `s3-sink-cdc.json` (`topics`), 5 file `es-sink-*.json` (topic + `extractKey.field` = PK từ
-   contract), danh sách DLQ topic cho `dlq-processor`, và **topic manifest**
-   (partition/retention/RF theo env — tắt `auto.create.topics`).
-2. **Deployer** áp connector qua Connect REST API **idempotent** (`PUT /connectors/{name}/config`).
-3. Đối chiếu JSON sinh vs JSON hiện tại (diff = rỗng) → cắt chuyển → xóa file viết tay.
+1. Generator sinh các artifact ingestion:
+   - ✅ 5 file `es-sink-*.json` (topic + `extractKey.field` = PK từ contract) — [ADR-0015](../decisions/0015-metadata-registry-yaml-first.md)
+   - ✅ `s3-sink-cdc.json` (`topics` gộp từ mọi dataset bật `s3_bronze`)
+   - ✅ Cấu hình DLQ cho cả 6 connector + bản kê topic cho `dlq-processor` — [ADR-0017](../decisions/0017-dlq-flow-observe-then-park.md)
+   - ⬜ `postgres-connector.json` (`table.include.list`) **và** `04_publication.sql` — **việc kế tiếp**.
+     Hai file này phải khớp nhau (sprawl #2/#3); lệch một bảng là **mất CDC âm thầm**. Sinh cả hai từ
+     một contract là chỗ diệt sprawl có giá trị nhất còn lại.
+   - ⬜ **Topic manifest** (partition/retention/RF theo env — tắt `auto.create.topics`).
+2. ⬜ **Deployer** áp connector qua Connect REST API **idempotent** (`PUT /connectors/{name}/config`).
+   Hiện vẫn đăng ký tay bằng `curl`.
+3. ✅ Đối chiếu JSON sinh vs JSON hiện tại (diff = rỗng) — `python -m dataplatform.cli check`, 7/7 khớp.
+   ⬜ Cắm `check` vào **CI** để sửa contract mà quên chạy generator thì CI đỏ.
 
-**Đầu ra:** thêm/bớt bảng CDC = sửa 1 contract + chạy generator. **Ước lượng:** 1.5–2 tuần.
+**Đầu ra:** thêm/bớt bảng CDC = sửa 1 contract + chạy generator. **Ước lượng:** 1.5–2 tuần
+*(đã đi được ~2/3)*.
 
 ---
 

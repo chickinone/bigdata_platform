@@ -18,15 +18,18 @@ docker exec -i bigdata-clickhouse clickhouse-client --user admin --password "$CL
   --multiquery < clickhouse/init/01_schema.sql
 docker exec -i bigdata-clickhouse clickhouse-client --user admin --password "$CLICKHOUSE_PASSWORD" \
   --multiquery < clickhouse/init/02_kafka_consumers.sql
+docker exec -i bigdata-clickhouse clickhouse-client --user admin --password "$CLICKHOUSE_PASSWORD" \
+  --multiquery < clickhouse/init/03_dlq.sql
 ```
 
 PowerShell:
 ```powershell
 Get-Content .\clickhouse\init\01_schema.sql | docker exec -i bigdata-clickhouse clickhouse-client --user admin --password $env:CLICKHOUSE_PASSWORD --multiquery
 Get-Content .\clickhouse\init\02_kafka_consumers.sql | docker exec -i bigdata-clickhouse clickhouse-client --user admin --password $env:CLICKHOUSE_PASSWORD --multiquery
+Get-Content .\clickhouse\init\03_dlq.sql | docker exec -i bigdata-clickhouse clickhouse-client --user admin --password $env:CLICKHOUSE_PASSWORD --multiquery
 ```
 
-Kỳ vọng **12 bảng**:
+Kỳ vọng **15 bảng**:
 ```bash
 docker exec bigdata-clickhouse clickhouse-client --user admin --password "$CLICKHOUSE_PASSWORD" \
   --query "SHOW TABLES FROM metrics"
@@ -35,10 +38,17 @@ docker exec bigdata-clickhouse clickhouse-client --user admin --password "$CLICK
 breakdown, breakdown_kafka, breakdown_mv,
 kpi, kpi_kafka, kpi_mv,
 timeseries, timeseries_kafka, timeseries_mv,
-topn, topn_kafka, topn_mv
+topn, topn_kafka, topn_mv,
+dlq_events, dlq_events_kafka, dlq_events_mv
 ```
 
 Phải chạy lại sau mỗi `docker compose down -v`.
+
+| File init | Tạo gì |
+|---|---|
+| `01_schema.sql` | 4 bảng metric đích (ReplacingMergeTree + TTL) |
+| `02_kafka_consumers.sql` | 4 bảng Kafka engine + 4 MV cho metric |
+| `03_dlq.sql` | `dlq_events` + Kafka engine + MV — lỗi connector thành dữ liệu ([ADR-0017](../decisions/0017-dlq-flow-observe-then-park.md)) |
 
 ---
 
@@ -144,6 +154,37 @@ ORDER BY rank_num
 > Cần chính xác tuyệt đối thì thêm `FINAL` (chậm hơn) hoặc `argMax(...)`. Với dashboard thì thường
 > không đáng.
 
+### 4.2 Panel sức khoẻ DLQ (nên có)
+
+Vì `errors.tolerance=all`, **connector lỗi vẫn báo `RUNNING`** — bản ghi hỏng lặng lẽ sang DLQ. Không
+có panel này thì không ai biết đang mất dữ liệu ([ADR-0017](../decisions/0017-dlq-flow-observe-then-park.md)).
+
+Lỗi theo thời gian, chẻ theo nhóm:
+```sql
+SELECT $__timeInterval(detected_at) AS time, category, count() AS n
+FROM metrics.dlq_events
+WHERE $__timeFilter(detected_at)
+GROUP BY time, category ORDER BY time
+```
+
+Thẻ số — lỗi vĩnh viễn trong 24h (đặt ngưỡng cảnh báo `> 0`):
+```sql
+SELECT count() FROM metrics.dlq_events
+WHERE category = 'PERMANENT' AND detected_at > now() - INTERVAL 1 DAY
+```
+
+Bảng — lỗi mới nhất, kèm đường tìm lại bản ghi gốc:
+```sql
+SELECT detected_at, connector_name, error_class, error_stage,
+       original_topic, original_partition, original_offset, error_message
+FROM metrics.dlq_events
+WHERE $__timeFilter(detected_at)
+ORDER BY detected_at DESC LIMIT 50
+```
+
+> `original_partition`/`original_offset` là **vị trí trong topic gốc** — dùng để tìm lại bản ghi đã
+> lỗi. Đừng nhầm với `dlq_partition`/`dlq_offset` (vị trí trong topic DLQ, chỉ dùng chống trùng).
+
 ---
 
 ## 5. TTL & dung lượng
@@ -154,5 +195,6 @@ ORDER BY rank_num
 | `metrics.kpi` | **90 ngày** | Ít dòng nhất (không group by), nên giữ lâu hơn |
 | `metrics.breakdown` | 30 ngày | |
 | `metrics.topn` | 30 ngày | Tối đa 10 dòng mỗi cửa sổ |
+| `metrics.dlq_events` | 30 ngày | Lỗi connector. Khoá dedup `(dlq_topic, dlq_partition, dlq_offset)` — khoá tự nhiên của message Kafka |
 
 ClickHouse **không** là nguồn sự thật — nó có TTL. Dữ liệu lưu vĩnh viễn nằm ở lakehouse.

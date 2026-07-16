@@ -51,7 +51,7 @@ mở link nào, đăng ký connector, chạy Flink/Spark job, kiểm tra dữ li
 | [`guide/clickhouse-grafana.md`](guide/clickhouse-grafana.md) | Khởi tạo schema thủ công (init **không** tự chạy), kiểm tra Kafka engine/MV, dựng Grafana. |
 | [`guide/kibana.md`](guide/kibana.md) | Data view, saved search, dashboard điều tra fraud/failed transaction. |
 | [`guide/trino.md`](guide/trino.md) | Truy vấn liên nguồn Postgres + ClickHouse + Iceberg từ một SQL engine. |
-| [`guide/dlq-and-notifier.md`](guide/dlq-and-notifier.md) | DLQ processor và fraud-notifier — **cả hai đang thiếu wiring**, tài liệu này nói rõ thiếu gì. |
+| [`guide/dlq-and-notifier.md`](guide/dlq-and-notifier.md) | **Luồng DLQ** — lỗi connector → `dlq.*` → phân loại → ClickHouse; cách truy vấn, vì sao không tự phát lại. (fraud-notifier vẫn còn nợ một bảng.) |
 
 ## `infra/` — stack local
 
