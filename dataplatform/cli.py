@@ -15,7 +15,7 @@ import json
 import sys
 from pathlib import Path
 
-from .generators import dlq, es_sink, s3_sink
+from .generators import debezium, dlq, es_sink, postgres_publication, s3_sink
 from .registry import REPO_ROOT, ContractError, load_datasets
 
 # Ghi JSON với indent 2 + newline cuối file. Đây là QUY ƯỚC, không phải yêu cầu
@@ -24,23 +24,33 @@ from .registry import REPO_ROOT, ContractError, load_datasets
 JSON_INDENT = 2
 
 
-def _serialize(payload: dict) -> str:
+def _serialize(payload) -> str:
+    """Biến artifact thành text để ghi ra đĩa.
+
+    Hai loại artifact:
+      - dict  -> JSON (connector config, bản kê DLQ...)
+      - str   -> text nguyên văn (DDL SQL, publication...)
+    """
+    if isinstance(payload, str):
+        return payload
     return json.dumps(payload, indent=JSON_INDENT, ensure_ascii=False) + "\n"
 
 
-def _collect() -> dict[str, dict]:
+def _collect() -> dict:
     datasets = load_datasets()
-    targets: dict[str, dict] = {}
+    targets: dict = {}
+    targets.update(debezium.targets(datasets))
     targets.update(es_sink.targets(datasets))
     targets.update(s3_sink.targets(datasets))
     targets.update(dlq.targets(datasets))
+    targets.update(postgres_publication.targets(datasets))
     return targets
 
 
 # Các khoá mà giá trị là DANH SÁCH ngăn bằng dấu phẩy, và thứ tự KHÔNG mang ý
-# nghĩa. Kafka Connect coi `topics` là một tập hợp — so sánh chúng như chuỗi sẽ
-# báo lệch giả chỉ vì generator sắp theo thứ tự khác người viết tay.
-SET_VALUED_KEYS = {"topics"}
+# nghĩa. Kafka Connect coi chúng như một tập hợp — so sánh như chuỗi sẽ báo lệch
+# giả chỉ vì generator sắp thứ tự khác người viết tay.
+SET_VALUED_KEYS = {"topics", "table.include.list"}
 
 
 def _normalize(payload: dict) -> dict:
@@ -57,25 +67,46 @@ def _normalize(payload: dict) -> dict:
     return out
 
 
-def _compare(rel_path: str, generated: dict) -> tuple[str, list[str]]:
-    """So bản sinh với file trên đĩa.
+def _compare(rel_path: str, generated) -> tuple[str, list[str]]:
+    """So bản sinh với file trên đĩa. Trả về (trạng_thái, danh_sách_khác_biệt).
 
-    So sánh trên DICT ĐÃ PARSE, không so văn bản. Lý do: file viết tay có dòng
-    trống và thứ tự khoá do người sắp; ép generator tái tạo y hệt từng byte là
-    vô nghĩa và giòn. Thứ ta cần bảo toàn là *ngữ nghĩa config* - Kafka Connect
-    đọc JSON, nó không quan tâm dòng trống.
-
-    Trả về (trạng_thái, danh_sách_khác_biệt).
+    Rẽ theo LOẠI artifact:
+      - dict (JSON): so NGỮ NGHĨA (parse rồi so dict). File viết tay có dòng trống
+        + thứ tự khoá tuỳ người; ép tái tạo từng byte là giòn. Kafka Connect đọc
+        JSON, không quan tâm dòng trống.
+      - str (SQL/text): so NGUYÊN VĂN. Lý do khác JSON: file này DO CONTROL PLANE
+        SỞ HỮU, không công cụ ngoài nào format lại, nên byte-match là hợp lý và
+        chặt hơn.
     """
     path = REPO_ROOT / rel_path
     if not path.exists():
         return "MOI", []
 
-    current = json.loads(path.read_text(encoding="utf-8"))
+    raw = path.read_text(encoding="utf-8")
+
+    if isinstance(generated, str):
+        if raw == generated:
+            return "KHOP", []
+        return "KHAC", _diff_text(raw, generated)
+
+    current = json.loads(raw)
     if _normalize(current) == _normalize(generated):
         return "KHOP", []
-
     return "KHAC", _diff_keys(_normalize(current), _normalize(generated))
+
+
+def _diff_text(current: str, generated: str) -> list[str]:
+    """Diff dòng cho artifact text — chỉ những dòng thật sự khác."""
+    import difflib
+
+    diffs: list[str] = []
+    for line in difflib.unified_diff(
+        current.splitlines(), generated.splitlines(),
+        fromfile="đĩa", tofile="sinh", lineterm="",
+    ):
+        if line.startswith(("+", "-")) and not line.startswith(("+++", "---")):
+            diffs.append(line)
+    return diffs[:40]  # đủ để thấy, không tràn màn hình
 
 
 def _diff_keys(current: dict, generated: dict) -> list[str]:

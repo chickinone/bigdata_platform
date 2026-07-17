@@ -88,9 +88,11 @@ dataplatform/
   schemas/
     dataset.schema.json  # JSON Schema — định nghĩa "contract hợp lệ là gì"
   generators/
-    es_sink.py           # 1 dataset  -> 1 ES sink connector
-    s3_sink.py           # N dataset  -> 1 S3 sink connector (gộp `topics`)
-    dlq.py               # chính sách DLQ + bản kê topic cho dlq-processor
+    es_sink.py               # 1 dataset  -> 1 ES sink connector
+    s3_sink.py               # N dataset  -> 1 S3 sink connector (gộp `topics`)
+    debezium.py              # N dataset  -> 1 source connector (gộp table.include.list)
+    postgres_publication.py  # N dataset  -> publication SQL (cùng nguồn với debezium)
+    dlq.py                   # chính sách DLQ + bản kê topic cho dlq-processor
 ```
 
 Hai **hình dạng generator** khác nhau, đáng để ý:
@@ -98,9 +100,14 @@ Hai **hình dạng generator** khác nhau, đáng để ý:
 | Hình dạng | Ví dụ | Đặc điểm |
 |---|---|---|
 | 1 dataset → 1 file | `es_sink.py` | Chỉ cần nhìn một contract |
-| N dataset → 1 file | `s3_sink.py`, `dlq.py` | Phải nhìn **toàn bộ** registry để gộp |
+| N dataset → 1 file | `s3_sink.py`, `debezium.py`, `postgres_publication.py`, `dlq.py` | Phải nhìn **toàn bộ** registry để gộp |
 
-Hình dạng thứ hai là thứ Debezium `table.include.list` sẽ cần — nên `s3_sink.py` là bài tập dượt cho nó.
+Hình dạng fan-in (N→1) là chỗ diệt được sprawl nguy hiểm nhất: `debezium.py` và
+`postgres_publication.py` cùng đọc một nguồn, nên `table.include.list` (connector) và `FOR TABLE`
+(publication) **không thể lệch nhau** ([ADR-0018](../decisions/0018-generate-debezium-and-publication.md)).
+
+Artifact cũng có **hai loại**: `dict` → ghi JSON (connector, bản kê); `str` → ghi text nguyên văn (SQL
+publication). `check` so JSON theo ngữ nghĩa, so SQL nguyên văn.
 
 Vì sao là `dataplatform/` chứ không `platform/`: tên sau trùng module chuẩn của Python và sẽ che mất
 stdlib. Xem [ADR-0016](../decisions/0016-rename-platform-to-dataplatform.md).
@@ -145,9 +152,9 @@ vì khai rời là cho phép chúng lệch nhau.
 
 | Giới hạn | Ghi chú |
 |---|---|
-| Chưa sinh Debezium + publication | `table.include.list` và `04_publication.sql` vẫn viết tay, và **phải khớp nhau** — sprawl #2/#3 còn nguyên. Việc kế tiếp. |
 | Chưa sinh DDL Flink/ClickHouse | Sprawl #6 (`ROW<...>` lặp 6 file) và #9 (12 khối schema metric) còn nguyên — Pha 3–4. |
-| Chưa cắt chuyển | File sinh ra **đã là** file trên đĩa, nhưng chưa xoá bước viết tay khỏi quy trình: sửa contract xong vẫn phải nhớ chạy `write`. Cần CI. |
+| Chưa có Deployer | `write` chỉ ghi đĩa; đẩy vào engine vẫn làm tay bằng `curl` (§3). |
+| Chưa có CI | `check` chạy tay. Sửa contract mà quên `write` thì chưa có gì chặn. |
 | Contract chưa đối chiếu ngược với DB thật | Nó khớp *artifact*, chưa chắc khớp *schema Postgres*. Việc của Pha 1. |
 | `columns` chưa được dùng | Tồn tại sẵn cho Flink/ClickHouse ở pha sau. |
 | Chưa có CI | `check` chạy tay. Cắm vào CI là việc kế tiếp. |
