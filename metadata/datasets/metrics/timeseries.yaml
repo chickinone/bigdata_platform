@@ -1,0 +1,43 @@
+# Metric: so luong + tong gia tri giao dich moi phut, che theo loai.
+# Flink (lane1_dashboard) ghi JSON ra Kafka -> ClickHouse tu keo ve (ADR-0007).
+urn: bank.metric.timeseries
+kind: olap_table
+layer: metric
+owner: team-analytics
+description: Số lượng và tổng giá trị giao dịch theo phút, chẻ theo loại giao dịch.
+
+source:
+  # app_json: Flink ghi JSON tho ra Kafka, khong qua Debezium/Avro.
+  type: app_json
+  topic: metrics.timeseries
+
+# KHONG co primary_key: metric la chuoi ban ghi cua so, khong co khoa upsert.
+# Chong trung lam o tang ClickHouse bang ReplacingMergeTree + order_by.
+
+columns:
+  - { name: window_start, type: timestamp, nullable: false, description: "Đầu cửa sổ TUMBLE 1 phút" }
+  - { name: window_end,   type: timestamp, nullable: false }
+  # low_cardinality: chi co 6 loai giao dich -> su that LOGIC, ClickHouse khai thac
+  # thanh LowCardinality(String) o bang dich (nhung bang Kafka van dung String).
+  - { name: tx_type,      type: string, nullable: false, low_cardinality: true, description: "deposit|withdrawal|fee|interest|transfer_in|transfer_out" }
+  # unsigned: dem so luong -> khong bao gio am -> UInt64
+  - { name: tx_count,     type: long, nullable: false, unsigned: true }
+  - { name: total_amount, type: "decimal(19,4)", nullable: false }
+
+sinks:
+  clickhouse:
+    enabled: true
+    database: metrics
+    table: timeseries
+    engine: ReplacingMergeTree
+    # inserted_at KHONG nam trong columns: no thuoc tang serving, chi co o bang
+    # dich, khong co o bang Kafka lan MV.
+    version_column: inserted_at
+    partition_by: toYYYYMMDD(window_start)
+    order_by: [window_start, tx_type]
+    ttl_column: window_start
+    ttl_interval: 30 DAY
+    kafka_group: clickhouse-timeseries
+    kafka_max_block_size: 1048576
+
+tags: [metric, realtime, dashboard]

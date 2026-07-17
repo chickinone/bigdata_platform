@@ -133,14 +133,18 @@ Ba quy ước ảnh hưởng tới mọi consumer hạ nguồn:
 | `metrics.breakdown` | CUMULATE 5 phút / 1 ngày | `(window_start, window_end, tx_type)` | 30 ngày | Như KPI nhưng chẻ theo `tx_type`. |
 | `metrics.topn` | CUMULATE 5 phút / 1 ngày | `(window_start, window_end, rank_num)` | 30 ngày | Top 10 account theo `total_value`. |
 
-**Mỗi metric được khai báo 3 lần** phải khớp tuyệt đối với nhau và với sink DDL trong Flink:
+**Mỗi metric cần 3 đối tượng** phải khớp tuyệt đối với nhau và với sink DDL trong Flink:
 
 1. Bảng đích `metrics.<m>` — `ReplacingMergeTree` ([`01_schema.sql`](../../clickhouse/init/01_schema.sql))
 2. Bảng đệm `metrics.<m>_kafka` — Kafka engine, `JSONEachRow` ([`02_kafka_consumers.sql`](../../clickhouse/init/02_kafka_consumers.sql))
 3. `SELECT` trong `metrics.<m>_mv` — Materialized View
 
-→ 4 metric × 3 = **12 khối schema viết tay**. Nếu cột lệch, MV **bỏ dữ liệu mà không báo lỗi**. Đây là
-động lực chính của [lộ trình metadata-driven](../roadmap/BDP-metadata-driven-roadmap.md).
+> ✅ **Cả 3 nay SINH từ một contract** ([ADR-0019](../decisions/0019-generate-clickhouse-metric-ddl.md)) —
+> `metadata/datasets/metrics/*.yaml`. Chúng đọc chung một `columns` nên **không thể lệch**, hết cảnh MV
+> bỏ dữ liệu âm thầm. Hai file `01_schema.sql`/`02_kafka_consumers.sql` là **file sinh, đừng sửa tay**.
+>
+> ⚠️ **Vẫn còn hở:** sink DDL bên Flink (`lane1_dashboard.py`) **viết tay** → vẫn có thể lệch với
+> ClickHouse. Hết khi Flink runner sinh cả hai đầu từ cùng spec (Pha 3).
 
 ### 3.1 `metrics.dlq_events` — lỗi cũng là dữ liệu
 

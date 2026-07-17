@@ -1,0 +1,42 @@
+# Metric: top 10 account theo tong gia tri (CUMULATE 5 phut / 1 ngay).
+# Toi da 10 dong moi cua so -> bang nho nhat.
+urn: bank.metric.topn
+kind: olap_table
+layer: metric
+owner: team-analytics
+description: Top 10 tài khoản theo tổng giá trị giao dịch, cộng dồn trong ngày.
+
+source:
+  type: app_json
+  topic: metrics.topn
+
+columns:
+  - { name: window_start, type: timestamp, nullable: false }
+  - { name: window_end,   type: timestamp, nullable: false }
+  # rank_num chi tu 1-10. Mo hinh logic chi biet "int khong am"; ClickHouse dung
+  # UInt8 cho gon. Day la cho mo hinh logic KHONG du dien ta -> dung cua thoat
+  # hiem column_types ben duoi. Xem ADR-0019.
+  - { name: rank_num,     type: int,  nullable: false, unsigned: true, description: "Hạng 1-10" }
+  - { name: account_id,   type: long, nullable: false, unsigned: true }
+  - { name: tx_count,     type: long, nullable: false, unsigned: true }
+  - { name: total_value,  type: "decimal(19,4)", nullable: false }
+
+sinks:
+  clickhouse:
+    enabled: true
+    database: metrics
+    table: topn
+    engine: ReplacingMergeTree
+    version_column: inserted_at
+    partition_by: toYYYYMMDD(window_start)
+    order_by: [window_start, window_end, rank_num]
+    ttl_column: window_start
+    ttl_interval: 30 DAY
+    kafka_group: clickhouse-topn
+    kafka_max_block_size: 1048576
+    # Cua thoat hiem: rank_num 1-10 nen UInt8 la du. Mo hinh logic khong co khai
+    # niem "int nho" -> ep kieu tuong minh o day.
+    column_types:
+      rank_num: UInt8
+
+tags: [metric, realtime, dashboard]

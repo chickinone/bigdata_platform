@@ -4,6 +4,12 @@
 - **Date:** 2026-07-15 *(hồi tố)*
 - **Deciders:** Phan Trường
 
+> **Cập nhật 2026-07-16:** cái giá lớn nhất mà ADR này ghi nhận — *"12 khối schema viết tay phải khớp
+> tuyệt đối, lệch cột thì MV bỏ dữ liệu không báo lỗi"* — **đã được xử lý** ở
+> [ADR-0019](0019-generate-clickhouse-metric-ddl.md): cả 3 đối tượng ClickHouse nay sinh từ một
+> `columns` của contract. Quyết định kiến trúc (đi vòng qua Kafka thay vì ghi thẳng) **giữ nguyên**.
+> Riêng phần "schema Flink sink phải khớp thủ công" vẫn còn — cần Pha 3.
+
 ## Bối cảnh
 
 Metric của Flink phải đến được Grafana. Cách hiển nhiên là cho Flink ghi thẳng vào ClickHouse bằng

@@ -46,9 +46,13 @@ Phải chạy lại sau mỗi `docker compose down -v`.
 
 | File init | Tạo gì |
 |---|---|
-| `01_schema.sql` | 4 bảng metric đích (ReplacingMergeTree + TTL) |
-| `02_kafka_consumers.sql` | 4 bảng Kafka engine + 4 MV cho metric |
+| `01_schema.sql` | 4 bảng metric đích (ReplacingMergeTree + TTL) — **file sinh** ([ADR-0019](../decisions/0019-generate-clickhouse-metric-ddl.md)) |
+| `02_kafka_consumers.sql` | 4 bảng Kafka engine + 4 MV cho metric — **file sinh** |
 | `03_dlq.sql` | `dlq_events` + Kafka engine + MV — lỗi connector thành dữ liệu ([ADR-0017](../decisions/0017-dlq-flow-observe-then-park.md)) |
+
+> ⚠️ **`01_schema.sql` và `02_kafka_consumers.sql` là file SINH** từ
+> `metadata/datasets/metrics/*.yaml` — **đừng sửa tay**. Muốn đổi cột/TTL/engine của metric thì sửa
+> contract rồi `python -m dataplatform.cli write`. (`03_dlq.sql` vẫn viết tay.)
 
 ---
 

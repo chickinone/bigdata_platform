@@ -83,6 +83,16 @@
             "description": "Kiểu THỰC TẾ trên Kafka khi khác kiểu logic. decimal + encoded_as=string là hệ quả của decimal.handling.mode=string (ADR-0003) — generator dựa vào đây để chèn CAST.",
             "enum": ["string"]
           },
+          "unsigned": {
+            "description": "Giá trị KHÔNG BAO GIỜ âm (vd: đếm số lượng). Đây là sự thật LOGIC về dữ liệu, không phải chi tiết engine — ClickHouse chỉ tình cờ khai thác được nó thành UInt*.",
+            "type": "boolean",
+            "default": false
+          },
+          "low_cardinality": {
+            "description": "Cột có RẤT ÍT giá trị phân biệt (vd: loại giao dịch). Cũng là sự thật logic; ClickHouse khai thác thành LowCardinality(String) ở bảng đích.",
+            "type": "boolean",
+            "default": false
+          },
           "pii": { "type": "boolean", "default": false },
           "description": { "type": "string" }
         }
@@ -106,6 +116,44 @@
           "additionalProperties": false,
           "properties": {
             "enabled": { "type": "boolean", "default": true }
+          }
+        },
+        "clickhouse": {
+          "description": "Serving OLAP. Sinh ĐỦ BỘ 3 đối tượng cho mỗi metric: bảng đích (MergeTree) + bảng đệm (Kafka engine) + Materialized View. Cả 3 dùng CHUNG danh sách cột của contract, nên KHÔNG THỂ lệch nhau — diệt sprawl #8/#9.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "database", "table", "engine", "order_by"],
+          "properties": {
+            "enabled": { "type": "boolean", "default": true },
+            "database": { "type": "string", "minLength": 1 },
+            "table": { "type": "string", "minLength": 1 },
+            "engine": {
+              "description": "ReplacingMergeTree gộp bản trùng theo order_by lúc merge — cần vì sink Flink là AT_LEAST_ONCE (ADR-0007).",
+              "enum": ["MergeTree", "ReplacingMergeTree"]
+            },
+            "version_column": {
+              "description": "Cột phiên bản cho ReplacingMergeTree, sinh ra dạng `DateTime DEFAULT now()`. Nó THUỘC VỀ tầng serving, không phải schema logic của metric — nên KHÔNG khai trong `columns`, và không có trong bảng Kafka lẫn MV.",
+              "type": "string"
+            },
+            "partition_by": { "type": "string" },
+            "order_by": {
+              "description": "Khoá sắp xếp — cũng là khoá gộp bản trùng của ReplacingMergeTree.",
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string" }
+            },
+            "ttl_column": { "type": "string" },
+            "ttl_interval": {
+              "description": "Vd '30 DAY'. ClickHouse KHÔNG là nguồn sự thật — nó có TTL.",
+              "type": "string"
+            },
+            "kafka_group": { "type": "string" },
+            "kafka_max_block_size": { "type": "integer" },
+            "column_types": {
+              "description": "Cửa thoát hiểm: ép kiểu ClickHouse cho cột mà mô hình logic không diễn tả nổi (vd rank_num = UInt8). Dùng càng ít càng tốt — mỗi lần dùng là một chỗ mô hình logic chưa đủ.",
+              "type": "object",
+              "additionalProperties": { "type": "string" }
+            }
           }
         }
       }

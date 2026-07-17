@@ -13,16 +13,19 @@
 > Khai báo mỗi thực thể **một lần** trong `metadata/datasets/*.yaml`, rồi để generator sinh ra mọi
 > file cấu hình của thực thể đó — thay vì chép tay cùng thông tin sang từng công cụ.
 
-**Trạng thái hiện tại — 7 artifact:**
+**Trạng thái hiện tại — 11 artifact:**
 
 | Artifact | Số file | Ghi chú |
 |---|---|---|
 | ES sink connector | 5 | 1 dataset → 1 connector |
 | S3 sink connector (Bronze) | 1 | N dataset → 1 connector (gộp `topics`) |
+| Debezium source connector | 1 | N dataset → 1 (gộp `table.include.list`) — [ADR-0018](../decisions/0018-generate-debezium-and-publication.md) |
+| Publication SQL | 1 | **text/SQL**, cùng nguồn với Debezium → không thể lệch |
+| DDL ClickHouse | 2 | 12 đối tượng metric từ `columns` — [ADR-0019](../decisions/0019-generate-clickhouse-metric-ddl.md) |
 | Bản kê topic DLQ | 1 | `dlq-processor/dlq_topics.json` ([ADR-0017](../decisions/0017-dlq-flow-observe-then-park.md)) |
 
-Cấu hình DLQ của **cả 6 connector** cũng sinh từ đây. Còn viết tay: Debezium connector, publication
-SQL, DDL Flink/ClickHouse — sẽ làm theo lộ trình.
+Cấu hình DLQ của **cả 6 connector** cũng sinh từ đây. Còn viết tay: DDL sink bên Flink
+(`lane1_dashboard.py`), job Spark, catalog Trino — sẽ làm theo lộ trình.
 
 ---
 
@@ -53,8 +56,11 @@ python -m dataplatform.cli write    # ghi bản sinh ĐÈ lên đĩa
 Kết quả `check` khi mọi thứ đúng:
 
 ```text
-Đối chiếu 7 artifact sinh từ metadata/ với file trên đĩa:
+Đối chiếu 11 artifact sinh từ metadata/ với file trên đĩa:
 
+  [KHỚP] clickhouse/init/01_schema.sql
+  [KHỚP] clickhouse/init/02_kafka_consumers.sql
+  [KHỚP] debezium/postgres-connector.json
   [KHỚP] dlq-processor/dlq_topics.json
   [KHỚP] kafka-connect/es-sinks/es-sink-accounts.json
   [KHỚP] kafka-connect/es-sinks/es-sink-customers.json
@@ -62,8 +68,10 @@ Kết quả `check` khi mọi thứ đúng:
   [KHỚP] kafka-connect/es-sinks/es-sink-transactions.json
   [KHỚP] kafka-connect/es-sinks/es-sink-transfers.json
   [KHỚP] kafka-connect/s3-sinks/s3-sink-cdc.json
+  [KHỚP] postgres/init/04_publication.sql
 
-KẾT QUẢ: 7/7 artifact khớp tuyệt đối.
+KẾT QUẢ: 11/11 artifact khớp tuyệt đối.
+Contract mang đủ thông tin để sinh lại toàn bộ file viết tay.
 ```
 
 > `check` so **dict đã parse**, không so văn bản — dòng trống và thứ tự khoá không tính là lệch. Chỉ
@@ -81,6 +89,7 @@ viết tay sẽ báo lệch giả.
 metadata/
   datasets/
     oltp/      customers.yaml  accounts.yaml  transactions.yaml  transfers.yaml
+    metrics/   timeseries.yaml  kpi.yaml  breakdown.yaml  topn.yaml
     alerts/    fraud-alerts.yaml
 dataplatform/
   registry.py            # đọc + validate contract (mọi generator đi qua đây)
@@ -92,6 +101,7 @@ dataplatform/
     s3_sink.py               # N dataset  -> 1 S3 sink connector (gộp `topics`)
     debezium.py              # N dataset  -> 1 source connector (gộp table.include.list)
     postgres_publication.py  # N dataset  -> publication SQL (cùng nguồn với debezium)
+    clickhouse_ddl.py        # 1 metric   -> 3 đối tượng ClickHouse (bảng + kafka + MV)
     dlq.py                   # chính sách DLQ + bản kê topic cho dlq-processor
 ```
 
@@ -152,9 +162,8 @@ vì khai rời là cho phép chúng lệch nhau.
 
 | Giới hạn | Ghi chú |
 |---|---|
-| Chưa sinh DDL Flink/ClickHouse | Sprawl #6 (`ROW<...>` lặp 6 file) và #9 (12 khối schema metric) còn nguyên — Pha 3–4. |
-| Chưa có Deployer | `write` chỉ ghi đĩa; đẩy vào engine vẫn làm tay bằng `curl` (§3). |
-| Chưa có CI | `check` chạy tay. Sửa contract mà quên `write` thì chưa có gì chặn. |
-| Contract chưa đối chiếu ngược với DB thật | Nó khớp *artifact*, chưa chắc khớp *schema Postgres*. Việc của Pha 1. |
-| `columns` chưa được dùng | Tồn tại sẵn cho Flink/ClickHouse ở pha sau. |
-| Chưa có CI | `check` chạy tay. Cắm vào CI là việc kế tiếp. |
+| **Nửa Flink của sprawl #8 còn hở** | DDL sink trong `lane1_dashboard.py` **vẫn viết tay** → vẫn có thể lệch với ClickHouse. Hết khi Flink runner sinh cả hai đầu từ cùng spec (Pha 3). |
+| Chưa sinh job Spark, catalog Trino | Sprawl #10/#11 (Pha 5), #13. |
+| Chưa có Deployer | `write` chỉ ghi đĩa; đẩy vào engine vẫn làm tay bằng `curl`. |
+| Chưa có CI | `check` chạy tay. Sửa contract mà quên `write`, hoặc sửa tay artifact → chưa có gì chặn. |
+| Contract chưa đối chiếu ngược với DB thật | Nó khớp *artifact*, chưa chắc khớp *schema Postgres*. Pha 1 còn nợ. |

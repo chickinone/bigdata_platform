@@ -261,12 +261,17 @@ MV). **Cùng một spec đảm bảo schema Flink output == schema ClickHouse in
 
 **Mục tiêu:** có `metadata/` mô tả *đúng* hệ thống đang chạy (reverse-engineering).
 
-1. Viết **JSON Schema** cho chính metadata (`platform/schemas/`) — "meta-metadata".
-2. Mã hóa 4 dataset OLTP + 4 metric + các dataset lake thành YAML như ví dụ §3.
-3. Mã hóa connections (postgres, kafka, clickhouse, s3, es, iceberg, trino).
-4. **Kiểm chứng ngược:** script so schema thật (Postgres `information_schema`, Avro trong Schema
-   Registry, DDL ClickHouse) với contract → báo lệch. Contract phải khớp 100% hiện trạng **trước khi**
-   dùng nó để sinh.
+1. ✅ Viết **JSON Schema** cho chính metadata (`dataplatform/schemas/`) — "meta-metadata".
+2. 🟡 Mã hóa dataset thành YAML như ví dụ §3:
+   - ✅ 4 dataset OLTP (`customers`, `accounts`, `transactions`, `transfers`)
+   - ✅ `fraud-alerts` (ngoài danh sách gốc — cần để chứng minh mô hình chịu được dataset khác khuôn)
+   - ✅ **4 metric** (`metrics.{timeseries,kpi,breakdown,topn}`) — [ADR-0019](../decisions/0019-generate-clickhouse-metric-ddl.md).
+     Mở khoá topic manifest (Pha 2) và đã dùng để sinh DDL ClickHouse (Pha 4).
+   - ⬜ Các dataset lake (bronze/silver/gold) — cần cho Pha 5.
+3. ⬜ Mã hóa connections (postgres, kafka, clickhouse, s3, es, iceberg, trino).
+4. ⬜ **Kiểm chứng ngược:** script so schema thật (Postgres `information_schema`, Avro trong Schema
+   Registry, DDL ClickHouse) với contract → báo lệch. Hiện contract mới được chứng minh khớp
+   *artifact*, **chưa** chứng minh khớp *database thật*.
 
 **Đầu ra:** `metadata/` là bản sao chính xác của hệ thống; validator chạy trong CI.
 **Ước lượng:** 1–1.5 tuần.
@@ -282,10 +287,11 @@ làm trước để chứng minh giá trị.
    - ✅ 5 file `es-sink-*.json` (topic + `extractKey.field` = PK từ contract) — [ADR-0015](../decisions/0015-metadata-registry-yaml-first.md)
    - ✅ `s3-sink-cdc.json` (`topics` gộp từ mọi dataset bật `s3_bronze`)
    - ✅ Cấu hình DLQ cho cả 6 connector + bản kê topic cho `dlq-processor` — [ADR-0017](../decisions/0017-dlq-flow-observe-then-park.md)
-   - ⬜ `postgres-connector.json` (`table.include.list`) **và** `04_publication.sql` — **việc kế tiếp**.
-     Hai file này phải khớp nhau (sprawl #2/#3); lệch một bảng là **mất CDC âm thầm**. Sinh cả hai từ
-     một contract là chỗ diệt sprawl có giá trị nhất còn lại.
+   - ✅ `postgres-connector.json` (`table.include.list`) **và** `04_publication.sql` — sinh từ **cùng
+     một nguồn** nên không thể lệch; diệt sprawl #2/#3 ([ADR-0018](../decisions/0018-generate-debezium-and-publication.md)).
    - ⬜ **Topic manifest** (partition/retention/RF theo env — tắt `auto.create.topics`).
+     **Đã mở khoá** — 4 metric dataset nay có trong registry (ADR-0019). Còn thiếu `dlq.events` và các
+     topic nội bộ của Connect (`_connect_*`) trước khi dám tắt `auto.create.topics`.
 2. ⬜ **Deployer** áp connector qua Connect REST API **idempotent** (`PUT /connectors/{name}/config`).
    Hiện vẫn đăng ký tay bằng `curl`.
 3. ✅ Đối chiếu JSON sinh vs JSON hiện tại (diff = rỗng) — `python -m dataplatform.cli check`, 7/7 khớp.
@@ -317,14 +323,19 @@ làm trước để chứng minh giá trị.
 
 **Mục tiêu:** hết cảnh 12 khối schema viết tay; đảm bảo khớp với Flink.
 
-1. Từ **mỗi metric spec** (dùng chung với Pha 3), sinh: `CREATE TABLE metrics.<m>` (engine/ORDER BY/TTL
-   từ metadata), `CREATE TABLE metrics.<m>_kafka` (Kafka engine), `CREATE MATERIALIZED VIEW
-   metrics.<m>_mv`.
-2. Vì cùng nguồn spec, **schema Flink sink == ClickHouse input** được đảm bảo bằng generator, không
-   bằng con người.
-3. Áp DDL qua **migration có version** (xem Pha 7) thay vì init script chạy một lần.
+1. ✅ Từ **mỗi metric dataset**, sinh cả 3: `metrics.<m>` (engine/ORDER BY/TTL từ metadata),
+   `metrics.<m>_kafka` (Kafka engine), `metrics.<m>_mv` — cả 3 đọc **cùng một `columns`** nên không thể
+   lệch. Kiểm chứng bằng cách áp DDL thật vào ClickHouse: **12/12 đối tượng giống hệt** bản viết tay
+   ([ADR-0019](../decisions/0019-generate-clickhouse-metric-ddl.md)).
+2. 🟡 **Nửa còn lại của sprawl #8:** sink DDL bên Flink (`lane1_dashboard.py`) **vẫn viết tay** → vẫn có
+   thể lệch với ClickHouse. Chỉ hết khi Flink runner sinh cả hai đầu từ cùng spec (**Pha 3**).
+3. ⬜ Áp DDL qua **migration có version** (xem Pha 7) thay vì init script chạy một lần.
 
-**Đầu ra:** đổi metric = sửa spec, DDL tự cập nhật, không lệch. **Ước lượng:** 1–1.5 tuần.
+> **Ghi chú thứ tự:** Pha 4 làm **trước** Pha 3, vì Pha 4 rủi ro "Trung bình" và **có oracle** (12 bảng
+> đang chạy để đối chiếu), còn Pha 3 rủi ro "Cao". Làm cái chắc chắn trước.
+
+**Đầu ra:** đổi metric = sửa contract, DDL tự cập nhật, không lệch. **Ước lượng:** 1–1.5 tuần
+*(phần ClickHouse đã xong)*.
 
 ---
 

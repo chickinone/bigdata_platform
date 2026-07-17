@@ -1,0 +1,35 @@
+# Metric: nhu KPI nhung che theo loai giao dich (CUMULATE 5 phut / 1 ngay).
+urn: bank.metric.breakdown
+kind: olap_table
+layer: metric
+owner: team-analytics
+description: KPI cộng dồn trong ngày, chẻ theo loại giao dịch.
+
+source:
+  type: app_json
+  topic: metrics.breakdown
+
+columns:
+  - { name: window_start,  type: timestamp, nullable: false }
+  - { name: window_end,    type: timestamp, nullable: false }
+  - { name: tx_type,       type: string, nullable: false, low_cardinality: true }
+  - { name: tx_count,      type: long, nullable: false, unsigned: true }
+  - { name: total_value,   type: "decimal(19,4)", nullable: false }
+  - { name: success_count, type: long, nullable: false, unsigned: true }
+  - { name: failed_count,  type: long, nullable: false, unsigned: true }
+
+sinks:
+  clickhouse:
+    enabled: true
+    database: metrics
+    table: breakdown
+    engine: ReplacingMergeTree
+    version_column: inserted_at
+    partition_by: toYYYYMMDD(window_start)
+    order_by: [window_start, window_end, tx_type]
+    ttl_column: window_start
+    ttl_interval: 30 DAY
+    kafka_group: clickhouse-breakdown
+    kafka_max_block_size: 1048576
+
+tags: [metric, realtime, dashboard]

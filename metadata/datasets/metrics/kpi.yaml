@@ -1,0 +1,41 @@
+# Metric: 6 KPI tong, cong don tu nua dem (CUMULATE 5 phut / 1 ngay).
+# It dong nhat (khong group by) -> giu lau nhat: TTL 90 ngay.
+urn: bank.metric.kpi
+kind: olap_table
+layer: metric
+owner: team-analytics
+description: 6 KPI tổng hợp cộng dồn trong ngày — dùng cho thẻ số trên dashboard.
+
+source:
+  type: app_json
+  topic: metrics.kpi
+
+columns:
+  - { name: window_start,  type: timestamp, nullable: false, description: "Cửa sổ CUMULATE reset lúc nửa đêm" }
+  - { name: window_end,    type: timestamp, nullable: false }
+  - { name: total_count,   type: long, nullable: false, unsigned: true }
+  - { name: total_value,   type: "decimal(19,4)", nullable: false }
+  - { name: success_count, type: long, nullable: false, unsigned: true }
+  - { name: failed_count,  type: long, nullable: false, unsigned: true }
+  # Ti le phan tram: 0-100 voi 2 chu so thap phan -> decimal(5,2)
+  - { name: success_rate,  type: "decimal(5,2)", nullable: false }
+  # COUNT(DISTINCT account_id) tren cua so cong don 1 ngay -> state Flink phinh
+  # dan trong ngay roi ve 0 luc nua dem (xem BDP-streaming-lanes.md).
+  - { name: active_users,  type: long, nullable: false, unsigned: true }
+
+sinks:
+  clickhouse:
+    enabled: true
+    database: metrics
+    table: kpi
+    engine: ReplacingMergeTree
+    version_column: inserted_at
+    partition_by: toYYYYMMDD(window_start)
+    order_by: [window_start, window_end]
+    ttl_column: window_start
+    # 90 ngay (khac 30 cua cac metric kia): bang nay it dong nhat vi khong group by.
+    ttl_interval: 90 DAY
+    kafka_group: clickhouse-kpi
+    kafka_max_block_size: 1048576
+
+tags: [metric, realtime, dashboard]
