@@ -4,6 +4,12 @@
 - **Date:** 2026-07-15 *(hồi tố)*
 - **Deciders:** Phan Trường
 
+> **Cập nhật 2026-07-16 — đã dọn nợ:** 4 file di sản `lane1_{timeseries,kpi,breakdown,topn}.py` **đã
+> bị xóa**. Kiểm chứng trước khi xóa: chúng dùng `'connector' = 'print'` (chỉ in console), khác hẳn
+> `lane1_dashboard.py` ghi thật vào Kafka `metrics.*`; và không file cấu hình/code nào tham chiếu. Nay
+> `flink/jobs/` chỉ còn 2 file (`lane1_dashboard.py`, `lane3_fraud_detection.py`). Phần "Việc còn nợ"
+> ở cuối ADR này coi như hoàn thành.
+
 ## Bối cảnh
 
 Lane 1 cần 4 metric (`timeseries`, `kpi`, `breakdown`, `topn`) — **tất cả** đều lấy từ cùng một topic

@@ -6,23 +6,18 @@
 
 ---
 
-## 1. Chỉ chạy hai file này
+## 1. Hai file
 
-Thư mục [`flink/jobs/`](../../flink/jobs/) có 6 file, nhưng **chỉ 2 file nên chạy**:
+Thư mục [`flink/jobs/`](../../flink/jobs/) có đúng 2 file, mỗi file một lane:
 
-| File | Chạy? | Vì sao |
-|---|---|---|
-| `lane1_dashboard.py` | ✅ **Có** | Sinh cả 4 metric trong 1 job qua `StatementSet`. |
-| `lane3_fraud_detection.py` | ✅ **Có** | Fraud detection. |
-| `lane1_timeseries.py` | ❌ Không | **Di sản** — đã gộp vào `lane1_dashboard.py`. |
-| `lane1_kpi.py` | ❌ Không | Di sản. |
-| `lane1_breakdown.py` | ❌ Không | Di sản. |
-| `lane1_topn.py` | ❌ Không | Di sản. |
+| File | Vì sao |
+|---|---|
+| `lane1_dashboard.py` | Sinh cả 4 metric trong 1 job qua `StatementSet`. |
+| `lane3_fraud_detection.py` | Fraud detection. |
 
-Chạy file di sản song song với `lane1_dashboard` → **hai job cùng ghi vào một topic metric**, ClickHouse
-nhận số liệu gấp đôi. Vì bảng dùng `ReplacingMergeTree(inserted_at)` chứ không phải khoá nghiệp vụ, dữ
-liệu trùng **không** bị gộp một cách đáng tin cậy. Xem
-[ADR-0006](../decisions/0006-one-flink-job-per-lane-statement-set.md).
+> **Đã xóa 4 file di sản** `lane1_{timeseries,kpi,breakdown,topn}.py` (2026-07-16). Chúng là bản
+> "print sink" debug cũ, đã gộp vào `lane1_dashboard.py`. Giữ lại chỉ tạo bẫy: chạy song song sẽ ghi
+> trùng vào cùng topic metric. Xem [ADR-0006](../decisions/0006-one-flink-job-per-lane-statement-set.md).
 
 ---
 
@@ -117,7 +112,7 @@ hơn (chỉ ~5% giao dịch fail). Muốn ép ra alert, tăng `PEAK_RPS` hoặc 
 | Triệu chứng | Nguyên nhân | Xử lý |
 |---|---|---|
 | Không có alert nào | Job submit **sau** khi generator xong (`latest-offset`) | Submit trước, chạy lại generator |
-| Metric gấp đôi | Đang chạy cả `lane1_dashboard` lẫn file di sản | `flink list` → `flink cancel` job thừa |
+| Metric gấp đôi | Đang chạy `lane1_dashboard` hai lần (hoặc bản cũ còn sót ở cluster) | `flink list` → `flink cancel` job thừa |
 | Log TaskManager phình rất nhanh | `lane3` còn `ds.print("LANE3-RAW")` — in **mọi** transaction | Gỡ dòng print rồi submit lại |
 | Checkpoint fail liên tục | Không tới được MinIO, hoặc thiếu bucket checkpoint | Kiểm tra `bigdata-minio-init` đã chạy xong |
 | `ClassNotFound` connector Kafka | JAR không có trong `/opt/flink/jobs/jars` | Kiểm tra thư mục `flink/jobs/jars/` trên host |

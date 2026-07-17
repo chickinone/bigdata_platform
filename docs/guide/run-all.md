@@ -147,7 +147,7 @@ qua `.env` — xem [`../infra/infra.md`](../infra/infra.md) §4.
 Chi tiết: [`flink-jobs.md`](flink-jobs.md).
 
 ```bash
-# Lane 1 — 4 metric trong 1 job. CHỈ chạy file này.
+# Lane 1 — 4 metric trong 1 job
 docker exec -it bigdata-flink-jobmanager flink run -py /opt/flink/jobs/lane1_dashboard.py
 
 # Lane 3 — fraud detection
@@ -156,9 +156,8 @@ docker exec -it bigdata-flink-jobmanager flink run -py /opt/flink/jobs/lane3_fra
 docker exec -it bigdata-flink-jobmanager flink list
 ```
 
-> ⚠️ **Không** chạy `lane1_timeseries.py`, `lane1_kpi.py`, `lane1_breakdown.py`, `lane1_topn.py`.
-> Logic của chúng đã nằm trong `lane1_dashboard.py`; chạy song song sẽ ghi trùng vào topic metric.
-> Xem [ADR-0006](../decisions/0006-one-flink-job-per-lane-statement-set.md).
+> Chỉ còn 2 file Flink. Bốn file `lane1_*` rời (di sản print-sink) **đã bị xóa** 2026-07-16 — logic
+> của chúng nằm trong `lane1_dashboard.py`. Xem [ADR-0006](../decisions/0006-one-flink-job-per-lane-statement-set.md).
 
 ---
 
