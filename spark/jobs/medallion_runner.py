@@ -13,8 +13,8 @@ import os
 from pyspark.sql import SparkSession
 
 
-def build_spark(name: str) -> SparkSession:
-    return (
+def build_spark(name: str, iceberg: bool) -> SparkSession:
+    b = (
         SparkSession.builder
         .appName(name)
         .config("spark.hadoop.fs.s3a.endpoint", os.getenv("S3_ENDPOINT", "http://minio:9000"))
@@ -23,15 +23,29 @@ def build_spark(name: str) -> SparkSession:
         .config("spark.hadoop.fs.s3a.path.style.access", os.getenv("S3_PATH_STYLE_ACCESS", "true"))
         .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
         .config("spark.hadoop.fs.s3a.connection.ssl.enabled", os.getenv("S3_SSL_ENABLED", "false"))
-        .getOrCreate()
     )
+    if iceberg:
+        # Chỉ thêm khi output là iceberg (cần iceberg jar do deployer nạp riêng).
+        # Cùng cấu hình đã chứng minh ở silver_to_iceberg.py: catalog REST + HadoopFileIO
+        # (S3A battle-tested với MinIO, tránh S3FileIO hang multipart).
+        b = (
+            b.config("spark.sql.catalog.lakehouse", "org.apache.iceberg.spark.SparkCatalog")
+            .config("spark.sql.catalog.lakehouse.type", "rest")
+            .config("spark.sql.catalog.lakehouse.uri", os.getenv("ICEBERG_REST_URI", "http://iceberg-rest:8181"))
+            .config("spark.sql.catalog.lakehouse.warehouse", os.getenv("ICEBERG_WAREHOUSE", "s3a://data-lake-iceberg/warehouse"))
+            .config("spark.sql.catalog.lakehouse.io-impl", "org.apache.iceberg.hadoop.HadoopFileIO")
+            .config("spark.sql.defaultCatalog", "lakehouse")
+        )
+    return b.getOrCreate()
 
 
 def main():
     with open(os.environ["JOB_PLAN"], encoding="utf-8") as f:
         plan = json.load(f)
 
-    spark = build_spark(plan["name"])
+    out = plan["output"]
+    is_iceberg = out.get("format") == "iceberg"
+    spark = build_spark(plan["name"], iceberg=is_iceberg)
     spark.sparkContext.setLogLevel("WARN")
 
     # Input: mỗi parquet -> view có tên (SQL tham chiếu tên này).
@@ -43,13 +57,21 @@ def main():
     result = spark.sql(plan["sql"]).cache()
     rows = result.count()
 
-    out = plan["output"]
-    writer = result.write.mode(out["mode"])
-    if out.get("partition_by"):
-        writer = writer.partitionBy(*out["partition_by"])
-    writer.format(out.get("format", "parquet")).save(out["path"])
+    if is_iceberg:
+        # CTAS Iceberg: tạo namespace rồi ghi đè bảng. Iceberg tự quản snapshot/time-travel.
+        table = out["table"]
+        namespace = table.rsplit(".", 1)[0]
+        spark.sql(f"CREATE NAMESPACE IF NOT EXISTS {namespace}")
+        result.writeTo(table).using("iceberg").createOrReplace()
+        target = table
+    else:
+        writer = result.write.mode(out["mode"])
+        if out.get("partition_by"):
+            writer = writer.partitionBy(*out["partition_by"])
+        writer.format(out.get("format", "parquet")).save(out["path"])
+        target = out["path"]
 
-    print(f"WROTE {plan['name']}: {rows:,} rows -> {out['path']}")
+    print(f"WROTE {plan['name']}: {rows:,} rows -> {target}")
     spark.stop()
 
 

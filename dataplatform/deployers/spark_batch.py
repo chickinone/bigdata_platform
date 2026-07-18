@@ -26,12 +26,26 @@ SPARK_CONTAINER = "bigdata-spark-master"
 SPARK_SUBMIT = "/opt/spark/bin/spark-submit"
 SPARK_MASTER = "spark://spark-master:7077"
 PACKAGES = "org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262"
+ICEBERG_PACKAGES = "org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.6.0," + PACKAGES
 CONTAINER_RUNNER = "/opt/spark-jobs/medallion_runner.py"
 PLAN_DIR_HOST = "spark/jobs/generated"
 PLAN_DIR_CONTAINER = "/opt/spark-jobs/generated"
 
-# Thứ tự chạy: gold đọc silver nên silver phải xong trước.
-_LAYER_RANK = {"bronze": 0, "silver": 1, "gold": 2}
+
+def _stage(spec: dict) -> int:
+    """Thứ tự chạy theo PHỤ THUỘC INPUT, không theo layer: job đọc Bronze là nguồn
+    (chạy trước), job đọc Silver là dẫn xuất (chạy sau — gold + iceberg đều đọc Silver).
+    """
+    paths = " ".join(i["path"] for i in spec["inputs"])
+    if "data-lake-bronze" in paths:
+        return 0
+    if "data-lake-silver" in paths:
+        return 1
+    return 2
+
+
+def _packages(spec: dict) -> str:
+    return ICEBERG_PACKAGES if spec["output"].get("format") == "iceberg" else PACKAGES
 
 
 def load_batch_specs() -> list[dict]:
@@ -40,7 +54,7 @@ def load_batch_specs() -> list[dict]:
         spec = yaml.safe_load(path.read_text(encoding="utf-8"))
         if spec.get("engine") == "spark_sql":
             specs.append(spec)
-    return sorted(specs, key=lambda s: (_LAYER_RANK.get(s.get("layer"), 9), s["name"]))
+    return sorted(specs, key=lambda s: (_stage(s), s["name"]))
 
 
 def _write_plan(spec: dict) -> str:
@@ -65,9 +79,12 @@ def cmd_plan() -> int:
     for spec in specs:
         _write_plan(spec)
         ins = ", ".join(i["view"] for i in spec["inputs"])
-        print(f"  [{spec.get('layer',''):<6}] {spec['name']}")
+        out = spec["output"]
+        target = out.get("table") or out.get("path")
+        fmt = out.get("format", "parquet")
+        print(f"  [stage {_stage(spec)}] {spec['name']}")
         print(f"           inputs: {ins}")
-        print(f"           output: {spec['output']['path']} ({len(spec['output'].get('columns', []))} cột)")
+        print(f"           output: {target} ({fmt}, {len(out.get('columns', []))} cột)")
     print("\nChạy `apply` để spark-submit theo thứ tự.")
     return 0
 
@@ -80,7 +97,7 @@ def _submit(spec: dict) -> bool:
          SPARK_SUBMIT, "--master", SPARK_MASTER,
          # ivy về /tmp: thư mục mặc định không ghi được khi container fresh.
          "--conf", "spark.jars.ivy=/tmp/.ivy2",
-         "--packages", PACKAGES, CONTAINER_RUNNER],
+         "--packages", _packages(spec), CONTAINER_RUNNER],
         capture_output=True, text=True,
     )
     out = (proc.stdout + proc.stderr).splitlines()
