@@ -1,0 +1,75 @@
+# Batch pipeline (Silver): Bronze -> Silver enriched.
+# Mo hinh dbt: transform la SQL (ETL khac khuon, xem ADR-0024), con schema output +
+# path/format/partition khai bao -> diet sprawl #10 (biet Silver phu thuoc cot gi).
+# Thay enrich_transactions.py.
+name: silver_enriched_transactions
+engine: spark_sql
+layer: silver
+
+# Input: doc Bronze parquet thanh view co ten (SQL tham chieu ten nay).
+inputs:
+  - { view: bronze_transactions, path: "s3a://data-lake-bronze/topics/bankdb.public.transactions/" }
+  - { view: bronze_accounts,     path: "s3a://data-lake-bronze/topics/bankdb.public.accounts/" }
+  - { view: bronze_customers,    path: "s3a://data-lake-bronze/topics/bankdb.public.customers/" }
+
+# Transform: dedup ve current state (row_number theo PK + updated_at) roi join 3 chieu.
+# Day la ETL khac khuon -> SQL la cach bieu dien dung (mo hinh dbt).
+sql: |
+  WITH accounts_current AS (
+    SELECT * FROM (
+      SELECT *, row_number() OVER (PARTITION BY account_id ORDER BY updated_at DESC) AS rn
+      FROM bronze_accounts
+    ) WHERE rn = 1
+  ),
+  customers_current AS (
+    SELECT * FROM (
+      SELECT *, row_number() OVER (PARTITION BY customer_id ORDER BY updated_at DESC) AS rn
+      FROM bronze_customers
+    ) WHERE rn = 1
+  )
+  SELECT
+    t.transaction_id,
+    t.transaction_type,
+    t.amount,
+    t.currency,
+    t.status,
+    t.posted_at,
+    a.account_id,
+    a.account_type,
+    a.account_number,
+    c.customer_id,
+    c.full_name AS customer_name,
+    c.country_code,
+    c.kyc_status,
+    c.risk_score,
+    year(t.posted_at)       AS year,
+    month(t.posted_at)      AS month,
+    dayofmonth(t.posted_at) AS day
+  FROM bronze_transactions t
+  JOIN accounts_current  a ON t.account_id = a.account_id
+  JOIN customers_current c ON a.customer_id = c.customer_id
+
+# Output: schema + noi ghi. Schema khai o day = hop dong cot cua Silver (sprawl #10).
+output:
+  path: "s3a://data-lake-silver/enriched_transactions/"
+  format: parquet
+  mode: overwrite
+  partition_by: [year, month, day]
+  columns:
+    - { name: transaction_id,   type: long }
+    - { name: transaction_type, type: string }
+    - { name: amount,           type: string }        # STRING tren day (encoded_as, ADR-0003)
+    - { name: currency,         type: string }
+    - { name: status,           type: string }
+    - { name: posted_at,        type: timestamp }
+    - { name: account_id,       type: long }
+    - { name: account_type,     type: string }
+    - { name: account_number,   type: string }
+    - { name: customer_id,      type: long }
+    - { name: customer_name,    type: string, pii: true }
+    - { name: country_code,     type: string }
+    - { name: kyc_status,       type: string }
+    - { name: risk_score,       type: int }
+    - { name: year,             type: int }
+    - { name: month,            type: int }
+    - { name: day,              type: int }

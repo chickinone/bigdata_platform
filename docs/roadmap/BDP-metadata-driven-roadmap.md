@@ -362,15 +362,18 @@ toàn bộ từ metadata (đã kiểm khi stack bị cycle giữa chừng). Auto
 
 **Mục tiêu:** Bronze→Silver→Gold tham số hóa bằng metadata.
 
-1. `spark_runner` nhận **dataset spec**:
-   - **Bronze read:** đường dẫn S3 suy từ topic; dedup theo `primary_key` + `updated_at` (khai báo
-     trong contract, thay cho hardcode `row_number()`).
-   - **Silver:** join spec khai báo (keys, cột chọn, cột partition) thay cho code cứng.
-   - **Gold:** aggregation spec (group_by, measures, filter).
-   - **Iceberg:** tạo/tiến hóa bảng từ contract; schema evolution do diff contract lái.
-2. Đối chiếu output Parquet/Iceberg sinh vs cũ (row count + checksum theo cột).
+**Hướng đã chốt:** SQL trong spec (mô hình **dbt**), không cấu-trúc-hoàn-toàn — vì ETL medallion **khác
+khuôn** (dedup/join/agg/filter), khác Flink metric đồng khuôn. Xem [ADR-0024](../decisions/0024-spark-medallion-runner-sql.md).
 
-**Đầu ra:** thêm bảng lake = khai báo dataset + transform spec. **Ước lượng:** 2–2.5 tuần.
+1. 🟡 `medallion_runner` (mỏng) + `deployers/spark_batch` (`plan`/`apply` theo thứ tự layer):
+   - ✅ **Silver** — batch spec `silver_enriched_transactions.yaml` (inputs + SQL dedup+join 3 chiều +
+     output schema/partition). **Parity: 72 = 72 rows** với `enrich_transactions.py`; đã xoá job cũ.
+   - ⬜ **Gold** (3 bảng) — cùng runner, thêm 3 batch spec; parity với `build_gold_layer.py` rồi xoá.
+   - ⬜ **Iceberg** — sinh CTAS từ contract Silver (tách khỏi demo `silver_to_iceberg.py`).
+2. ✅ Đối chiếu row count (Silver); ⬜ checksum theo cột + verifier schema output vs `output.columns`.
+
+**Đầu ra:** thêm bảng lake = 1 batch spec (contract + SQL), không Python. **Ước lượng:** 2–2.5 tuần
+*(Silver xong; Gold/Iceberg cùng khuôn)*.
 
 ---
 
