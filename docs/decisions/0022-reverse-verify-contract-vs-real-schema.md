@@ -24,14 +24,29 @@ Thêm `dataplatform/verifiers/` với hai verifier, mỗi cái hỏi một câu 
 | | Hỏi gì | Chuẩn là ai |
 |---|---|---|
 | `cli.py check` | Artifact có khớp metadata? | metadata |
-| `verifiers/postgres_schema` | Metadata có khớp Postgres thật? | **Postgres** |
+| `verifiers/postgres_schema` | Metadata có khớp Postgres thật? | **Postgres** (bảng nguồn) |
+| `verifiers/avro_schema` | Metadata có khớp cái Debezium PHÁT trên dây? | **Avro/Schema Registry** (trên dây) |
 | `verifiers/clickhouse_schema` | ClickHouse đang chạy có còn khớp metadata? | metadata (bắt drift) |
+
+Ba nguồn sự thật ĐỘC LẬP nhìn dữ liệu ở ba điểm khác nhau: bảng NGUỒN (Postgres), TRÊN DÂY (Avro), bảng
+ĐÍCH (ClickHouse). Mỗi cái bắt lỗi hai cái kia không thấy.
 
 ### Postgres — nguồn sự thật độc lập
 
 So từng contract CDC với `information_schema.columns`: **tên cột** (contract thừa/thiếu so với DB),
 **kiểu** (logic có tương thích kiểu Postgres thật), **nullable**, **primary key**. Đây là verifier có
 giá trị cao nhất vì Postgres độc lập với contract.
+
+### Avro — cái Debezium THẬT SỰ phát trên dây
+
+Nguồn độc lập thấy thứ Postgres verifier KHÔNG thấy: **mã hoá trên Kafka**. Cột `balance` là
+`numeric(19,4)` trong Postgres nhưng trên dây là **`string`** — do `decimal.handling.mode=string`
+([ADR-0003](0003-avro-with-schema-registry.md)). Contract phải khai `encoded_as: string`, và generator
+dựa vào đó để chèn `CAST`. Verifier so kiểu Avro thật trong Schema Registry (record `after`/`before` của
+envelope Debezium) với `type` + `encoded_as` của contract — khẳng định quan trọng nhất: cột khai
+`encoded_as: string` thì trên dây PHẢI là `string`, và cột decimal mà dây là string nhưng contract QUÊN
+`encoded_as` sẽ bị cảnh báo (generator sẽ thiếu `CAST`). Dataset bảng RỖNG chưa produce → chưa có subject
+→ **bỏ qua** (không phải lỗi).
 
 ### ClickHouse — bắt drift, không phải "tin tức"
 
@@ -54,10 +69,15 @@ Một verifier luôn báo "khớp" thì vô dụng. Nên kiểm hai chiều:
   `ghost_col`). Verifier bắt **đủ 3**, đúng loại. `git checkout` khôi phục → khớp lại.
 - **ClickHouse:** `ALTER TABLE metrics.timeseries ADD COLUMN drift_col` thật. Verifier bắt ngay cột
   drift. `DROP COLUMN` → sạch lại.
+- **Avro:** bỏ `encoded_as: string` khỏi `accounts.balance` và đổi `account_number` sang `long`. Verifier
+  bắt **kiểu dây lệch** (`account_number` contract=long vs dây=string) và **cảnh báo** balance là string
+  mà contract thiếu `encoded_as`. `git checkout` → khớp lại.
 
 ## Kết quả — nợ ẩn **không tồn tại**
 
-Chạy trên stack thật: **4/4 contract CDC khớp Postgres, 4/4 bảng metric khớp ClickHouse, 0 lệch.**
+Chạy trên stack thật: **4/4 contract CDC khớp Postgres, 4/4 bảng metric khớp ClickHouse, phần Avro kiểm
+được (accounts, customers) khớp — 0 lệch.** (transactions/transfers rỗng ở nguồn nên chưa có schema Avro,
+verifier bỏ qua đúng cách; kiểm được nốt khi có data.)
 
 Đây là tin tốt và là điểm chính của ADR: sự trung thực của contract với nguồn sự thật nay được **chứng
 minh**, không còn là **giả định**. Trước Pha 5 (lake) — nơi sẽ có thêm nhiều dataset suy từ các bảng
@@ -72,8 +92,8 @@ này — móng đã được kiểm, không xây trên đất chưa dò.
 **Khó hơn / phải chấp nhận:**
 - Verifier **cần stack chạy** (khác `check` thuần tĩnh), nên KHÔNG vào CI cơ bản được. Nó thuộc CI có
   **stack ephemeral** (Pha 7), hoặc chạy tay khi vận hành.
-- **Còn thiếu nguồn thứ ba: Avro trong Schema Registry** — cái Debezium THẬT SỰ phát ra trên Kafka
-  (kiểm `encoded_as: string` từ `decimal.handling.mode`). Đó là nguồn độc lập nữa, chưa làm ở ADR này.
+- Verifier Avro chỉ kiểm được dataset **đã produce ít nhất một message** (subject mới tồn tại). Bảng rỗng
+  bị bỏ qua cho tới khi có data — giới hạn cố hữu, không phải thiếu sót.
 
 ## Phương án đã cân nhắc
 
