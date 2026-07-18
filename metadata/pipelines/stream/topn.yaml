@@ -1,0 +1,30 @@
+# Pipeline streaming: top 10 account theo tong gia tri (CUMULATE 5 phut / 1 ngay).
+# Ca DUY NHAT can 'rank': aggregate -> xep hang trong cua so -> giu top N.
+name: metric_topn
+engine: flink_sql
+source_urn: bank.public.transactions
+sink_urn: bank.metric.topn
+
+filter: "op = 'c'"
+
+window:
+  type: cumulate
+  time_col: event_time
+  step: "5 MINUTE"
+  size: "1 DAY"
+
+dimensions:
+  - { as: account_id, expr: "`after`.account_id" }
+
+aggregations:
+  - { as: tx_count,    expr: "COUNT(*)" }
+  - { as: total_value, expr: "SUM(CAST(`after`.amount AS DECIMAL(19, 4)))" }
+
+# rank: sau khi aggregate theo dimensions, xep hang trong moi cua so va giu top 'keep'.
+# Sinh ra ROW_NUMBER() OVER (PARTITION BY partition_by ORDER BY order_by) + WHERE <= keep.
+# Thu tu cot sink: [window_start, window_end] + [rank.as] + dimensions + aggregations.
+rank:
+  as: rank_num
+  partition_by: ["window_start", "window_end"]
+  order_by: "total_value DESC"
+  keep: 10

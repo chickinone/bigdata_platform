@@ -316,14 +316,14 @@ phần cốt lõi (còn compatibility gate Avro để trọn vẹn — Pha 7).
 
 **Mục tiêu:** thay 6 job hardcode bằng **1 engine đọc pipeline spec**.
 
-1. Viết `flink_runner`: đọc **source DDL** từ contract dataset → đọc **pipeline spec**
-   (window/group_by/filter/aggregations) → build INSERT SQL → đọc **sink** từ dataset metric → build
-   sink DDL. Gộp nhiều pipeline chung `source_urn` vào 1 `StatementSet` (như `lane1_dashboard` đang
-   làm thủ công) — nay tự động.
-2. Fraud (DataStream API) khó tổng quát hơn: **giữ logic detector là code**, nhưng **tham số hóa**
-   (threshold, window, source/sink topic) từ metadata; source DDL và sink vẫn sinh từ contract.
-3. Đối chiếu: chạy runner song song với job cũ trên cùng dữ liệu, so kết quả metric → khớp → cắt
-   chuyển → xóa `lane1_*.py`.
+1. 🟡 `flink_runner` (**cấu trúc khai báo hoàn toàn** — [ADR-0023](../decisions/0023-flink-metric-runner-declarative.md)):
+   ✅ 4 pipeline spec (`metadata/pipelines/stream/*.yaml`) khai window/filter/dimensions/aggregations/rank;
+   ✅ `generators/flink_sql.py` sinh source DDL (từ cột tham chiếu — diệt sprawl #6, loại cột chết) + sink
+   DDL (từ contract metric — diệt nửa Flink #8) + INSERT; ✅ runner mỏng `metric_runner.py` thực thi job
+   plan; ✅ **oracle SQL**: SQL sinh tương đương SQL viết tay lane1 (sink khớp tuyệt đối, INSERT tương
+   đương). ⬜ Submit runtime + parity dưới traffic + xoá `lane1_dashboard.py` (chờ Docker + có data).
+2. ⬜ Fraud (DataStream API): **giữ detector là code**, tham số hoá (threshold/window/topic); bỏ `ds.print` spam.
+3. ⬜ Đối chiếu: chạy runner song song job cũ trên cùng dữ liệu → khớp → cắt chuyển → xoá `lane1_*.py`.
 
 **Đầu ra:** thêm 1 metric = thêm 1 file YAML, không viết Python mới. **Ước lượng:** 2.5–3 tuần.
 

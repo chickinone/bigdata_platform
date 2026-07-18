@@ -1,0 +1,22 @@
+# Pipeline streaming: nhu KPI nhung che theo loai giao dich (CUMULATE 5 phut / 1 ngay).
+name: metric_breakdown
+engine: flink_sql
+source_urn: bank.public.transactions
+sink_urn: bank.metric.breakdown
+
+filter: "op = 'c'"
+
+window:
+  type: cumulate
+  time_col: event_time
+  step: "5 MINUTE"
+  size: "1 DAY"
+
+dimensions:
+  - { as: tx_type, expr: "`after`.transaction_type" }
+
+aggregations:
+  - { as: tx_count,      expr: "COUNT(*)" }
+  - { as: total_value,   expr: "SUM(CAST(`after`.amount AS DECIMAL(19, 4)))" }
+  - { as: success_count, expr: "COUNT(*) FILTER (WHERE `after`.status = 'completed')" }
+  - { as: failed_count,  expr: "COUNT(*) FILTER (WHERE `after`.status = 'failed')" }

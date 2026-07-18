@@ -1,0 +1,24 @@
+# Pipeline streaming: 6 KPI tong cong don trong ngay (CUMULATE 5 phut / 1 ngay).
+name: metric_kpi
+engine: flink_sql
+source_urn: bank.public.transactions
+sink_urn: bank.metric.kpi
+
+filter: "op = 'c'"
+
+window:
+  type: cumulate        # cong don: cua so lon dan tu nua dem, reset moi ngay
+  time_col: event_time
+  step: "5 MINUTE"      # buoc nhay
+  size: "1 DAY"         # kich thuoc toi da (reset)
+
+# Khong co dimensions: KPI la 1 dong moi cua so (khong che theo gi).
+dimensions: []
+
+aggregations:
+  - { as: total_count,   expr: "COUNT(*)" }
+  - { as: total_value,   expr: "SUM(CAST(`after`.amount AS DECIMAL(19, 4)))" }
+  - { as: success_count, expr: "COUNT(*) FILTER (WHERE `after`.status = 'completed')" }
+  - { as: failed_count,  expr: "COUNT(*) FILTER (WHERE `after`.status = 'failed')" }
+  - { as: success_rate,  expr: "CAST(COUNT(*) FILTER (WHERE `after`.status = 'completed') * 100.0 / NULLIF(COUNT(*), 0) AS DECIMAL(5, 2))" }
+  - { as: active_users,  expr: "COUNT(DISTINCT `after`.account_id)" }

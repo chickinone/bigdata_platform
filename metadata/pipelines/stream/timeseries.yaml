@@ -1,0 +1,24 @@
+# Pipeline streaming: so luong + tong gia tri giao dich moi phut, che theo loai.
+# Thay cho INSERT viet tay trong lane1_dashboard.py (ADR-0023).
+name: metric_timeseries
+engine: flink_sql
+source_urn: bank.public.transactions
+sink_urn: bank.metric.timeseries
+
+filter: "op = 'c'"
+
+window:
+  type: tumble          # cua so khong chong lan, moi giao dich thuoc dung 1 cua so
+  time_col: event_time
+  size: "1 MINUTE"
+
+# dimensions: cot vua GROUP BY vua xuat ra. Thu tu cot sink = [window_start,
+# window_end] + dimensions + aggregations, PHAI khop cot cua contract sink.
+dimensions:
+  - { as: tx_type, expr: "`after`.transaction_type" }
+
+aggregations:
+  # amount la STRING tren day (encoded_as: string) nen phai CAST - day la business
+  # logic cua pipeline, khai tuong minh.
+  - { as: tx_count,     expr: "COUNT(*)" }
+  - { as: total_amount, expr: "SUM(CAST(`after`.amount AS DECIMAL(19, 4)))" }
