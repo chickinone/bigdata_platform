@@ -298,10 +298,13 @@ làm trước để chứng minh giá trị.
    `plan`/`apply`, đọc thẳng generator, không chạm secret. 7 connector deploy + RUNNING, idempotency
    chứng minh — [ADR-0021](../decisions/0021-connector-deployer-idempotent.md). Hết cảnh `curl` thủ công.
 3. ✅ Đối chiếu JSON sinh vs JSON hiện tại (diff = rỗng) — `python -m dataplatform.cli check`, 13/13 khớp.
-   ⬜ Cắm `check` **và** `deployers ... plan` vào **CI** để sửa contract mà quên generator/deploy thì CI đỏ.
+   ✅ **Cắm `check` vào CI** — GitHub Actions `metadata-check.yml` chạy `check` trên mọi PR + push main;
+   sửa contract mà quên generator thì CI **đỏ**. Chứng minh hai chiều: tree sạch → exit 0; chèn drift giả
+   → exit 1; khôi phục → exit 0. (`deployers ... plan` cần Connect sống nên để CI có stack ephemeral —
+   Pha 7.)
 
-**Đầu ra:** thêm/bớt bảng CDC = sửa 1 contract → chạy generator → chạy deployer. **Ước lượng:** 1.5–2 tuần
-*(gần xong — chỉ còn cắm CI)*.
+**Đầu ra:** thêm/bớt bảng CDC = sửa 1 contract → generator → deployer, drift bị CI chặn. **Pha 2 xong**
+phần cốt lõi (còn compatibility gate Avro để trọn vẹn — Pha 7).
 
 ---
 

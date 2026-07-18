@@ -1,0 +1,33 @@
+# Cổng CI của control plane: chặn "drift" giữa metadata và artifact sinh.
+#
+# Vì sao cần: sau khi deploy đọc từ metadata (ADR-0021), metadata đã gánh tải thật.
+# Nhưng nếu ai đó sửa contract mà QUÊN chạy generator, file trên đĩa lệch với
+# metadata mà không gì báo. `check` phát hiện đúng chỗ đó — cắm vào CI để lỗi này
+# làm PR ĐỎ thay vì lọt vào main.
+#
+# `check` thuần tĩnh (chỉ đọc metadata/ + so với file trên đĩa), KHÔNG cần engine
+# nào chạy — nên chạy được trên runner sạch, nhanh, rẻ.
+name: metadata-check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cài phụ thuộc control plane
+        run: pip install -r requirements-dev.txt
+
+      - name: Đối chiếu artifact sinh vs file trên đĩa
+        # Exit 1 nếu lệch (contract sửa mà quên generator), exit 2 nếu contract sai
+        # schema. Cả hai làm job ĐỎ.
+        run: python -m dataplatform.cli check
