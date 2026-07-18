@@ -1,0 +1,39 @@
+# Batch (Gold 3): giao dich rui ro cao (risk_score > 60). KHONG aggregate — chi
+# filter + projection. Thay GOLD 3 trong build_gold_layer.py.
+name: gold_high_risk_transactions
+engine: spark_sql
+layer: gold
+
+inputs:
+  - { view: silver, path: "s3a://data-lake-silver/enriched_transactions/" }
+
+sql: |
+  SELECT
+    transaction_id, posted_at, amount, currency, transaction_type, status,
+    customer_id, customer_name, country_code, risk_score,
+    account_id, account_type,
+    year, month, day
+  FROM silver
+  WHERE risk_score > 60
+
+output:
+  path: "s3a://data-lake-gold/high_risk_transactions/"
+  format: parquet
+  mode: overwrite
+  partition_by: [year, month, day]
+  columns:
+    - { name: transaction_id,   type: long }
+    - { name: posted_at,        type: timestamp }
+    - { name: amount,           type: string }
+    - { name: currency,         type: string }
+    - { name: transaction_type, type: string }
+    - { name: status,           type: string }
+    - { name: customer_id,      type: long }
+    - { name: customer_name,    type: string, pii: true }
+    - { name: country_code,     type: string }
+    - { name: risk_score,       type: int }
+    - { name: account_id,       type: long }
+    - { name: account_type,     type: string }
+    - { name: year,             type: int }
+    - { name: month,            type: int }
+    - { name: day,              type: int }

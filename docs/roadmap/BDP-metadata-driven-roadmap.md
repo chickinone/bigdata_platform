@@ -368,7 +368,9 @@ khuôn** (dedup/join/agg/filter), khác Flink metric đồng khuôn. Xem [ADR-00
 1. 🟡 `medallion_runner` (mỏng) + `deployers/spark_batch` (`plan`/`apply` theo thứ tự layer):
    - ✅ **Silver** — batch spec `silver_enriched_transactions.yaml` (inputs + SQL dedup+join 3 chiều +
      output schema/partition). **Parity: 72 = 72 rows** với `enrich_transactions.py`; đã xoá job cũ.
-   - ⬜ **Gold** (3 bảng) — cùng runner, thêm 3 batch spec; parity với `build_gold_layer.py` rồi xoá.
+   - 🟡 **Gold** (3 bảng) — 3 batch spec đã viết (dịch từ `build_gold_layer.py`); runtime parity **chờ**:
+     (1) Docker bất ổn, (2) dữ liệu test `posted_at` NULL → `year/month/day` NULL → partition NullType làm
+     **cả job cũ lẫn mới fail như nhau** (lỗi dữ liệu). Cần seed data có `posted_at` để đối chiếu rồi xoá `build_gold`.
    - ⬜ **Iceberg** — sinh CTAS từ contract Silver (tách khỏi demo `silver_to_iceberg.py`).
 2. ✅ Đối chiếu row count (Silver); ⬜ checksum theo cột + verifier schema output vs `output.columns`.
 

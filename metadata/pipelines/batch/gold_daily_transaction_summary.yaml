@@ -1,0 +1,36 @@
+# Batch (Gold 1): tong ket ngay theo quoc gia x loai giao dich. Thay GOLD 1 trong
+# build_gold_layer.py.
+name: gold_daily_transaction_summary
+engine: spark_sql
+layer: gold
+
+inputs:
+  - { view: silver, path: "s3a://data-lake-silver/enriched_transactions/" }
+
+sql: |
+  SELECT
+    year, month, day, country_code, transaction_type,
+    count(transaction_id)                              AS txn_count,
+    sum(CAST(amount AS DOUBLE))                        AS total_volume,
+    avg(CAST(amount AS DOUBLE))                        AS avg_amount,
+    count(DISTINCT customer_id)                        AS unique_customers,
+    sum(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed_count
+  FROM silver
+  GROUP BY year, month, day, country_code, transaction_type
+
+output:
+  path: "s3a://data-lake-gold/daily_transaction_summary/"
+  format: parquet
+  mode: overwrite
+  partition_by: [year, month, day]
+  columns:
+    - { name: country_code,     type: string }
+    - { name: transaction_type, type: string }
+    - { name: txn_count,        type: long }
+    - { name: total_volume,     type: double }
+    - { name: avg_amount,       type: double }
+    - { name: unique_customers, type: long }
+    - { name: failed_count,     type: long }
+    - { name: year,             type: int }
+    - { name: month,            type: int }
+    - { name: day,              type: int }
