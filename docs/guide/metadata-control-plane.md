@@ -13,7 +13,7 @@
 > Khai báo mỗi thực thể **một lần** trong `metadata/datasets/*.yaml`, rồi để generator sinh ra mọi
 > file cấu hình của thực thể đó — thay vì chép tay cùng thông tin sang từng công cụ.
 
-**Trạng thái hiện tại — 11 artifact:**
+**Trạng thái hiện tại — 13 artifact:**
 
 | Artifact | Số file | Ghi chú |
 |---|---|---|
@@ -23,6 +23,7 @@
 | Publication SQL | 1 | **text/SQL**, cùng nguồn với Debezium → không thể lệch |
 | DDL ClickHouse | 2 | 12 đối tượng metric từ `columns` — [ADR-0019](../decisions/0019-generate-clickhouse-metric-ddl.md) |
 | Bản kê topic DLQ | 1 | `dlq-processor/dlq_topics.json` ([ADR-0017](../decisions/0017-dlq-flow-observe-then-park.md)) |
+| Bản kê topic Kafka | 2 | `kafka/topics.json` + `create-topics.sh`, gộp dataset + DLQ + hạ tầng — [ADR-0020](../decisions/0020-generate-kafka-topic-manifest.md) |
 
 Cấu hình DLQ của **cả 6 connector** cũng sinh từ đây. Còn viết tay: DDL sink bên Flink
 (`lane1_dashboard.py`), job Spark, catalog Trino — sẽ làm theo lộ trình.
@@ -56,7 +57,7 @@ python -m dataplatform.cli write    # ghi bản sinh ĐÈ lên đĩa
 Kết quả `check` khi mọi thứ đúng:
 
 ```text
-Đối chiếu 11 artifact sinh từ metadata/ với file trên đĩa:
+Đối chiếu 13 artifact sinh từ metadata/ với file trên đĩa:
 
   [KHỚP] clickhouse/init/01_schema.sql
   [KHỚP] clickhouse/init/02_kafka_consumers.sql
@@ -68,9 +69,11 @@ Kết quả `check` khi mọi thứ đúng:
   [KHỚP] kafka-connect/es-sinks/es-sink-transactions.json
   [KHỚP] kafka-connect/es-sinks/es-sink-transfers.json
   [KHỚP] kafka-connect/s3-sinks/s3-sink-cdc.json
+  [KHỚP] kafka/create-topics.sh
+  [KHỚP] kafka/topics.json
   [KHỚP] postgres/init/04_publication.sql
 
-KẾT QUẢ: 11/11 artifact khớp tuyệt đối.
+KẾT QUẢ: 13/13 artifact khớp tuyệt đối.
 Contract mang đủ thông tin để sinh lại toàn bộ file viết tay.
 ```
 
@@ -103,6 +106,7 @@ dataplatform/
     postgres_publication.py  # N dataset  -> publication SQL (cùng nguồn với debezium)
     clickhouse_ddl.py        # 1 metric   -> 3 đối tượng ClickHouse (bảng + kafka + MV)
     dlq.py                   # chính sách DLQ + bản kê topic cho dlq-processor
+    topic_manifest.py        # N dataset + DLQ + hạ tầng -> bản kê topic + script tạo
 ```
 
 Hai **hình dạng generator** khác nhau, đáng để ý:
@@ -110,7 +114,7 @@ Hai **hình dạng generator** khác nhau, đáng để ý:
 | Hình dạng | Ví dụ | Đặc điểm |
 |---|---|---|
 | 1 dataset → 1 file | `es_sink.py` | Chỉ cần nhìn một contract |
-| N dataset → 1 file | `s3_sink.py`, `debezium.py`, `postgres_publication.py`, `dlq.py` | Phải nhìn **toàn bộ** registry để gộp |
+| N dataset → 1 file | `s3_sink.py`, `debezium.py`, `postgres_publication.py`, `dlq.py`, `topic_manifest.py` | Phải nhìn **toàn bộ** registry để gộp |
 
 Hình dạng fan-in (N→1) là chỗ diệt được sprawl nguy hiểm nhất: `debezium.py` và
 `postgres_publication.py` cùng đọc một nguồn, nên `table.include.list` (connector) và `FOR TABLE`

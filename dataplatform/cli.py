@@ -15,7 +15,15 @@ import json
 import sys
 from pathlib import Path
 
-from .generators import clickhouse_ddl, debezium, dlq, es_sink, postgres_publication, s3_sink
+from .generators import (
+    clickhouse_ddl,
+    debezium,
+    dlq,
+    es_sink,
+    postgres_publication,
+    s3_sink,
+    topic_manifest,
+)
 from .registry import REPO_ROOT, ContractError, load_datasets
 
 # Ghi JSON với indent 2 + newline cuối file. Đây là QUY ƯỚC, không phải yêu cầu
@@ -45,6 +53,7 @@ def _collect() -> dict:
     targets.update(dlq.targets(datasets))
     targets.update(postgres_publication.targets(datasets))
     targets.update(clickhouse_ddl.targets(datasets))
+    targets.update(topic_manifest.targets(datasets))
     return targets
 
 

@@ -1,0 +1,153 @@
+{
+  "_comment": "FILE SINH TỰ ĐỘNG - đừng sửa tay. Nguồn: metadata/datasets/*.yaml + generators/dlq.py + hằng số hạ tầng trong generators/topic_manifest.py. Sinh lại: python -m dataplatform.cli write",
+  "topics": [
+    {
+      "name": "_connect_configs",
+      "partitions": 1,
+      "replication_factor": 1,
+      "configs": {
+        "cleanup.policy": "compact"
+      },
+      "provenance": "infra:kafka-connect"
+    },
+    {
+      "name": "_connect_offsets",
+      "partitions": 25,
+      "replication_factor": 1,
+      "configs": {
+        "cleanup.policy": "compact"
+      },
+      "provenance": "infra:kafka-connect"
+    },
+    {
+      "name": "_connect_status",
+      "partitions": 5,
+      "replication_factor": 1,
+      "configs": {
+        "cleanup.policy": "compact"
+      },
+      "provenance": "infra:kafka-connect"
+    },
+    {
+      "name": "_schemas",
+      "partitions": 1,
+      "replication_factor": 1,
+      "configs": {
+        "cleanup.policy": "compact"
+      },
+      "provenance": "infra:schema-registry"
+    },
+    {
+      "name": "bankdb.public.accounts",
+      "partitions": 1,
+      "replication_factor": 1,
+      "configs": {},
+      "provenance": "dataset:bank.public.accounts"
+    },
+    {
+      "name": "bankdb.public.customers",
+      "partitions": 1,
+      "replication_factor": 1,
+      "configs": {},
+      "provenance": "dataset:bank.public.customers"
+    },
+    {
+      "name": "bankdb.public.transactions",
+      "partitions": 1,
+      "replication_factor": 1,
+      "configs": {},
+      "provenance": "dataset:bank.public.transactions"
+    },
+    {
+      "name": "bankdb.public.transfers",
+      "partitions": 1,
+      "replication_factor": 1,
+      "configs": {},
+      "provenance": "dataset:bank.public.transfers"
+    },
+    {
+      "name": "dlq.es-sink-accounts",
+      "partitions": 1,
+      "replication_factor": 1,
+      "configs": {},
+      "provenance": "dlq:es-sink-accounts"
+    },
+    {
+      "name": "dlq.es-sink-customers",
+      "partitions": 1,
+      "replication_factor": 1,
+      "configs": {},
+      "provenance": "dlq:es-sink-customers"
+    },
+    {
+      "name": "dlq.es-sink-fraud-alerts",
+      "partitions": 1,
+      "replication_factor": 1,
+      "configs": {},
+      "provenance": "dlq:es-sink-fraud-alerts"
+    },
+    {
+      "name": "dlq.es-sink-transactions",
+      "partitions": 1,
+      "replication_factor": 1,
+      "configs": {},
+      "provenance": "dlq:es-sink-transactions"
+    },
+    {
+      "name": "dlq.es-sink-transfers",
+      "partitions": 1,
+      "replication_factor": 1,
+      "configs": {},
+      "provenance": "dlq:es-sink-transfers"
+    },
+    {
+      "name": "dlq.events",
+      "partitions": 1,
+      "replication_factor": 1,
+      "configs": {},
+      "provenance": "pipeline:dlq-processor"
+    },
+    {
+      "name": "dlq.s3-sink-cdc",
+      "partitions": 1,
+      "replication_factor": 1,
+      "configs": {},
+      "provenance": "dlq:s3-sink-cdc"
+    },
+    {
+      "name": "fraud-alerts",
+      "partitions": 1,
+      "replication_factor": 1,
+      "configs": {},
+      "provenance": "dataset:bank.alerts.fraud_alerts"
+    },
+    {
+      "name": "metrics.breakdown",
+      "partitions": 1,
+      "replication_factor": 1,
+      "configs": {},
+      "provenance": "dataset:bank.metric.breakdown"
+    },
+    {
+      "name": "metrics.kpi",
+      "partitions": 1,
+      "replication_factor": 1,
+      "configs": {},
+      "provenance": "dataset:bank.metric.kpi"
+    },
+    {
+      "name": "metrics.timeseries",
+      "partitions": 1,
+      "replication_factor": 1,
+      "configs": {},
+      "provenance": "dataset:bank.metric.timeseries"
+    },
+    {
+      "name": "metrics.topn",
+      "partitions": 1,
+      "replication_factor": 1,
+      "configs": {},
+      "provenance": "dataset:bank.metric.topn"
+    }
+  ]
+}

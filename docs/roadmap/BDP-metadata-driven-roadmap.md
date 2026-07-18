@@ -289,9 +289,14 @@ làm trước để chứng minh giá trị.
    - ✅ Cấu hình DLQ cho cả 6 connector + bản kê topic cho `dlq-processor` — [ADR-0017](../decisions/0017-dlq-flow-observe-then-park.md)
    - ✅ `postgres-connector.json` (`table.include.list`) **và** `04_publication.sql` — sinh từ **cùng
      một nguồn** nên không thể lệch; diệt sprawl #2/#3 ([ADR-0018](../decisions/0018-generate-debezium-and-publication.md)).
-   - ⬜ **Topic manifest** (partition/retention/RF theo env — tắt `auto.create.topics`).
-     **Đã mở khoá** — 4 metric dataset nay có trong registry (ADR-0019). Còn thiếu `dlq.events` và các
-     topic nội bộ của Connect (`_connect_*`) trước khi dám tắt `auto.create.topics`.
+   - 🟡 **Topic manifest** (partition/retention/RF — tắt `auto.create.topics`).
+     ✅ Sinh `kafka/topics.json` (bản kê khai báo) + `kafka/create-topics.sh` (script tạo idempotent)
+     từ registry, gộp 3 nguồn: dataset topic, DLQ topic (tái dùng `dlq.py`), và topic hạ tầng
+     (`dlq.events`, `_connect_*`, `_schemas`). **Đối chiếu với Kafka thật: 11/11 topic thật khớp tuyệt
+     đối** — [ADR-0020](../decisions/0020-generate-kafka-topic-manifest.md). Bước này lôi ra `_schemas`
+     (Schema Registry) bị sót ở bản đầu.
+     ⬜ Còn 3 cổng gated trước khi **tắt `auto.create.topics`**: nối script vào khởi động → chạy pipeline
+     đầy đủ để 9 topic dataset/metric hiện ra và đối chiếu live → rồi mới đặt `=false`.
 2. ⬜ **Deployer** áp connector qua Connect REST API **idempotent** (`PUT /connectors/{name}/config`).
    Hiện vẫn đăng ký tay bằng `curl`.
 3. ✅ Đối chiếu JSON sinh vs JSON hiện tại (diff = rỗng) — `python -m dataplatform.cli check`, 7/7 khớp.

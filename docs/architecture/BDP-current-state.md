@@ -126,7 +126,7 @@ Xác minh trực tiếp từ code, không phải suy đoán.
 | # | Vấn đề | Chi tiết |
 |---|---|---|
 | 7 | **Single-node mọi thứ** | Kafka RF=1, ES single-node, 1 Spark worker, checkpoint 30s. Không HA, không chịu lỗi. |
-| 8 | **`AUTO_CREATE_TOPICS_ENABLE=true`** | Topic tự sinh với partition/retention mặc định, không kiểm soát. |
+| 8 | 🟡 **`AUTO_CREATE_TOPICS_ENABLE=true`** | Bản kê topic **đã sinh** từ registry và đối chiếu khớp Kafka thật ([ADR-0020](../decisions/0020-generate-kafka-topic-manifest.md)). Còn giữ auto-create tới khi nối script tạo topic vào khởi động + đối chiếu live đủ 9 topic dataset/metric, rồi mới `=false`. |
 | 9 | **Không orchestration** | Job Spark chạy tay; không lịch, không phụ thuộc, không retry/backfill. |
 | 10 | **Không data quality gate & lineage** | Không kiểm tra chất lượng, không truy vết nguồn-đích tự động. |
 | 11 | **Không CI/CD** | Thay đổi cấu hình áp thủ công qua REST/`docker compose`. |
