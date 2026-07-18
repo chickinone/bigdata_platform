@@ -22,32 +22,25 @@ Tất cả chạy trên **một** worker Kafka Connect (`bigdata-kafka-connect`,
 | `es-sink-fraud-alerts` | `es-sink-fraud-alerts.json` | `fraud-alerts` → ES index |
 | `s3-sink-cdc` | [`kafka-connect/s3-sinks/s3-sink-cdc.json`](../../kafka-connect/s3-sinks/s3-sink-cdc.json) | 4 topic → Parquet Bronze |
 
-**Thứ tự đăng ký quan trọng:** Debezium **trước** — nó tạo topic và đăng ký Avro schema. Sink đăng ký
-trước sẽ ở trạng thái chờ topic (`AUTO_CREATE_TOPICS_ENABLE=true` nên topic rỗng vẫn được tạo, khiến
-lỗi khó thấy hơn).
+**Thứ tự khởi động:** topic được tạo trước bởi service `kafka-init` (bản kê sinh từ metadata, [ADR-0020](../decisions/0020-generate-kafka-topic-manifest.md)) — `auto.create.topics` nay **tắt**, không còn topic rỗng tạo ngầm. Trong các connector thì Debezium là cái đăng ký Avro schema cho luồng CDC.
 
 ---
 
-## 2. Đăng ký
+## 2. Đăng ký — dùng deployer, không `curl` tay
 
-Config dùng `${env:...}` để lấy secret từ biến môi trường của worker (nhờ `EnvVarConfigProvider`) —
-**không** có mật khẩu nào nằm trong file JSON.
+Cách đúng nay là **connector deployer** ([ADR-0021](../decisions/0021-connector-deployer-idempotent.md)):
+đọc thẳng metadata, áp idempotent, đúng thứ tự — thay cho `curl` thủ công.
 
 ```bash
-# Source
-curl.exe -X POST http://localhost:8083/connectors -H "Content-Type: application/json" \
-  --data-binary "@debezium/postgres-connector.json"
-
-# 5 ES sink
-for f in customers accounts transactions transfers fraud-alerts; do
-  curl.exe -X POST http://localhost:8083/connectors -H "Content-Type: application/json" \
-    --data-binary "@kafka-connect/es-sinks/es-sink-$f.json"
-done
-
-# S3 sink
-curl.exe -X POST http://localhost:8083/connectors -H "Content-Type: application/json" \
-  --data-binary "@kafka-connect/s3-sinks/s3-sink-cdc.json"
+python -m dataplatform.deployers.connectors plan    # xem sẽ tạo/sửa gì (không ghi)
+python -m dataplatform.deployers.connectors apply   # PUT thật, đợi RUNNING
 ```
+
+Config dùng `${env:...}` để Connect tự lấy secret từ biến môi trường worker (`EnvVarConfigProvider`) —
+**không** mật khẩu nào nằm trong JSON, và deployer cũng không chạm tới secret.
+
+> Cần thao tác từng connector thủ công (debug) thì vẫn dùng được REST trực tiếp — xem mục 3–4. Nhưng
+> đăng ký hàng loạt thì đi qua deployer để khỏi lệch với metadata.
 
 ---
 
