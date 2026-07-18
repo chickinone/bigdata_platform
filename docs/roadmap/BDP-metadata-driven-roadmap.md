@@ -324,8 +324,15 @@ phần cốt lõi (còn compatibility gate Avro để trọn vẹn — Pha 7).
    vertex, kể cả WindowRank cho topn); ✅ **parity ground truth**: seed data → cả 4 metric (TUMBLE +
    CUMULATE) khớp tuyệt đối trong Kafka + ClickHouse; ✅ **cắt chuyển: xoá `lane1_dashboard.py`**; ✅
    deployer `flink_metrics` (`plan`/`apply`).
-2. ⬜ Fraud (DataStream API): **giữ detector là code**, tham số hoá (threshold/window/topic); bỏ `ds.print` spam.
-3. ⬜ Đối chiếu: chạy runner song song job cũ trên cùng dữ liệu → khớp → cắt chuyển → xoá `lane1_*.py`.
+2. ✅ Fraud (`fraud_runner.py`): **giữ detector là code** (velocity, failed-storm), nhưng source DDL +
+   ngưỡng/cửa sổ/topic **sinh** từ `fraud.yaml` (diệt nốt sprawl #6); bỏ `ds.print` spam (gap #6).
+   Chứng minh runtime: seed 8 giao dịch/account → alert `VELOCITY_FRAUD tx_count=8` khớp ground truth.
+3. ✅ Đối chiếu + cắt chuyển: runner chạy song song (group riêng), parity ground truth → **xoá
+   `lane1_dashboard.py` + `lane3_fraud_detection.py`**. Deployer `flink_metrics` submit cả hai.
+
+**Pha 3 XONG.** Ghi chú vận hành: Flink session job **không sống sót qua restart jobmanager** (single-node,
+không HA — gap #7). Nhưng recovery nay là **một lệnh**: `connectors apply` + `flink_metrics apply` dựng lại
+toàn bộ từ metadata (đã kiểm khi stack bị cycle giữa chừng). Auto-resubmit lúc khởi động = orchestration Pha 7.
 
 **Đầu ra:** thêm 1 metric = thêm 1 file YAML, không viết Python mới. **Ước lượng:** 2.5–3 tuần.
 

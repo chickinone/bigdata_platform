@@ -147,17 +147,14 @@ qua `.env` — xem [`../infra/infra.md`](../infra/infra.md) §4.
 Chi tiết: [`flink-jobs.md`](flink-jobs.md).
 
 ```bash
-# Lane 1 — 4 metric trong 1 job
-docker exec -it bigdata-flink-jobmanager flink run -py /opt/flink/jobs/lane1_dashboard.py
-
-# Lane 3 — fraud detection
-docker exec -it bigdata-flink-jobmanager flink run -py /opt/flink/jobs/lane3_fraud_detection.py
+# Cả hai runner (metric + fraud), sinh config từ metadata rồi submit
+python -m dataplatform.deployers.flink_metrics apply
 
 docker exec -it bigdata-flink-jobmanager flink list
 ```
 
-> Chỉ còn 2 file Flink. Bốn file `lane1_*` rời (di sản print-sink) **đã bị xóa** 2026-07-16 — logic
-> của chúng nằm trong `lane1_dashboard.py`. Xem [ADR-0006](../decisions/0006-one-flink-job-per-lane-statement-set.md).
+> 2 runner (`metric_runner.py`, `fraud_runner.py`) SINH từ `metadata/pipelines/stream/` — thay
+> `lane1_dashboard.py` + `lane3_fraud_detection.py` đã xoá ([ADR-0023](../decisions/0023-flink-metric-runner-declarative.md)).
 
 ---
 
@@ -259,7 +256,7 @@ curl.exe -X DELETE http://localhost:8083/connectors/postgres-source-connector   
 | S3 sink `FAILED`, lỗi NoSuchBucket | Chưa tạo bucket (§3.1) | Tạo bucket rồi `PUT .../restart` |
 | Không có topic CDC | Debezium chưa đăng ký, hoặc publication thiếu | `curl .../connectors/postgres-source-connector/status` |
 | Không có alert fraud | Job submit **sau** khi generator chạy xong (`latest-offset`) | Submit job trước, chạy lại generator |
-| Metric trùng/gấp đôi | Đang chạy cả `lane1_dashboard` lẫn `lane1_*` rời | `flink list` → `flink cancel <id>` job thừa |
+| Metric trùng/gấp đôi | Đang chạy `metric_runner` hai lần (deployer `apply` không huỷ job cũ) | `flink list` → `flink cancel <id>` job thừa |
 | ClickHouse có bảng nhưng rỗng | MV tạo **sau** khi message đã trôi qua; hoặc lệch cột → MV im lặng bỏ | Kiểm tra `SELECT * FROM metrics.timeseries_kafka` |
 | Trino lỗi mount `jvm.config` | `trino/etc/jvm.config` trên host bị tạo thành **folder** | Xoá, tạo lại đúng dạng **file**, `docker compose up -d trino` |
 | Connector "already exists" | Đăng ký lại connector cũ | `curl -X DELETE .../connectors/<tên>` rồi POST lại |

@@ -1,14 +1,18 @@
-"""Deployer runner metric Flink — sinh job plan từ metadata rồi submit.
+"""Deployer job Flink streaming — sinh config từ metadata rồi submit.
 
     python -m dataplatform.deployers.flink_metrics plan     # sinh + xem, không submit
     python -m dataplatform.deployers.flink_metrics apply    # sinh + submit vào Flink
 
-Thay việc submit tay `flink run -py lane1_dashboard.py`. Job plan (source DDL + sink
-DDL + INSERT) sinh trên host từ pipeline spec + contract (ADR-0023), ghi ra file
-runtime rồi runner mỏng trong container thực thi.
+Deploy CẢ HAI job sinh từ metadata: metric runner (SQL) và fraud runner (DataStream).
+Thay việc submit tay `flink run -py lane1_dashboard.py` / `lane3_fraud_detection.py`.
+Config sinh trên host từ pipeline spec + contract (ADR-0023), ghi ra file runtime rồi
+runner trong container thực thi.
 
-Cùng triết lý với connector deployer (ADR-0021): control plane sinh, data plane
-thực thi; thêm/sửa metric = sửa YAML, không đụng Python.
+Cùng triết lý với connector deployer (ADR-0021): control plane sinh, data plane thực
+thi; thêm/sửa metric hoặc chỉnh ngưỡng fraud = sửa YAML, không đụng Python.
+
+LƯU Ý: `apply` submit MỚI, không huỷ job cũ — nếu job đang chạy thì huỷ trước bằng
+`flink cancel` để tránh hai bản cùng ghi. (Chưa có reconcile — Pha 7.)
 """
 from __future__ import annotations
 
@@ -27,49 +31,72 @@ GROUP_ID = "flink-metrics-runner"
 STARTUP = "earliest-offset"
 
 FLINK_CONTAINER = "bigdata-flink-jobmanager"
+FRAUD_GROUP_ID = "flink-fraud-runner"
 # Đường dẫn TRONG container (flink/jobs mount vào /opt/flink/jobs).
-CONTAINER_RUNNER = "/opt/flink/jobs/metric_runner.py"
-PLAN_REL = "flink/jobs/generated/metrics-job.json"
+METRIC_RUNNER = "/opt/flink/jobs/metric_runner.py"
+FRAUD_RUNNER = "/opt/flink/jobs/fraud_runner.py"
+METRIC_PLAN_REL = "flink/jobs/generated/metrics-job.json"
+FRAUD_PLAN_REL = "flink/jobs/generated/fraud-job.json"
 
 
-def _build_and_write() -> dict:
-    job = flink_sql.build_job(
+def _write(rel: str, payload: dict) -> None:
+    path = REPO_ROOT / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+                    encoding="utf-8", newline="\n")
+
+
+def _build_and_write() -> tuple[dict, dict]:
+    metric = flink_sql.build_job(
         bootstrap=BOOTSTRAP, schema_registry=SCHEMA_REGISTRY,
         group_id=GROUP_ID, startup=STARTUP,
     )
-    path = REPO_ROOT / PLAN_REL
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(job, ensure_ascii=False, indent=2) + "\n",
-                    encoding="utf-8", newline="\n")
-    return job
+    fraud = flink_sql.build_fraud_config(
+        bootstrap=BOOTSTRAP, schema_registry=SCHEMA_REGISTRY, group_id=FRAUD_GROUP_ID,
+    )
+    _write(METRIC_PLAN_REL, metric)
+    _write(FRAUD_PLAN_REL, fraud)
+    return metric, fraud
 
 
 def cmd_plan() -> int:
-    job = _build_and_write()
-    print(f"Job plan sinh xong ({PLAN_REL}):")
-    print(f"  source: 1 bảng ({len(job['source_ddl'].splitlines())} dòng DDL)")
-    print(f"  sinks:  {len(job['sink_ddls'])}")
-    print(f"  inserts:{len(job['inserts'])}  | group.id = {job['group_id']}")
-    print("\nChạy `apply` để submit runner vào Flink.")
+    metric, fraud = _build_and_write()
+    print(f"Đã sinh 2 config:")
+    print(f"  {METRIC_PLAN_REL}: {len(metric['sink_ddls'])} sink, {len(metric['inserts'])} insert, "
+          f"group {metric['group_id']}")
+    print(f"  {FRAUD_PLAN_REL}: fraud '{fraud['job_name']}' -> {fraud['sink_topic']} "
+          f"(velocity {fraud['velocity_threshold']}/{fraud['velocity_window_minutes']}m, "
+          f"storm {fraud['storm_threshold']}/{fraud['storm_window_minutes']}m)")
+    print("\nChạy `apply` để submit cả hai runner vào Flink.")
     return 0
 
 
-def cmd_apply() -> int:
-    _build_and_write()
-    print(f"Submit runner vào {FLINK_CONTAINER} ...")
+def _submit(runner_path: str, label: str) -> bool:
     # subprocess (không qua shell) nên đường dẫn container KHÔNG bị MSYS mangle.
     proc = subprocess.run(
-        ["docker", "exec", FLINK_CONTAINER, "flink", "run", "-d", "-py", CONTAINER_RUNNER],
+        ["docker", "exec", FLINK_CONTAINER, "flink", "run", "-d", "-py", runner_path],
         capture_output=True, text=True,
     )
     out = proc.stdout + proc.stderr
     job_line = [ln for ln in out.splitlines() if "JobID" in ln]
     if proc.returncode == 0 and job_line:
-        print(f"  {job_line[0].strip()}")
-        print("KẾT QUẢ: đã submit. Kiểm RUNNING bằng `flink list`.")
+        print(f"  [OK ] {label}: {job_line[0].strip()}")
+        return True
+    print(f"  [LỖI] {label}:")
+    print("        " + "\n        ".join(out.strip().splitlines()[-6:]))
+    return False
+
+
+def cmd_apply() -> int:
+    _build_and_write()
+    print(f"Submit 2 runner vào {FLINK_CONTAINER} ...")
+    ok_metric = _submit(METRIC_RUNNER, "metric_runner")
+    ok_fraud = _submit(FRAUD_RUNNER, "fraud_runner")
+    print()
+    if ok_metric and ok_fraud:
+        print("KẾT QUẢ: đã submit cả hai. Kiểm RUNNING bằng `flink list`.")
         return 0
-    print("LỖI submit:")
-    print("  " + "\n  ".join(out.strip().splitlines()[-8:]))
+    print("KẾT QUẢ: có runner submit LỖI — xem trên.")
     return 1
 
 

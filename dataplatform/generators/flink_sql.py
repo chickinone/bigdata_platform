@@ -254,3 +254,35 @@ def build_job(*, bootstrap: str, schema_registry: str, group_id: str, startup: s
         "sink_ddls": sink_ddls,
         "inserts": inserts,
     }
+
+
+def build_fraud_config(*, bootstrap: str, schema_registry: str, group_id: str) -> dict:
+    """Config cho fraud runner (Lane 3, DataStream có state).
+
+    KHÁC build_job: fraud không sinh INSERT/sink DDL — logic detector là code Python.
+    Chỉ sinh **source DDL** (diệt nốt sprawl #6: ROW không còn viết tay ở đâu) và gom
+    tham số detector từ spec. Runner giữ VelocityDetector/FailedStormDetector là code,
+    nhưng nguồn/đích/ngưỡng/cửa sổ đều lái từ metadata.
+    """
+    datasets = _by_urn(load_datasets())
+    specs = [p for p in load_pipelines() if p.get("engine") == "flink_datastream"]
+    if len(specs) != 1:
+        raise ContractError(f"hiện chỉ hỗ trợ 1 fraud pipeline, thấy: {[p['name'] for p in specs]}")
+    spec = specs[0]
+
+    source = datasets[spec["source_urn"]]
+    sink = datasets[spec["sink_urn"]]
+    source_ddl = render_source_ddl(
+        source, spec["source_columns"], bootstrap=bootstrap,
+        schema_registry=schema_registry, group_id=group_id, startup=spec["startup"],
+    )
+    det = spec["detectors"]
+    return {
+        "job_name": spec["name"],
+        "source_ddl": source_ddl,
+        "sink_topic": sink.topic,
+        "velocity_threshold": det["velocity"]["threshold"],
+        "velocity_window_minutes": det["velocity"]["window_minutes"],
+        "storm_threshold": det["failed_storm"]["threshold"],
+        "storm_window_minutes": det["failed_storm"]["window_minutes"],
+    }

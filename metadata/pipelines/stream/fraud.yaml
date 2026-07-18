@@ -1,0 +1,22 @@
+# Pipeline fraud (Lane 3): KHAC cac metric — logic detector CO STATE, khong tong
+# quat hoa bang SQL duoc, nen GIU la code (VelocityDetector, FailedStormDetector).
+# Spec nay chi tham so hoa: nguon/dich, nguong, cua so, va cot source can doc.
+# Xem ADR-0023.
+name: fraud_detection
+engine: flink_datastream          # khac flink_sql: chay DataStream API co state
+source_urn: bank.public.transactions
+sink_urn: bank.alerts.fraud_alerts
+startup: latest-offset            # fraud chi quan tam giao dich MOI, khong replay lich su
+
+# Cot source ma detector doc (sinh ROW tu contract theo dung ma hoa tren day).
+# Diet not sprawl #6: ROW khong con viet tay o dau.
+source_columns: [transaction_id, account_id, transaction_type, amount, currency, status]
+
+# Tham so detector (truoc day hardcode trong Python).
+detectors:
+  velocity:                       # > threshold giao dich / account trong cua so tumbling
+    threshold: 5
+    window_minutes: 1
+  failed_storm:                   # >= threshold giao dich 'failed' / account trong cua so truot
+    threshold: 15
+    window_minutes: 5

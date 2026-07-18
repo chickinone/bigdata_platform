@@ -82,9 +82,11 @@ biểu đồ dung lượng checkpoint.
 
 ## 3. Lane 3 — Fraud detection
 
-[`flink/jobs/lane3_fraud_detection.py`](../../flink/jobs/lane3_fraud_detection.py) — dùng Table API để
+[`flink/jobs/fraud_runner.py`](../../flink/jobs/fraud_runner.py) — dùng Table API để
 đọc + flatten, rồi chuyển sang **DataStream API** vì logic phát hiện cần state tuỳ biến mà SQL không
-diễn đạt gọn được.
+diễn đạt gọn được. Source DDL và tham số (ngưỡng/cửa sổ/topic) nay **sinh** từ
+[`metadata/pipelines/stream/fraud.yaml`](../../metadata/pipelines/stream/fraud.yaml); riêng detector giữ là
+code ([ADR-0023](../decisions/0023-flink-metric-runner-declarative.md)).
 
 ```mermaid
 flowchart LR

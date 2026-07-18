@@ -1,40 +1,41 @@
 # Job Flink — submit, theo dõi, huỷ
 
-> Cách chạy 2 job streaming, đọc Web UI, và vì sao **chỉ** nên chạy `lane1_dashboard.py`.
+> Cách submit 2 runner streaming (sinh từ metadata), đọc Web UI, huỷ & savepoint.
 > Thiết kế: [`../architecture/BDP-streaming-lanes.md`](../architecture/BDP-streaming-lanes.md).
-> Cập nhật lần cuối: 2026-07-15.
+> Cập nhật lần cuối: 2026-07-18.
 
 ---
 
-## 1. Hai file
+## 1. Hai runner — SINH từ metadata
 
-Thư mục [`flink/jobs/`](../../flink/jobs/) có đúng 2 file, mỗi file một lane:
+Thư mục [`flink/jobs/`](../../flink/jobs/) có 2 runner; SQL/tham số của chúng **sinh** từ
+[`metadata/pipelines/stream/`](../../metadata/pipelines/stream/) ([ADR-0023](../decisions/0023-flink-metric-runner-declarative.md)):
 
 | File | Vì sao |
 |---|---|
-| `lane1_dashboard.py` | Sinh cả 4 metric trong 1 job qua `StatementSet`. |
-| `lane3_fraud_detection.py` | Fraud detection. |
+| `metric_runner.py` | Thực thi job plan sinh sẵn — 4 metric trong 1 `StatementSet`. |
+| `fraud_runner.py` | Fraud: source DDL + tham số sinh, detector có state giữ là code. |
 
-> **Đã xóa 4 file di sản** `lane1_{timeseries,kpi,breakdown,topn}.py` (2026-07-16). Chúng là bản
-> "print sink" debug cũ, đã gộp vào `lane1_dashboard.py`. Giữ lại chỉ tạo bẫy: chạy song song sẽ ghi
-> trùng vào cùng topic metric. Xem [ADR-0006](../decisions/0006-one-flink-job-per-lane-statement-set.md).
+> **Đã xoá** `lane1_{timeseries,kpi,breakdown,topn}.py`, `lane1_dashboard.py`, `lane3_fraud_detection.py`
+> — thay bằng 2 runner sinh ở trên. Xem [ADR-0006](../decisions/0006-one-flink-job-per-lane-statement-set.md)
+> (một job/lane) và [ADR-0023](../decisions/0023-flink-metric-runner-declarative.md) (sinh từ spec).
 
 ---
 
-## 2. Submit
+## 2. Submit — qua deployer
+
+Cách đúng: **deployer** sinh config từ metadata rồi submit cả hai runner.
 
 ```bash
-# Lane 1 — 4 metric, một job
-docker exec -it bigdata-flink-jobmanager flink run -py /opt/flink/jobs/lane1_dashboard.py
-
-# Lane 3 — fraud
-docker exec -it bigdata-flink-jobmanager flink run -py /opt/flink/jobs/lane3_fraud_detection.py
+python -m dataplatform.deployers.flink_metrics plan    # xem sẽ submit gì (không đụng Flink)
+python -m dataplatform.deployers.flink_metrics apply   # submit metric_runner + fraud_runner
 ```
 
-Job chạy **foreground** cho tới khi bị huỷ. Thêm `-d` để detach:
-```bash
-docker exec -it bigdata-flink-jobmanager flink run -d -py /opt/flink/jobs/lane1_dashboard.py
-```
+> Deployer `apply` submit MỚI, **không** huỷ job cũ — nếu đang chạy thì `flink cancel` trước để tránh
+> hai bản cùng ghi. Cần submit tay một runner (debug) thì vẫn được:
+> ```bash
+> docker exec -it bigdata-flink-jobmanager flink run -d -py /opt/flink/jobs/metric_runner.py
+> ```
 
 > **Thứ tự với generator:** Lane 3 dùng `scan.startup.mode='latest-offset'` → chỉ thấy dữ liệu đến
 > **sau** khi submit. Submit job **trước**, rồi mới chạy generator. Lane 1 thì `earliest-offset` nên
@@ -78,7 +79,7 @@ docker exec -it bigdata-flink-jobmanager flink cancel <job-id>
 docker exec -it bigdata-flink-jobmanager flink stop --savepointPath s3a://flink-savepoints/savepoints <job-id>
 
 # Khôi phục từ savepoint
-docker exec -it bigdata-flink-jobmanager flink run -s <duong-dan-savepoint> -py /opt/flink/jobs/lane1_dashboard.py
+docker exec -it bigdata-flink-jobmanager flink run -s <duong-dan-savepoint> -py /opt/flink/jobs/metric_runner.py
 ```
 
 Checkpoint ở `s3a://flink-checkpoints/checkpoints`, savepoint ở `s3a://flink-savepoints/savepoints` —
@@ -112,8 +113,8 @@ hơn (chỉ ~5% giao dịch fail). Muốn ép ra alert, tăng `PEAK_RPS` hoặc 
 | Triệu chứng | Nguyên nhân | Xử lý |
 |---|---|---|
 | Không có alert nào | Job submit **sau** khi generator xong (`latest-offset`) | Submit trước, chạy lại generator |
-| Metric gấp đôi | Đang chạy `lane1_dashboard` hai lần (hoặc bản cũ còn sót ở cluster) | `flink list` → `flink cancel` job thừa |
-| Log TaskManager phình rất nhanh | `lane3` còn `ds.print("LANE3-RAW")` — in **mọi** transaction | Gỡ dòng print rồi submit lại |
+| Metric gấp đôi | Đang chạy `metric_runner` hai lần (deployer `apply` không huỷ job cũ) | `flink list` → `flink cancel` job thừa |
+| ~~Log TaskManager phình vì `ds.print`~~ | Đã bỏ trong `fraud_runner.py` (ADR-0023) | — |
 | Checkpoint fail liên tục | Không tới được MinIO, hoặc thiếu bucket checkpoint | Kiểm tra `bigdata-minio-init` đã chạy xong |
 | `ClassNotFound` connector Kafka | JAR không có trong `/opt/flink/jobs/jars` | Kiểm tra thư mục `flink/jobs/jars/` trên host |
 | Job restart vòng lặp | Xem tab **Exceptions** trên UI | Thường là lỗi decode Avro → kiểm tra Schema Registry |

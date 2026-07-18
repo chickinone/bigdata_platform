@@ -77,11 +77,21 @@ Chạy đầy đủ quy trình strangler-fig cho streaming:
 **Dễ hơn:** thêm metric = 1 file YAML spec, không Python. Source ROW + sink DDL + INSERT đều sinh từ
 metadata; sink không thể lệch ClickHouse.
 
+**Lane 3 (fraud) — đã làm cùng cách:** detector có state (velocity, failed-storm) giữ **verbatim là code**
+(không tổng quát hoá được), nhưng `fraud_runner.py` sinh **source DDL** từ `fraud.yaml` (ROW khớp
+byte-for-byte lane3 cũ) và **tham số hoá** ngưỡng/cửa sổ/topic; bỏ 2 `ds.print` spam (gap #6). Runtime:
+seed 8 giao dịch/account → `VELOCITY_FRAUD tx_count=8` khớp ground truth. Đã xoá `lane3_fraud_detection.py`.
+Sprawl #6 **hết hẳn**.
+
+**Ghi chú vận hành (phát hiện lúc làm):** Flink session job **không sống sót qua restart jobmanager**
+(single-node, không HA). Giữa lúc làm, stack bị cycle → cả hai job biến mất. Nhưng vì mọi thứ sinh từ
+metadata, **recovery là một lệnh**: `connectors apply` (khôi phục CDC) + `flink_metrics apply` (resubmit 2
+runner). Auto-resubmit lúc khởi động thuộc orchestration (Pha 7).
+
 **Khó hơn / phải chấp nhận:**
-- **Lane 3 (fraud) chưa đụng**: logic detector có state (velocity, failed-storm) không tổng quát hoá
-  được — sẽ giữ là code + tham số hoá riêng, và bỏ `ds.print` spam log (gap #6).
 - Generator giờ mang tri thức dựng SQL (window/rank) — thêm dạng pipeline mới = thêm code sinh.
-- Job plan là artifact **runtime** (có group.id/bootstrap cụ thể) → không commit, sinh lúc deploy.
+- Job plan/config là artifact **runtime** (có group.id/bootstrap cụ thể) → không commit, sinh lúc deploy.
+- Deployer `apply` submit MỚI, chưa huỷ job cũ (cần `flink cancel` trước nếu đang chạy) — reconcile: Pha 7.
 
 ## Phương án đã cân nhắc
 

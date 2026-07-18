@@ -1,26 +1,38 @@
-import os
-from pyflink.common import Types
-from pyflink.datastream import StreamExecutionEnvironment, CheckpointingMode
-from pyflink.table import StreamTableEnvironment, EnvironmentSettings
+"""Fraud runner (Lane 3) — detector CÓ STATE giữ là code, mọi tham số lái từ metadata.
+
+Khác metric_runner: logic phát hiện gian lận (đếm vận tốc, "failed storm") có state
+tuỳ biến, KHÔNG tổng quát hoá bằng SQL được — nên giữ VelocityDetector và
+FailedStormDetector là code Python. Nhưng nguồn/đích/ngưỡng/cửa sổ nay đọc từ config
+sinh trên host (`dataplatform/generators/flink_sql.build_fraud_config`, ADR-0023):
+  - source DDL sinh từ contract (diệt nốt sprawl #6 — hết ROW viết tay);
+  - threshold/window/topic tham số hoá (trước hardcode).
+
+Đã BỎ hai print sink debug (`ds.print("LANE3-RAW")`, `all_alerts.print("ALERT")`):
+chúng in MỌI giao dịch ra log TaskManager ở 150 RPS — khoảng trống #6 trong audit.
+"""
 import json
-from pyflink.common.typeinfo import Types
+import os
+
+from pyflink.common import Types
 from pyflink.common.time import Time
-from pyflink.datastream.window import TumblingEventTimeWindows
-from pyflink.datastream.functions import ProcessWindowFunction
-from pyflink.datastream.functions import KeyedProcessFunction
-from pyflink.datastream.state import ListStateDescriptor
 from pyflink.common.serialization import SimpleStringSchema
+from pyflink.datastream import StreamExecutionEnvironment, CheckpointingMode
+from pyflink.datastream.window import TumblingEventTimeWindows
+from pyflink.datastream.functions import ProcessWindowFunction, KeyedProcessFunction
+from pyflink.datastream.state import ListStateDescriptor
 from pyflink.datastream.connectors.kafka import (
     KafkaSink,
     KafkaRecordSerializationSchema,
     DeliveryGuarantee,
 )
+from pyflink.table import StreamTableEnvironment, EnvironmentSettings
+
 
 def main():
-    kafka_bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092")
-    schema_registry_url = os.getenv("SCHEMA_REGISTRY_URL", "http://schema-registry:8081")
+    cfg_path = os.getenv("FRAUD_CONFIG", "/opt/flink/jobs/generated/fraud-job.json")
+    with open(cfg_path, encoding="utf-8") as f:
+        cfg = json.load(f)
 
-    #Environment setup 
     env = StreamExecutionEnvironment.get_execution_environment()
     env.set_parallelism(1)
     env.enable_checkpointing(30_000, CheckpointingMode.EXACTLY_ONCE)
@@ -32,33 +44,15 @@ def main():
     )
 
     tenv = StreamTableEnvironment.create(
-        env,
-        environment_settings=EnvironmentSettings.in_streaming_mode()
+        env, environment_settings=EnvironmentSettings.in_streaming_mode()
     )
     tenv.get_config().set("table.exec.source.idle-timeout", "5000 ms")
 
-    # Đọc Kafka CDC topic bằng Table API 
-    # Schema match với Avro schema của bankdb.public.transactions
-    tenv.execute_sql(f"""
-        CREATE TABLE transactions_source (
-            op STRING,
-            ts_ms BIGINT,
-            `after` ROW<transaction_id BIGINT, account_id BIGINT, transaction_type STRING, amount STRING, currency STRING, status STRING>,
-            event_time AS TO_TIMESTAMP_LTZ(ts_ms, 3),
-            WATERMARK FOR event_time AS event_time - INTERVAL '5' SECOND
-        ) WITH (
-            'connector' = 'kafka',
-            'topic' = 'bankdb.public.transactions',
-            'properties.bootstrap.servers' = '{kafka_bootstrap_servers}',
-            'properties.group.id' = 'flink-lane3-fraud',
-            'value.format' = 'avro-confluent',
-            'value.avro-confluent.url' = '{schema_registry_url}',
-            'scan.startup.mode' = 'latest-offset'
-        )
-    """)
+    # Source DDL SINH từ contract (không còn ROW viết tay).
+    tenv.execute_sql(cfg["source_ddl"])
 
-    # Filter INSERTs (op='c') và flatten ra cột top-level 
-    # Convert nested ROW thành flat columns để dễ xử lý ở DataStream
+    # Flatten envelope -> cột phẳng để DataStream xử lý. Coupled với tên field detector
+    # dùng, nên giữ ở đây (không sinh).
     flattened = tenv.sql_query("""
         SELECT
             `after`.transaction_id AS transaction_id,
@@ -71,80 +65,61 @@ def main():
         FROM transactions_source
         WHERE op = 'c'
     """)
-
-    # Convert Table → DataStream 
     ds = tenv.to_data_stream(flattened)
 
-    # Sink tạm: in ra console để verify pipeline đọc được 
-    # L3.1 debug: in raw event ra console 
-    ds.print("LANE3-RAW").name("debug-print")
-
-    # 2: Velocity Fraud Detector 
+    # Velocity: > threshold giao dịch / account trong cửa sổ tumbling.
     velocity_alerts = (
         ds
         .key_by(lambda row: row.account_id, key_type=Types.LONG())
-        .window(TumblingEventTimeWindows.of(Time.minutes(1)))
-        .process(VelocityDetector(threshold=5), output_type=Types.STRING())
+        .window(TumblingEventTimeWindows.of(Time.minutes(cfg["velocity_window_minutes"])))
+        .process(VelocityDetector(threshold=cfg["velocity_threshold"]), output_type=Types.STRING())
         .name("velocity-detector")
     )
 
-
-    # L3.3: Failed Storm Detector 
+    # Failed storm: >= threshold giao dịch 'failed' / account trong cửa sổ trượt.
     storm_alerts = (
         ds
         .key_by(lambda row: row.account_id, key_type=Types.LONG())
         .process(
-            FailedStormDetector(window_minutes=5, threshold=15),
-            output_type=Types.STRING()
+            FailedStormDetector(
+                window_minutes=cfg["storm_window_minutes"],
+                threshold=cfg["storm_threshold"],
+            ),
+            output_type=Types.STRING(),
         )
         .name("failed-storm-detector")
     )
 
-    # ===== L3.4: Union alerts + sink to Kafka =====
-    
-    # Gộp 2 alert stream thành 1
     all_alerts = velocity_alerts.union(storm_alerts)
-    
-    # Kafka sink
+
     kafka_alert_sink = (
         KafkaSink.builder()
-        .set_bootstrap_servers(kafka_bootstrap_servers)
+        .set_bootstrap_servers(os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:9092"))
         .set_record_serializer(
             KafkaRecordSerializationSchema.builder()
-            .set_topic("fraud-alerts")
+            .set_topic(cfg["sink_topic"])
             .set_value_serialization_schema(SimpleStringSchema())
             .build()
         )
         .set_delivery_guarantee(DeliveryGuarantee.AT_LEAST_ONCE)
         .build()
     )
-    
     all_alerts.sink_to(kafka_alert_sink).name("kafka-alert-sink")
-    
-    # Vẫn print để debug (có thể bỏ sau)
-    all_alerts.print("ALERT").name("debug-print")
 
-    # Submit
-    env.execute("lane3_fraud_detection")
+    env.execute(cfg["job_name"])
+
 
 class VelocityDetector(ProcessWindowFunction):
-    """
-    Đếm transactions trong tumbling window 1 phút per account.
-    Emit alert nếu count > threshold.
-    """
+    """Đếm transaction / account trong tumbling window. Alert nếu count > threshold."""
 
     def __init__(self, threshold: int):
         super().__init__()
         self.threshold = threshold
 
     def process(self, key, ctx, elements):
-        # key = account_id (int)
-        # elements = iterable các Row trong window
-        # ctx.window() có .start và .end (millis)
         count = sum(1 for _ in elements)
-
         if count > self.threshold:
-            alert = {
+            yield json.dumps({
                 "alert_type": "VELOCITY_FRAUD",
                 "severity": "MEDIUM",
                 "account_id": int(key),
@@ -152,15 +127,12 @@ class VelocityDetector(ProcessWindowFunction):
                 "threshold": self.threshold,
                 "window_start_ms": ctx.window().start,
                 "window_end_ms": ctx.window().end,
-            }
-            yield json.dumps(alert)
+            })
+
 
 class FailedStormDetector(KeyedProcessFunction):
-    """
-    Detect: >= N failed transactions trong sliding 5-phút window per account.
-    
-    Khác với TumblingWindow: state là LIST sliding theo từng event,
-    không reset cứng tại biên 5 phút.
+    """>= N giao dịch 'failed' trong cửa sổ trượt 5 phút / account. State là LIST
+    trượt theo từng event, không reset cứng tại biên.
     """
 
     def __init__(self, window_minutes: int, threshold: int):
@@ -169,40 +141,27 @@ class FailedStormDetector(KeyedProcessFunction):
         self.threshold = threshold
 
     def open(self, runtime_context):
-        # ListState: lưu tuple (timestamp_ms, transaction_id, amount)
-        # PyFlink yêu cầu type info rõ ràng cho tuple
         descriptor = ListStateDescriptor(
             "failed_history",
-            Types.TUPLE([Types.LONG(), Types.LONG(), Types.STRING()])
+            Types.TUPLE([Types.LONG(), Types.LONG(), Types.STRING()]),
         )
         self.failed_history = runtime_context.get_list_state(descriptor)
 
     def process_element(self, value, ctx):
-        # value là Row có cột: transaction_id, account_id, tx_type, amount, currency, status, event_time
-        # Chỉ care về failed transactions
         if value.status != "failed":
             return
-
-        current_ts_ms = ctx.timestamp()  # event-time của record này
+        current_ts_ms = ctx.timestamp()
         if current_ts_ms is None:
-            return  # bỏ qua nếu không có timestamp
+            return
 
-        # lấy history hiện tại
         history = list(self.failed_history.get())
-
-        # cleanup entries quá cũ (> 5 phút trước current)
         cutoff = current_ts_ms - self.window_ms
         history = [entry for entry in history if entry[0] >= cutoff]
-
-        # thêm event mới
         history.append((current_ts_ms, int(value.transaction_id), str(value.amount)))
-
-        # Update state
         self.failed_history.update(history)
 
-        # Check threshold
         if len(history) >= self.threshold:
-            alert = {
+            yield json.dumps({
                 "alert_type": "FAILED_STORM",
                 "severity": "HIGH",
                 "account_id": int(ctx.get_current_key()),
@@ -212,25 +171,21 @@ class FailedStormDetector(KeyedProcessFunction):
                 "detected_at_ms": current_ts_ms,
                 "recent_failures": [
                     {"ts_ms": e[0], "tx_id": e[1], "amount": e[2]}
-                    for e in history[-self.threshold:]  # chỉ N gần nhất
+                    for e in history[-self.threshold:]
                 ],
-            }
-            yield json.dumps(alert)
+            })
 
-        # set timer để cleanup nếu account này im lặng
-        # Timer này fire khi watermark vượt qua (current + window_ms)
         ctx.timer_service().register_event_time_timer(current_ts_ms + self.window_ms)
 
     def on_timer(self, timestamp, ctx):
-        """Cleanup state khi timer fire — đảm bảo state không phình mãi."""
         history = list(self.failed_history.get())
         cutoff = timestamp - self.window_ms
         kept = [entry for entry in history if entry[0] >= cutoff]
-
         if kept:
             self.failed_history.update(kept)
         else:
-            self.failed_history.clear()  # account này im lặng quá lâu → xóa hết state
+            self.failed_history.clear()
+
 
 if __name__ == "__main__":
     main()
