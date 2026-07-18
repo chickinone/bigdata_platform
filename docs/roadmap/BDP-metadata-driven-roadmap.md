@@ -269,9 +269,13 @@ MV). **Cùng một spec đảm bảo schema Flink output == schema ClickHouse in
      Mở khoá topic manifest (Pha 2) và đã dùng để sinh DDL ClickHouse (Pha 4).
    - ⬜ Các dataset lake (bronze/silver/gold) — cần cho Pha 5.
 3. ⬜ Mã hóa connections (postgres, kafka, clickhouse, s3, es, iceberg, trino).
-4. ⬜ **Kiểm chứng ngược:** script so schema thật (Postgres `information_schema`, Avro trong Schema
-   Registry, DDL ClickHouse) với contract → báo lệch. Hiện contract mới được chứng minh khớp
-   *artifact*, **chưa** chứng minh khớp *database thật*.
+4. 🟡 **Kiểm chứng ngược:** so contract với schema THẬT (nguồn độc lập), không chỉ với artifact.
+   - ✅ `verifiers/postgres_schema` — so 4 contract CDC với `information_schema` (tên/kiểu/nullable/PK):
+     **4/4 khớp**; test âm bắt 3 lỗi tiêm. ✅ `verifiers/clickhouse_schema` — so 4 bảng metric với
+     `system.columns` (bắt drift thủ công, tái dùng `_ch_type`): **4/4 khớp**; test âm bắt cột `ALTER`.
+     Nợ ẩn "contract lệch DB thật" nay **chứng minh không tồn tại** — [ADR-0022](../decisions/0022-reverse-verify-contract-vs-real-schema.md).
+   - ⬜ Nguồn thứ ba: **Avro trong Schema Registry** — cái Debezium thật sự phát trên Kafka (`encoded_as`).
+   - Lưu ý: verifier cần stack chạy → thuộc CI có stack ephemeral (Pha 7), không vào CI tĩnh.
 
 **Đầu ra:** `metadata/` là bản sao chính xác của hệ thống; validator chạy trong CI.
 **Ước lượng:** 1–1.5 tuần.
