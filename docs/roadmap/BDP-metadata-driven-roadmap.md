@@ -320,8 +320,10 @@ phần cốt lõi (còn compatibility gate Avro để trọn vẹn — Pha 7).
    ✅ 4 pipeline spec (`metadata/pipelines/stream/*.yaml`) khai window/filter/dimensions/aggregations/rank;
    ✅ `generators/flink_sql.py` sinh source DDL (từ cột tham chiếu — diệt sprawl #6, loại cột chết) + sink
    DDL (từ contract metric — diệt nửa Flink #8) + INSERT; ✅ runner mỏng `metric_runner.py` thực thi job
-   plan; ✅ **oracle SQL**: SQL sinh tương đương SQL viết tay lane1 (sink khớp tuyệt đối, INSERT tương
-   đương). ⬜ Submit runtime + parity dưới traffic + xoá `lane1_dashboard.py` (chờ Docker + có data).
+   plan; ✅ **oracle SQL**: SQL sinh tương đương SQL viết tay lane1; ✅ **runtime**: submit RUNNING (mọi
+   vertex, kể cả WindowRank cho topn); ✅ **parity ground truth**: seed data → cả 4 metric (TUMBLE +
+   CUMULATE) khớp tuyệt đối trong Kafka + ClickHouse; ✅ **cắt chuyển: xoá `lane1_dashboard.py`**; ✅
+   deployer `flink_metrics` (`plan`/`apply`).
 2. ⬜ Fraud (DataStream API): **giữ detector là code**, tham số hoá (threshold/window/topic); bỏ `ds.print` spam.
 3. ⬜ Đối chiếu: chạy runner song song job cũ trên cùng dữ liệu → khớp → cắt chuyển → xoá `lane1_*.py`.
 

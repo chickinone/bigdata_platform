@@ -44,9 +44,10 @@ CREATE TABLE transactions_source (
 
 ## 2. Lane 1 — Dashboard metrics
 
-[`flink/jobs/lane1_dashboard.py`](../../flink/jobs/lane1_dashboard.py) — **một** job sinh ra **bốn**
+[`flink/jobs/metric_runner.py`](../../flink/jobs/metric_runner.py) — **một** job sinh ra **bốn**
 luồng metric, gộp bằng `StatementSet` để chia sẻ chung một lần đọc Kafka
-([ADR-0006](../decisions/0006-one-flink-job-per-lane-statement-set.md)).
+([ADR-0006](../decisions/0006-one-flink-job-per-lane-statement-set.md)). SQL của cả bốn nay **sinh** từ
+[`metadata/pipelines/stream/`](../../metadata/pipelines/stream/) thay vì viết tay ([ADR-0023](../decisions/0023-flink-metric-runner-declarative.md)).
 
 ```mermaid
 flowchart LR

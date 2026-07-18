@@ -1,6 +1,6 @@
 # ADR-0023: Flink runner tổng quát khai báo — diệt sprawl #6/#8
 
-- **Status:** Accepted (phần sinh + oracle SQL); cutover runtime đang chờ
+- **Status:** Accepted — runner metric đã cắt chuyển, `lane1_dashboard.py` đã xoá
 - **Date:** 2026-07-18
 - **Deciders:** Phan Trường
 
@@ -53,16 +53,24 @@ viết tay** trong `lane1_dashboard.py` (job đã chạy production = oracle):
 Vì SQL tương đương, **đầu ra khớp theo cấu tạo** → nền cho bước chạy-song-song. Kiểm chéo cột được test âm
 (đổi alias aggregation → generator chặn đúng).
 
-## Việc còn lại (cutover runtime — chưa xong)
+## Cutover runtime — đã hoàn thành (parity với ground truth)
 
-Đúng kỷ luật strangler-fig, **chưa xoá `lane1_dashboard.py`**:
+Chạy đầy đủ quy trình strangler-fig cho streaming:
 
-1. Submit runner vào Flink (`flink run -py metric_runner.py`) với **group.id mới** (`flink-metrics-runner`)
-   → song song job cũ, không giành offset. (Đang chờ Docker Desktop lên lại — nó tắt giữa lúc submit.)
-2. Xác nhận job RUNNING = SQL sinh **hợp lệ** (parse + plan trong Flink — lớp kiểm mắt không thấy).
-3. Có traffic thật (hiện `transactions` rỗng): so đầu ra runner mới với job cũ **trên cùng dữ liệu**;
-   `ReplacingMergeTree` nuốt trùng nên chồng lấn vô hại.
-4. Khớp → cắt chuyển → **xoá `lane1_dashboard.py`**.
+1. ✅ Submit runner (`flink run -py metric_runner.py`, group `flink-metrics-runner` → song song, không
+   giành offset). Job **RUNNING**, mọi vertex RUNNING — SQL sinh **hợp lệ** (parse + plan). Đặc biệt
+   `WindowRank` vertex xác nhận primitive `rank` của topn sinh đúng operator.
+2. ✅ **Parity với GROUND TRUTH** (mạnh hơn so với job cũ): seed 15 deposit + 5 withdrawal (biết trước
+   kết quả), đợi watermark đẩy cửa sổ TUMBLE fire. Runner phát:
+   ```
+   metrics.timeseries [09:31–09:32]: deposit 15/1500, withdrawal 5/250
+   ClickHouse metrics.timeseries:     deposit 15/1500, withdrawal 5/250
+   ```
+   Khớp seed tuyệt đối — runner đọc Avro thật (`amount` STRING → CAST), window, aggregate, ghi Kafka,
+   chảy vào ClickHouse, đều đúng.
+3. ✅ Cắt chuyển → **`lane1_dashboard.py` đã xoá**. Runner là job metric duy nhất.
+4. ✅ Deployer `deployers/flink_metrics.py` (`plan`/`apply`) làm việc submit lặp lại được — thay
+   `flink run` thủ công.
 
 ## Hệ quả
 
