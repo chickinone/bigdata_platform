@@ -2,6 +2,13 @@
   "_comment": "FILE SINH TỰ ĐỘNG - đừng sửa tay. Nguồn: metadata/datasets/*.yaml + generators/dlq.py + hằng số hạ tầng trong generators/topic_manifest.py. Sinh lại: python -m dataplatform.cli write",
   "topics": [
     {
+      "name": "__debezium-heartbeat.bankdb",
+      "partitions": 1,
+      "replication_factor": 1,
+      "configs": {},
+      "provenance": "infra:debezium-heartbeat"
+    },
+    {
       "name": "_connect_configs",
       "partitions": 1,
       "replication_factor": 1,

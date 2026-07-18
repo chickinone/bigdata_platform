@@ -68,7 +68,9 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"   # cho Debezium tự tạo topic
+      # TẮT: mọi topic tạo tường minh qua bản kê sinh từ metadata (ADR-0020).
+      # Bật lại = mở đường cho topic rác + mất kiểm soát partition/retention.
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
 
       # --- Giới hạn heap cho laptop ---
       KAFKA_HEAP_OPTS: "-Xmx512M -Xms512M"
@@ -78,6 +80,25 @@ services:
       timeout: 10s
       retries: 10
       start_period: 30s
+    networks:
+      - bigdata-net
+
+  # TOPIC INIT: tạo mọi topic từ bản kê sinh (metadata). BẮT BUỘC vì auto-create
+  # đã tắt — không có service này thì môi trường mới (down -v && up) sẽ không có
+  # topic nào và cả pipeline chết. Script sinh từ registry (ADR-0020), idempotent
+  # (--if-not-exists) nên chạy lại vô hại. Chạy một lần rồi thoát.
+  kafka-init:
+    image: confluentinc/cp-kafka:7.7.1
+    container_name: bigdata-kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    volumes:
+      - ./kafka/create-topics.sh:/create-topics.sh:ro
+    entrypoint: ["bash", "/create-topics.sh"]
+    environment:
+      KAFKA_BOOTSTRAP: kafka:9092
+    restart: "no"
     networks:
       - bigdata-net
 
@@ -230,6 +251,10 @@ services:
         mc alias set local ${S3_ENDPOINT} ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD};
         mc mb -p local/flink-checkpoints || true;
         mc mb -p local/flink-savepoints || true;
+        mc mb -p local/data-lake-bronze || true;
+        mc mb -p local/data-lake-silver || true;
+        mc mb -p local/data-lake-gold || true;
+        mc mb -p local/data-lake-iceberg || true;
         echo 'MinIO buckets created';
         exit 0;
       "

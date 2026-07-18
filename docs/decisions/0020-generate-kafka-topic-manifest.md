@@ -103,16 +103,23 @@ Topic CDC được **kiểm chứng kép**: es-sink tham chiếu chúng, *và* `
 Debezium suy ra đúng cùng tên. Topic metric suy từ cùng `source.topic` mà bảng Kafka engine ClickHouse
 (`kafka_topic_list`, ADR-0019) đang đọc — nhất quán theo cấu tạo.
 
-## Phát hiện: bản kê bản đầu **sót `_schemas`**
+## Phát hiện: đối chiếu-với-thật lôi ra **ba** topic/lỗi mà suy luận bỏ sót
 
-Bước đối chiếu live lôi ra ngay một lỗi tôi **không lường trước**: `_schemas` — store schema của
-Confluent Schema Registry (single-partition, compacted) — tồn tại trên cluster nhưng **không có** trong
-bản kê đầu. Tôi đã liệt kê `_connect_*` mà quên `_schemas`.
+Mỗi lần chạy pipeline thật rồi describe cluster lại lộ một thứ bản kê thiếu:
 
-Đây đúng loại topic hạ tầng mà roadmap Pha 2 cảnh báo *"còn thiếu các topic nội bộ trước khi dám tắt
-auto.create.topics"*. Nếu tắt auto-create mà thiếu `_schemas` trong script tạo, Schema Registry sẽ
-**không khởi động được** → sập toàn bộ đường CDC Avro. Đã bổ sung. Giá trị của "đối chiếu với thật":
-nó bắt lỗi mà suy luận thuần không bắt được — y như vụ `kafka_max_block_size` ở ADR-0019.
+| Lần | Thiếu / lỗi | Nếu tắt auto-create mà bỏ qua |
+|---|---|---|
+| 1 | `_schemas` (store của Confluent Schema Registry) | Schema Registry không khởi động → **sập toàn bộ đường CDC Avro** |
+| 2 | `__debezium-heartbeat.bankdb` (do `heartbeat.interval.ms`) | Debezium không đẩy được replication slot → **slot đứng → WAL phình vô hạn** |
+| 3 | `create-topics.sh` bị **CRLF** (Python `write_text` trên Windows dịch `\n`→`\r\n`) | `set -euo pipefail\r` là option lỗi → **script chết ngay dòng đầu** |
+
+Lần 1 và 2 cùng bản chất: topic hạ tầng do một service tự tạo, không suy ra được từ dataset — chỉ lộ khi
+describe cluster đang chạy. Lần 2 nay **suy diễn** từ `TOPIC_PREFIX` (có CDC thì có heartbeat), sạch hơn
+khai hằng số. Lần 3 chữa tận gốc: `cli.py write` ép `newline="\n"`, cộng `.gitattributes` `*.sh eol=lf`.
+
+Đây đúng loại rủi ro roadmap Pha 2 cảnh báo (*"còn thiếu topic nội bộ trước khi dám tắt auto-create"*), và
+là lý do **không được tắt auto-create bằng suy luận thuần**. Ba lần liên tiếp, ba thứ mắt bỏ qua — giá
+trị của kỷ luật "đối chiếu với hiện thực", y như `kafka_max_block_size` ở ADR-0019.
 
 ## Hệ quả
 
@@ -130,19 +137,30 @@ nó bắt lỗi mà suy luận thuần không bắt được — y như vụ `ka
 - Bản kê **chưa được áp** và auto-create **vẫn bật**. Đây là cố ý (xem dưới), nhưng nghĩa là giá trị
   "kiểm soát topic" chưa hiện thực hoá tới khi làm nốt các bước gated.
 
-## Việc còn lại (các cổng có chủ ý, chưa làm trong ADR này)
+## Cutover — đã hoàn thành end-to-end (2026-07-18)
 
-Tôi **không** tắt `auto.create.topics` ngay, đúng kỷ luật strangler-fig "thêm cái mới song song, kiểm
-chứng, rồi mới bỏ cái cũ":
+Các cổng dưới đây ban đầu để dành; nay đã đi hết, đúng kỷ luật "thêm cái mới song song, kiểm chứng, rồi
+mới bỏ cái cũ":
 
-1. **Nối `create-topics.sh` vào vòng khởi động** (service `kafka-init` trong compose, hoặc chạy tay).
-   Kiểm chứng: mọi topic trong bản kê tồn tại sau khi chạy.
-2. **Chạy pipeline đầy đủ** (đăng ký Debezium + deploy Flink) để 9 topic "chờ" xuất hiện, rồi đối chiếu
-   lại — đóng nốt phần tên topic CDC/metric bằng bằng chứng live thay vì cross-check tĩnh.
-3. **Chỉ khi (1)(2) xanh** mới đặt `KAFKA_AUTO_CREATE_TOPICS_ENABLE=false`. Đây là bước bỏ "cái cũ".
+1. ✅ **Nối `create-topics.sh` vào khởi động** — thêm service `kafka-init` trong compose (mount script
+   LF, chạy sau kafka healthy, `--if-not-exists` nên idempotent). Kiểm chứng cô lập: `up kafka-init` →
+   "Đã đảm bảo tồn tại 21 topic", exit 0.
+2. ✅ **Chạy pipeline đầy đủ** — deploy 7 connector bằng [connector deployer](0021-connector-deployer-idempotent.md)
+   ([ADR-0021](0021-connector-deployer-idempotent.md)); Debezium snapshot sinh các topic CDC; chạy
+   `create-topics.sh` tạo nốt `metrics.*` + `dlq.events`. Đối chiếu lại: **21/21 topic thật khớp bản kê,
+   0 lệch/mồ côi.**
+3. ✅ **Tắt auto-create** — đặt `KAFKA_AUTO_CREATE_TOPICS_ENABLE=false`, recreate container kafka (config
+   này KHÔNG đổi động được — Kafka báo `Cannot update these configs dynamically`). 21 topic sống sót qua
+   recreate (volume bền).
 
-Giữ auto-create bật tới lúc đó nghĩa là nếu script tạo topic sót cái gì, hệ thống vẫn chạy — lưới an
-toàn không rút trước khi lưới mới được chứng minh.
+**Chứng minh sau khi rút lưới:**
+- Config broker: `auto.create.topics.enable=false` (STATIC override thắng DEFAULT=true).
+- Chạm một topic ma → `UNKNOWN_TOPIC_OR_PARTITION`, topic **không** bị tạo. Auto-create tắt dứt khoát.
+- 7 connector tự reconnect sau recreate, vẫn RUNNING; snapshot (accounts=200, customers=100) chảy trọn
+  Postgres → topic → ES với auto-create **tắt**. `transactions`/`transfers` rỗng ở nguồn nên 0 message —
+  đúng, không phải lỗi.
+
+Lưới cũ chỉ rút SAU khi lưới mới (bản kê + `kafka-init`) được chứng minh phủ đủ.
 
 ## Phương án đã cân nhắc
 

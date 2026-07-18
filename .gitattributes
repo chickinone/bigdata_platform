@@ -1,0 +1,8 @@
+# Script shell PHẢI giữ LF kể cả trên Windows: chúng chạy trong container Linux
+# (docker exec / mount vào kafka-init). CRLF làm `set -euo pipefail\r` thành option
+# lỗi và cắn nguyên script. Đây là file SINH (kafka/create-topics.sh) nên không
+# sửa tay được — ép LF ở tầng git là cách duy nhất chắc chắn.
+*.sh text eol=lf
+
+# Cùng lý do cho các file cấu hình/khởi tạo chạy trong container.
+*.sql text eol=lf

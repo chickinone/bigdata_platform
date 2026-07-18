@@ -177,7 +177,11 @@ def cmd_write() -> int:
     for rel_path, payload in sorted(targets.items()):
         path = REPO_ROOT / rel_path
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(_serialize(payload), encoding="utf-8")
+        # newline="\n": ÉP LF kể cả trên Windows. write_text mặc định (newline=None)
+        # dịch \n -> \r\n trên Windows, làm hỏng script .sh chạy trong container Linux
+        # (set -euo pipefail\r -> option lỗi). Mọi artifact đều cho engine Linux nên
+        # đều phải LF. `check` không thấy khác biệt này vì read_text dịch ngược lúc đọc.
+        path.write_text(_serialize(payload), encoding="utf-8", newline="\n")
         print(f"  đã ghi  {rel_path}")
     print(f"\nĐã sinh {len(targets)} artifact từ metadata/.")
     return 0

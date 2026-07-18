@@ -289,21 +289,19 @@ làm trước để chứng minh giá trị.
    - ✅ Cấu hình DLQ cho cả 6 connector + bản kê topic cho `dlq-processor` — [ADR-0017](../decisions/0017-dlq-flow-observe-then-park.md)
    - ✅ `postgres-connector.json` (`table.include.list`) **và** `04_publication.sql` — sinh từ **cùng
      một nguồn** nên không thể lệch; diệt sprawl #2/#3 ([ADR-0018](../decisions/0018-generate-debezium-and-publication.md)).
-   - 🟡 **Topic manifest** (partition/retention/RF — tắt `auto.create.topics`).
-     ✅ Sinh `kafka/topics.json` (bản kê khai báo) + `kafka/create-topics.sh` (script tạo idempotent)
-     từ registry, gộp 3 nguồn: dataset topic, DLQ topic (tái dùng `dlq.py`), và topic hạ tầng
-     (`dlq.events`, `_connect_*`, `_schemas`). **Đối chiếu với Kafka thật: 11/11 topic thật khớp tuyệt
-     đối** — [ADR-0020](../decisions/0020-generate-kafka-topic-manifest.md). Bước này lôi ra `_schemas`
-     (Schema Registry) bị sót ở bản đầu.
-     ⬜ Còn 3 cổng gated trước khi **tắt `auto.create.topics`**: nối script vào khởi động → chạy pipeline
-     đầy đủ để 9 topic dataset/metric hiện ra và đối chiếu live → rồi mới đặt `=false`.
-2. ⬜ **Deployer** áp connector qua Connect REST API **idempotent** (`PUT /connectors/{name}/config`).
-   Hiện vẫn đăng ký tay bằng `curl`.
-3. ✅ Đối chiếu JSON sinh vs JSON hiện tại (diff = rỗng) — `python -m dataplatform.cli check`, 7/7 khớp.
-   ⬜ Cắm `check` vào **CI** để sửa contract mà quên chạy generator thì CI đỏ.
+   - ✅ **Topic manifest + cutover** — sinh `kafka/topics.json` + `kafka/create-topics.sh` từ registry
+     (gộp dataset + DLQ tái dùng `dlq.py` + hạ tầng `dlq.events`/`_connect_*`/`_schemas`/
+     `__debezium-heartbeat`). **Đã cắt chuyển end-to-end:** service `kafka-init` tạo topic khi khởi động,
+     `auto.create.topics=false`, chứng minh live (21/21 topic khớp, topic ma không bị tạo, pipeline vẫn
+     chảy). Đối chiếu-với-thật lôi ra `_schemas`, `__debezium-heartbeat`, lỗi CRLF — [ADR-0020](../decisions/0020-generate-kafka-topic-manifest.md).
+2. ✅ **Deployer** áp connector qua Connect REST **idempotent** (`PUT /connectors/{name}/config`), có
+   `plan`/`apply`, đọc thẳng generator, không chạm secret. 7 connector deploy + RUNNING, idempotency
+   chứng minh — [ADR-0021](../decisions/0021-connector-deployer-idempotent.md). Hết cảnh `curl` thủ công.
+3. ✅ Đối chiếu JSON sinh vs JSON hiện tại (diff = rỗng) — `python -m dataplatform.cli check`, 13/13 khớp.
+   ⬜ Cắm `check` **và** `deployers ... plan` vào **CI** để sửa contract mà quên generator/deploy thì CI đỏ.
 
-**Đầu ra:** thêm/bớt bảng CDC = sửa 1 contract + chạy generator. **Ước lượng:** 1.5–2 tuần
-*(đã đi được ~2/3)*.
+**Đầu ra:** thêm/bớt bảng CDC = sửa 1 contract → chạy generator → chạy deployer. **Ước lượng:** 1.5–2 tuần
+*(gần xong — chỉ còn cắm CI)*.
 
 ---
 

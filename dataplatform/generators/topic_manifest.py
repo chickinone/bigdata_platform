@@ -40,7 +40,7 @@ from __future__ import annotations
 import json
 
 from ..registry import Dataset
-from . import dlq
+from . import debezium, dlq
 
 # RF=1 vì Kafka single-node (ADR-0005). Khoá ở MỘT chỗ; lên multi-broker thì đây là
 # giá trị đổi theo env — cùng lý do và cùng kiểu với DLQ_REPLICATION_FACTOR bên dlq.py.
@@ -106,6 +106,13 @@ def _entries(datasets: list[Dataset]) -> list[dict]:
     # Store schema của Confluent Schema Registry: single-partition, compacted (SR bắt
     # buộc như vậy). SR tự tạo, nhưng vẫn phải khai để manifest là bản kê ĐẦY ĐỦ.
     entries.append(_topic("_schemas", "infra:schema-registry", partitions=1, compact=True))
+    # Heartbeat của Debezium: nếu có dataset CDC, Debezium tự tạo
+    # __debezium-heartbeat.<prefix> (do heartbeat.interval.ms) để đẩy replication slot
+    # tiến kể cả khi bảng không đổi. Tắt auto-create mà thiếu nó -> slot đứng -> WAL
+    # phình vô hạn. Suy DIỄN từ TOPIC_PREFIX, chỉ thêm khi thực sự có CDC — cũng là
+    # một topic mà đối chiếu-với-Kafka-thật lôi ra, không phải suy luận thuần.
+    if debezium.cdc_datasets(datasets):
+        entries.append(_topic(f"__debezium-heartbeat.{debezium.TOPIC_PREFIX}", "infra:debezium-heartbeat"))
     # LƯU Ý: __consumer_offsets KHÔNG nằm đây. Nó do chính broker Kafka quản, tạo bất
     # kể auto.create.topics, không phải thứ control plane khai hay xoá được.
 
@@ -186,7 +193,9 @@ def render_script(datasets: list[Dataset]) -> str:
             f'{cfg}  # {t["provenance"]}'
         )
     lines.append("")
-    lines.append('echo "Đã đảm bảo tồn tại $(grep -c \'^kafka-topics\' "$0") topic."')
+    # Số đếm BAKE cứng lúc sinh, không dùng $0: script còn được chạy qua stdin
+    # (docker exec -i ... bash -s < script) — khi đó $0 là "bash", không phải path.
+    lines.append(f'echo "Đã đảm bảo tồn tại {len(ordered)} topic."')
     lines.append("")
     return "\n".join(lines)
 

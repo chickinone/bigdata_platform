@@ -114,7 +114,7 @@ Xác minh trực tiếp từ code, không phải suy đoán.
 | # | Vấn đề | Bằng chứng | Hệ quả |
 |---|---|---|---|
 | 1 | **ClickHouse init không tự chạy** | `docker-compose.yml` không mount `clickhouse/init/` vào `/docker-entrypoint-initdb.d` | Không bảng `metrics.*` → MV không tồn tại → Grafana rỗng. Phải chạy tay. |
-| 2 | **Bucket lake không được tạo** | `minio-init` chỉ `mc mb` cho `flink-checkpoints` và `flink-savepoints` | S3 sink fail cho tới khi tạo tay `data-lake-{bronze,silver,gold,iceberg}`. |
+| 2 | ✅ ~~**Bucket lake không được tạo**~~ | **ĐÃ XỬ LÝ** 2026-07-18 — `minio-init` nay tạo cả `data-lake-{bronze,silver,gold,iceberg}` | S3 sink chạy được ngay khi `up`; không phải tạo tay. |
 | 3 | ~~**DLQ chưa được nối**~~ | **ĐÃ XỬ LÝ** 2026-07-16 — [ADR-0017](../decisions/0017-dlq-flow-observe-then-park.md) | Mọi sink bật DLQ; lỗi chảy vào `metrics.dlq_events`. Kèm sửa lỗi replay làm hỏng metric. |
 | 4 | ~~**`metrics.dlq_events` không tồn tại**~~ | **ĐÃ XỬ LÝ** — [`clickhouse/init/03_dlq.sql`](../../clickhouse/init/03_dlq.sql) | Vẫn phải chạy tay như mọi init ClickHouse (mục 1). |
 | 4b | **`metrics.notification_events` không tồn tại** | `fraud_notifier.py:177` INSERT vào bảng này; không init nào tạo nó | Mọi lần ghi đều fail (nuốt trong `try/except`). **Còn nợ.** |
@@ -126,7 +126,7 @@ Xác minh trực tiếp từ code, không phải suy đoán.
 | # | Vấn đề | Chi tiết |
 |---|---|---|
 | 7 | **Single-node mọi thứ** | Kafka RF=1, ES single-node, 1 Spark worker, checkpoint 30s. Không HA, không chịu lỗi. |
-| 8 | 🟡 **`AUTO_CREATE_TOPICS_ENABLE=true`** | Bản kê topic **đã sinh** từ registry và đối chiếu khớp Kafka thật ([ADR-0020](../decisions/0020-generate-kafka-topic-manifest.md)). Còn giữ auto-create tới khi nối script tạo topic vào khởi động + đối chiếu live đủ 9 topic dataset/metric, rồi mới `=false`. |
+| 8 | ✅ ~~**`AUTO_CREATE_TOPICS_ENABLE=true`**~~ | **ĐÃ TẮT** — topic tạo tường minh qua bản kê sinh từ registry + service `kafka-init`; `auto.create.topics=false`, chứng minh live 21/21 topic khớp và topic ma không bị tạo ([ADR-0020](../decisions/0020-generate-kafka-topic-manifest.md)). |
 | 9 | **Không orchestration** | Job Spark chạy tay; không lịch, không phụ thuộc, không retry/backfill. |
 | 10 | **Không data quality gate & lineage** | Không kiểm tra chất lượng, không truy vết nguồn-đích tự động. |
 | 11 | **Không CI/CD** | Thay đổi cấu hình áp thủ công qua REST/`docker compose`. |

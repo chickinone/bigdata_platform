@@ -28,9 +28,10 @@ kafka-topics --bootstrap-server "$BOOTSTRAP" --create --if-not-exists --topic dl
 # --- Topic pipeline nội bộ ---
 kafka-topics --bootstrap-server "$BOOTSTRAP" --create --if-not-exists --topic dlq.events --partitions 1 --replication-factor 1   # pipeline:dlq-processor
 # --- Topic nội bộ Kafka Connect (compacted) ---
+kafka-topics --bootstrap-server "$BOOTSTRAP" --create --if-not-exists --topic __debezium-heartbeat.bankdb --partitions 1 --replication-factor 1   # infra:debezium-heartbeat
 kafka-topics --bootstrap-server "$BOOTSTRAP" --create --if-not-exists --topic _connect_configs --partitions 1 --replication-factor 1 --config cleanup.policy=compact  # infra:kafka-connect
 kafka-topics --bootstrap-server "$BOOTSTRAP" --create --if-not-exists --topic _connect_offsets --partitions 25 --replication-factor 1 --config cleanup.policy=compact  # infra:kafka-connect
 kafka-topics --bootstrap-server "$BOOTSTRAP" --create --if-not-exists --topic _connect_status --partitions 5 --replication-factor 1 --config cleanup.policy=compact  # infra:kafka-connect
 kafka-topics --bootstrap-server "$BOOTSTRAP" --create --if-not-exists --topic _schemas --partitions 1 --replication-factor 1 --config cleanup.policy=compact  # infra:schema-registry
 
-echo "Đã đảm bảo tồn tại $(grep -c '^kafka-topics' "$0") topic."
+echo "Đã đảm bảo tồn tại 21 topic."
