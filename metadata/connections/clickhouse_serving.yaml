@@ -1,0 +1,12 @@
+# Connection: ClickHouse serving (Grafana doc; Trino query cross-source).
+name: clickhouse_serving
+type: clickhouse
+description: Tầng serving OLAP — bảng metrics.* (ADR-0007).
+
+trino:
+  catalog: clickhouse
+  connector: clickhouse
+  properties:
+    connection-url: "jdbc:clickhouse://${ENV:CLICKHOUSE_HOST}:${ENV:CLICKHOUSE_PORT}/default"
+    connection-user: "${ENV:CLICKHOUSE_USER}"
+    connection-password: "${ENV:CLICKHOUSE_PASSWORD}"

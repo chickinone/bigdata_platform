@@ -15,6 +15,7 @@ from jsonschema import Draft202012Validator
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 METADATA_DIR = REPO_ROOT / "metadata"
+CONNECTIONS_DIR = METADATA_DIR / "connections"
 SCHEMA_DIR = Path(__file__).resolve().parent / "schemas"
 
 
@@ -105,6 +106,39 @@ def load_datasets(metadata_dir: Path = METADATA_DIR) -> list[Dataset]:
 
     _check_unique_urns(datasets)
     return sorted(datasets, key=lambda d: d.urn)
+
+
+def load_connections(connections_dir: Path = CONNECTIONS_DIR) -> list[dict]:
+    """Đọc + validate mọi connection contract, sắp theo name để output ổn định.
+
+    Connection là hệ thống kết nối (postgres, clickhouse, iceberg...). Dataset tham
+    chiếu qua source.connection; artifact như Trino catalog sinh từ đây. Đóng nợ Pha 1.
+    """
+    if not connections_dir.exists():
+        return []
+    schema = json.loads((SCHEMA_DIR / "connection.schema.json").read_text(encoding="utf-8"))
+    validator = Draft202012Validator(schema)
+
+    conns: list[dict] = []
+    errors: list[str] = []
+    seen: dict[str, Path] = {}
+    for path in sorted(connections_dir.rglob("*.yaml")):
+        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+        rel = path.relative_to(REPO_ROOT)
+        for err in sorted(validator.iter_errors(raw), key=lambda e: list(e.path)):
+            loc = ".".join(str(p) for p in err.path) or "(gốc)"
+            errors.append(f"  {rel} -> {loc}: {err.message}")
+        if raw is None:
+            continue
+        name = raw.get("name")
+        if name in seen:
+            errors.append(f"  connection trùng tên: {name}\n    {seen[name]}\n    {rel}")
+        seen[name] = rel
+        conns.append(raw)
+
+    if errors:
+        raise ContractError("Connection không hợp lệ:\n" + "\n".join(errors))
+    return sorted(conns, key=lambda c: c["name"])
 
 
 def _check_unique_urns(datasets: list[Dataset]) -> None:

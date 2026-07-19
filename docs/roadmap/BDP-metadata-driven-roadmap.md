@@ -268,7 +268,8 @@ MV). **Cùng một spec đảm bảo schema Flink output == schema ClickHouse in
    - ✅ **4 metric** (`metrics.{timeseries,kpi,breakdown,topn}`) — [ADR-0019](../decisions/0019-generate-clickhouse-metric-ddl.md).
      Mở khoá topic manifest (Pha 2) và đã dùng để sinh DDL ClickHouse (Pha 4).
    - ⬜ Các dataset lake (bronze/silver/gold) — cần cho Pha 5.
-3. ⬜ Mã hóa connections (postgres, kafka, clickhouse, s3, es, iceberg, trino).
+3. 🟡 Mã hóa connections — `metadata/connections/*.yaml` là contract hạng nhất ([ADR-0025](../decisions/0025-connection-registry-trino-catalog.md)).
+   ✅ 3 connection Trino (postgres, clickhouse, iceberg) → sinh catalog. ⬜ Còn kafka, s3, es, schema-registry.
 4. ✅ **Kiểm chứng ngược** (bộ ba nguồn sự thật độc lập) — [ADR-0022](../decisions/0022-reverse-verify-contract-vs-real-schema.md):
    - ✅ `verifiers/postgres_schema` — bảng NGUỒN, so `information_schema` (tên/kiểu/nullable/PK): 4/4 khớp.
    - ✅ `verifiers/avro_schema` — TRÊN DÂY, so Avro trong Schema Registry (`encoded_as: string` = decimal
@@ -384,12 +385,17 @@ khuôn** (dedup/join/agg/filter), khác Flink metric đồng khuôn. Xem [ADR-00
 
 ### Pha 6 — Federation & Catalog/Lineage
 
-1. Sinh `trino/etc/catalog/*.properties` từ connection registry (theo env).
-2. Đẩy metadata vào **OpenMetadata hoặc DataHub**: ingest schema, nạp ownership/tag PII/mô tả từ
+1. 🟡 Sinh `trino/etc/catalog/*.properties` từ **connection registry**.
+   - ✅ **Connection registry** (`metadata/connections/*.yaml`) — đóng nợ Pha 1 (connection nay là contract
+     hạng nhất, không còn tên treo lơ lửng). 3 connection Trino: postgres, clickhouse, iceberg.
+   - ✅ Generator `trino_catalog.py` — sinh 3 catalog, **oracle byte-exact khớp bản viết tay** (`check` 16/16);
+     diệt sprawl #13 ([ADR-0025](../decisions/0025-connection-registry-trino-catalog.md)). Secret vẫn `${ENV:...}`.
+   - ⬜ Verify Trino federation runtime (query chéo) — chờ Docker; ⬜ encode connection non-Trino (kafka/es/s3).
+2. ⬜ Đẩy metadata vào **OpenMetadata hoặc DataHub**: ingest schema, nạp ownership/tag PII/mô tả từ
    contract, **lineage cột-tới-cột** suy từ pipeline spec (`source_urn` → `sink_urn` + mapping).
-3. Có UI trả lời: "cột `amount` chảy tới đâu?", "dataset nào chứa PII?", "ai sở hữu?".
+3. ⬜ Có UI trả lời: "cột `amount` chảy tới đâu?", "dataset nào chứa PII?", "ai sở hữu?".
 
-**Đầu ra:** discovery + lineage tự động. **Ước lượng:** 1.5–2 tuần.
+**Đầu ra:** discovery + lineage tự động. **Ước lượng:** 1.5–2 tuần *(bước 1 gần xong)*.
 
 ---
 

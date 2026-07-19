@@ -13,7 +13,7 @@
 > Khai báo mỗi thực thể **một lần** trong `metadata/datasets/*.yaml`, rồi để generator sinh ra mọi
 > file cấu hình của thực thể đó — thay vì chép tay cùng thông tin sang từng công cụ.
 
-**Trạng thái hiện tại — 13 artifact:**
+**Trạng thái hiện tại — 16 artifact:**
 
 | Artifact | Số file | Ghi chú |
 |---|---|---|
@@ -24,9 +24,10 @@
 | DDL ClickHouse | 2 | 12 đối tượng metric từ `columns` — [ADR-0019](../decisions/0019-generate-clickhouse-metric-ddl.md) |
 | Bản kê topic DLQ | 1 | `dlq-processor/dlq_topics.json` ([ADR-0017](../decisions/0017-dlq-flow-observe-then-park.md)) |
 | Bản kê topic Kafka | 2 | `kafka/topics.json` + `create-topics.sh`, gộp dataset + DLQ + hạ tầng — [ADR-0020](../decisions/0020-generate-kafka-topic-manifest.md) |
+| Trino catalog | 3 | `trino/etc/catalog/*.properties` từ **connection registry** — [ADR-0025](../decisions/0025-connection-registry-trino-catalog.md) |
 
-Cấu hình DLQ của **cả 6 connector** cũng sinh từ đây. Còn viết tay: DDL sink bên Flink
-(`lane1_dashboard.py`), job Spark, catalog Trino — sẽ làm theo lộ trình.
+Cấu hình DLQ của **cả 6 connector** cũng sinh từ đây. Runtime (Flink runner, Spark medallion) sinh từ
+pipeline spec riêng, không qua `check`. Còn viết tay ngoài `check`: mapping ES, DAG orchestration — theo lộ trình.
 
 ---
 
@@ -94,11 +95,14 @@ metadata/
     oltp/      customers.yaml  accounts.yaml  transactions.yaml  transfers.yaml
     metrics/   timeseries.yaml  kpi.yaml  breakdown.yaml  topn.yaml
     alerts/    fraud-alerts.yaml
+  connections/ postgres_main.yaml  clickhouse_serving.yaml  iceberg_lakehouse.yaml
+  pipelines/   stream/ (Flink specs)   batch/ (Spark medallion specs)
 dataplatform/
-  registry.py            # đọc + validate contract (mọi generator đi qua đây)
+  registry.py            # đọc + validate contract + connection (mọi generator đi qua đây)
   cli.py                 # check / write / show
   schemas/
-    dataset.schema.json  # JSON Schema — định nghĩa "contract hợp lệ là gì"
+    dataset.schema.json      # "contract dataset hợp lệ là gì"
+    connection.schema.json   # "contract connection hợp lệ là gì"
   generators/
     es_sink.py               # 1 dataset  -> 1 ES sink connector
     s3_sink.py               # N dataset  -> 1 S3 sink connector (gộp `topics`)
@@ -107,6 +111,7 @@ dataplatform/
     clickhouse_ddl.py        # 1 metric   -> 3 đối tượng ClickHouse (bảng + kafka + MV)
     dlq.py                   # chính sách DLQ + bản kê topic cho dlq-processor
     topic_manifest.py        # N dataset + DLQ + hạ tầng -> bản kê topic + script tạo
+    trino_catalog.py         # N connection -> Trino catalog .properties
 ```
 
 Hai **hình dạng generator** khác nhau, đáng để ý:

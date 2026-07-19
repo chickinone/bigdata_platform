@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bigdata-platform/schemas/connection.schema.json",
+  "title": "Connection contract",
+  "description": "Khai báo MỘT hệ thống kết nối một lần. Dataset tham chiếu qua source.connection; artifact kết nối (vd Trino catalog) sinh từ đây. KHÔNG chứa secret — dùng ${ENV:...}.",
+
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "type"],
+
+  "properties": {
+    "name": { "type": "string", "minLength": 1 },
+    "type": {
+      "enum": ["postgres", "clickhouse", "iceberg", "kafka", "elasticsearch", "s3", "schema_registry"]
+    },
+    "description": { "type": "string" },
+
+    "trino": {
+      "description": "Có khối này = sinh trino/etc/catalog/<catalog>.properties.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["catalog", "connector", "properties"],
+      "properties": {
+        "catalog": { "type": "string", "minLength": 1, "description": "Tên catalog = tên file .properties" },
+        "connector": { "type": "string", "minLength": 1 },
+        "properties": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    }
+  }
+}

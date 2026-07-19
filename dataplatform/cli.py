@@ -23,8 +23,9 @@ from .generators import (
     postgres_publication,
     s3_sink,
     topic_manifest,
+    trino_catalog,
 )
-from .registry import REPO_ROOT, ContractError, load_datasets
+from .registry import REPO_ROOT, ContractError, load_connections, load_datasets
 
 # Ghi JSON với indent 2 + newline cuối file. Đây là QUY ƯỚC, không phải yêu cầu
 # của Kafka Connect - chọn một kiểu rồi giữ nguyên để diff giữa các lần chạy chỉ
@@ -54,6 +55,7 @@ def _collect() -> dict:
     targets.update(postgres_publication.targets(datasets))
     targets.update(clickhouse_ddl.targets(datasets))
     targets.update(topic_manifest.targets(datasets))
+    targets.update(trino_catalog.targets(load_connections()))
     return targets
 
 

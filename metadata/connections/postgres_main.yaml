@@ -1,0 +1,15 @@
+# Connection: Postgres OLTP nguon (Debezium CDC doc tu day; Trino query truc tiep).
+# Cac dataset OLTP tham chieu ten nay qua source.connection.
+# KHONG chua secret: moi gia tri nhay dung ${ENV:...} de Trino/engine tu resolve.
+name: postgres_main
+type: postgres
+description: Nguồn OLTP ngân hàng — 4 bảng (customers, accounts, transactions, transfers).
+
+# Khoi trino: co khoi nay -> sinh trino/etc/catalog/<catalog>.properties.
+trino:
+  catalog: postgres
+  connector: postgresql
+  properties:
+    connection-url: "jdbc:postgresql://${ENV:POSTGRES_HOST}:${ENV:POSTGRES_PORT}/${ENV:POSTGRES_DB}"
+    connection-user: "${ENV:POSTGRES_USER}"
+    connection-password: "${ENV:POSTGRES_PASSWORD}"
