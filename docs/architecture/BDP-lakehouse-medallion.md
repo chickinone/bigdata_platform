@@ -102,11 +102,11 @@ Cột đầu ra: `transaction_id`, `transaction_type`, `amount`, `currency`, `st
 
 ---
 
-## 4. Gold — `build_gold_layer.py`
+## 4. Gold — 3 batch spec `metadata/pipelines/batch/gold_*.yaml`
 
-[`spark/jobs/build_gold_layer.py`](../../spark/jobs/build_gold_layer.py): Silver → 3 bảng phân tích.
-Vì `amount` vẫn là STRING (di sản từ `decimal.handling.mode=string`), job cast trước:
-`silver.withColumn("amount_dbl", col("amount").cast("double"))`.
+Chạy bằng runner chung `medallion_runner` từ 3 spec ([ADR-0024](../decisions/0024-spark-medallion-runner-sql.md)),
+thay `build_gold_layer.py` đã xoá. Vì `amount` vẫn là STRING (di sản từ
+`decimal.handling.mode=string`), SQL cast trước: `CAST(amount AS DOUBLE)`.
 
 | Bảng Gold | Group by | Đo lường |
 |---|---|---|
@@ -118,10 +118,11 @@ Vì `amount` vẫn là STRING (di sản từ `decimal.handling.mode=string`), jo
 
 ---
 
-## 5. Iceberg — `silver_to_iceberg.py`
+## 5. Iceberg — `metadata/pipelines/batch/iceberg_silver_enriched.yaml`
 
-[`spark/jobs/silver_to_iceberg.py`](../../spark/jobs/silver_to_iceberg.py) — cùng dữ liệu Silver nhưng
-dưới dạng **table format**, để có snapshot và time travel.
+CTAS Silver → bảng Iceberg (`lakehouse.silver.enriched_transactions`), chạy bằng `medallion_runner`
+(`output.format=iceberg`, [ADR-0024](../decisions/0024-spark-medallion-runner-sql.md)) — thay
+`silver_to_iceberg.py` đã xoá. Cùng dữ liệu Silver nhưng dưới dạng **table format**, có snapshot và time travel.
 
 | Cấu hình | Giá trị |
 |---|---|

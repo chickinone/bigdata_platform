@@ -160,27 +160,17 @@ docker exec -it bigdata-flink-jobmanager flink list
 
 ## 7. Chạy job Spark
 
-Chi tiết: [`spark-lakehouse.md`](spark-lakehouse.md). Phải theo **đúng thứ tự** — không có orchestrator:
+Chi tiết: [`spark-lakehouse.md`](spark-lakehouse.md). Nay chạy bằng **deployer** — sinh config từ batch
+spec rồi spark-submit theo **đúng thứ tự phụ thuộc** (silver → 3 gold → iceberg), thay 3 job hardcode
+đã xoá ([ADR-0024](../decisions/0024-spark-medallion-runner-sql.md)):
 
 ```bash
-# Bronze → Silver (chờ S3 sink đổ đủ dữ liệu đã)
-docker exec -it bigdata-spark-master /opt/spark/bin/spark-submit \
-  --master spark://spark-master:7077 \
-  --packages org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262 \
-  /opt/spark-jobs/enrich_transactions.py
-
-# Silver → Gold
-docker exec -it bigdata-spark-master /opt/spark/bin/spark-submit \
-  --master spark://spark-master:7077 \
-  --packages org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262 \
-  /opt/spark-jobs/build_gold_layer.py
-
-# Silver → Iceberg (+ demo time travel)
-docker exec -it bigdata-spark-master /opt/spark/bin/spark-submit \
-  --master spark://spark-master:7077 \
-  --packages org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.6.0,org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262 \
-  /opt/spark-jobs/silver_to_iceberg.py
+python -m dataplatform.deployers.spark_batch plan     # xem 5 job + thứ tự (không đụng Spark)
+python -m dataplatform.deployers.spark_batch apply    # chạy Bronze→Silver→Gold→Iceberg
 ```
+
+> Chờ S3 sink đổ đủ Bronze trước. Nếu Spark container chết sau restart Docker:
+> `docker start bigdata-spark-master bigdata-spark-worker`.
 
 ---
 

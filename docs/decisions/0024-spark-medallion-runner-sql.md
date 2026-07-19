@@ -1,7 +1,7 @@
 # ADR-0024: Spark medallion runner — transform bằng SQL (mô hình dbt)
 
-- **Status:** Accepted (Silver đã cắt chuyển); Gold + Iceberg theo cùng khuôn
-- **Date:** 2026-07-18
+- **Status:** Accepted — Silver + Gold + Iceberg đã cắt chuyển (job cũ đã xoá). Pha 5 xong.
+- **Date:** 2026-07-18 *(runtime hoàn tất 2026-07-19)*
 - **Deciders:** Phan Trường
 
 ## Bối cảnh
@@ -63,12 +63,31 @@ liệu, không phải lệch.
 - Job plan là artifact **runtime** → không commit, sinh lúc deploy.
 - Fix vận hành: `--conf spark.jars.ivy=/tmp/.ivy2` (thư mục ivy mặc định không ghi được khi container fresh).
 
+## Runtime hoàn tất (2026-07-19)
+
+Sau khi seed 1000 giao dịch có `posted_at` (phá chặn NullType partition), chạy toàn bộ medallion:
+
+```
+silver  1,072 rows                          (parity: xem trên)
+gold daily_transaction_summary   339        OLD 339 = NEW 339  ✓
+gold customer_lifetime_metrics   100        OLD 100 = NEW 100  ✓
+gold high_risk_transactions      310        OLD 310 = NEW 310  ✓
+iceberg lakehouse.silver.enriched_transactions  1,072 rows, 1 snapshot  ✓
+```
+
+**Gold parity tuyệt đối** cả 3 bảng (cùng Silver input, so `build_gold_layer.py`). **Iceberg CTAS** query
+được, đúng 1072 rows. Đã xoá `build_gold_layer.py` + `silver_to_iceberg.py`.
+
+**Bẫy Iceberg lôi ra khi tổng quát hoá:** server iceberg-rest trả path scheme `s3://` (S3FileIO riêng),
+client HadoopFileIO chỉ có `s3a` → `No FileSystem for scheme "s3"`. Fix: `fs.s3.impl = S3AFileSystem`
+(s3 đi qua S3A, dùng config `fs.s3a.*` sẵn có). Demo cũ giấu điều này vì nó chạy khác đường.
+
 ## Việc còn lại
 
-- ✅ Silver cắt chuyển (`enrich_transactions.py` xoá).
-- ⬜ **Gold** (3 bảng) — cùng runner, chỉ thêm 3 batch spec; parity với `build_gold_layer.py` rồi xoá nó.
-- ⬜ **Iceberg** — sinh CTAS từ contract Silver (tách khỏi demo).
+- ✅ Silver + Gold + Iceberg cắt chuyển (3 job cũ xoá). **Pha 5 xong.**
 - ⬜ Verifier schema Silver/Gold vs `output.columns` (như verifier ClickHouse, ADR-0022) — Pha 6/7.
+- ⬜ Demo Iceberg (time-travel/schema-evolution) chưa chuyển thành tài liệu dạy học riêng — nội dung cũ
+  còn trong git history nếu cần.
 
 ## Phương án đã cân nhắc
 

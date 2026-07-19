@@ -368,33 +368,17 @@ khuôn** (dedup/join/agg/filter), khác Flink metric đồng khuôn. Xem [ADR-00
 1. 🟡 `medallion_runner` (mỏng) + `deployers/spark_batch` (`plan`/`apply` theo thứ tự layer):
    - ✅ **Silver** — batch spec `silver_enriched_transactions.yaml` (inputs + SQL dedup+join 3 chiều +
      output schema/partition). **Parity: 72 = 72 rows** với `enrich_transactions.py`; đã xoá job cũ.
-   - 🟡 **Gold** (3 spec) + **Iceberg** (1 spec, `output.format=iceberg` → runner làm CTAS + catalog REST)
-     — code + spec **viết xong**, `plan` verify được (5 job đúng thứ tự stage). Dữ liệu chặn **đã sửa**
-     (seed 1000 giao dịch có `posted_at`, Bronze đã flush). Còn **runtime parity + cắt chuyển** — chờ
-     **Docker ổn định** (phiên này sập ~5 lần: spark container chết, lệnh treo).
-2. ✅ Đối chiếu row count (Silver); ⬜ Gold/Iceberg runtime + checksum + verifier schema vs `output.columns`.
+   - ✅ **Gold** (3 spec) — parity tuyệt đối với `build_gold_layer.py`: daily **339=339**, customer
+     **100=100**, high_risk **310=310** (cùng Silver 1072). Đã xoá job cũ.
+   - ✅ **Iceberg** (`output.format=iceberg` → runner CTAS + catalog REST) — `lakehouse.silver.enriched_transactions`
+     1072 rows, 1 snapshot, query được. Đã xoá `silver_to_iceberg.py`. Lôi ra bẫy scheme `s3://` vs `s3a`
+     (fix `fs.s3.impl=S3AFileSystem`).
+2. ✅ Đối chiếu row count Silver + Gold + Iceberg. ⬜ Verifier schema output vs `output.columns` (Pha 6/7).
 
-> **Chặn hiện tại KHÔNG phải code mà là Docker Desktop bất ổn.** Khi ổn, chạy đúng chuỗi ở cuối tài liệu
-> này (mục "Resume Pha 5") là xong Gold + Iceberg.
+> **Pha 5 XONG.** Thêm bảng lake = 1 batch spec (contract + SQL), không Python. 3 job Spark hardcode đã xoá.
 
-**Đầu ra:** thêm bảng lake = 1 batch spec (contract + SQL), không Python. **Ước lượng:** 2–2.5 tuần
-*(Silver xong; Gold/Iceberg code xong, chờ Docker để runtime)*.
-
-#### Resume Pha 5 (khi Docker ổn định)
-
-```bash
-# 0. Nếu Docker treo/spark chết: wsl --shutdown, mở lại Docker Desktop; docker start bigdata-spark-master bigdata-spark-worker
-# 1. Đảm bảo Bronze có data posted_at (đã seed 1000; nếu mất thì seed lại — xem git log)
-# 2. Chạy toàn bộ medallion (silver -> 3 gold -> iceberg), theo thứ tự stage:
-python -m dataplatform.deployers.spark_batch apply        # in "WROTE <n> rows" cho từng job
-# 3. Baseline parity: chạy job cũ rồi so row count 3 bảng gold
-docker exec bigdata-spark-master /opt/spark/bin/spark-submit --master spark://spark-master:7077 \
-  --conf spark.jars.ivy=/tmp/.ivy2 \
-  --packages org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262 \
-  /opt/spark-jobs/build_gold_layer.py     # so count 3 bảng gold vs bước 2
-# 4. Khớp -> cắt chuyển: git rm spark/jobs/build_gold_layer.py spark/jobs/silver_to_iceberg.py
-#    (giữ nội dung demo silver_to_iceberg vào docs nếu muốn làm tài liệu Iceberg)
-```
+**Đầu ra:** thêm bảng lake = 1 batch spec. Chạy toàn bộ: `python -m dataplatform.deployers.spark_batch apply`
+(silver → 3 gold → iceberg, theo thứ tự phụ thuộc). **Ước lượng:** 2–2.5 tuần *(đã xong)*.
 
 ---
 

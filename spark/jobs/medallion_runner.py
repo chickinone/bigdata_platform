@@ -35,6 +35,10 @@ def build_spark(name: str, iceberg: bool) -> SparkSession:
             .config("spark.sql.catalog.lakehouse.warehouse", os.getenv("ICEBERG_WAREHOUSE", "s3a://data-lake-iceberg/warehouse"))
             .config("spark.sql.catalog.lakehouse.io-impl", "org.apache.iceberg.hadoop.HadoopFileIO")
             .config("spark.sql.defaultCatalog", "lakehouse")
+            # Server iceberg-rest trả path scheme s3:// (S3FileIO), nhưng client dùng
+            # HadoopFileIO chỉ có s3a. Map s3 -> S3AFileSystem: S3A đọc config fs.s3a.*
+            # sẵn có ở trên, nên endpoint/key MinIO áp dụng cho cả s3://.
+            .config("spark.hadoop.fs.s3.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
         )
     return b.getOrCreate()
 
