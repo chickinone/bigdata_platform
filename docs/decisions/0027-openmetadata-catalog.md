@@ -36,12 +36,23 @@ nguồn sự thật, catalog là nơi tra cứu" — metadata đổi thì chạy
 OM chạy ổn ở ~3GB. Vì deployer PUSH `graph.json` (không auto-ingest từ engine sống), stack chính không cần
 bật lúc nạp catalog. Nên catalog là một **phiên riêng**: `docker compose stop` → bật OM → nạp → đảo lại.
 
-## Kiểm chứng
+## Kiểm chứng (đo thật qua API OM)
 
 Nạp xong, verify qua API OM:
-- **14 table** trong `bdp.bank` (9 dataset + 5 lake node).
-- **Tag PII đúng cột**: `customers` có `full_name/email/phone` gắn `PII.Sensitive`.
-- **Lineage**: `transactions` → 10 cạnh downstream (4 metric + fraud + medallion silver→gold/iceberg).
+- **24 table** trong `bdp.bank` = 9 dataset + 5 lake node + **10 đích sink ngoài** (4 ClickHouse
+  + 5 Elasticsearch + 1 S3). Sink ngoài nay là table thật nên lineage không còn bị cụt.
+- **Tag PII đúng cột**: `oltp.customers` có `full_name/email/phone` gắn `PII.Sensitive`.
+- **Lineage đủ 25/25 cạnh** (trước chỉ giữ 12 cạnh nội bộ). Ví dụ `elasticsearch.fraud_alerts`
+  có upstream nối ngược về `alerts.fraud_alerts` → `transactions`.
+
+### Cú vấp cần nhớ: Elasticsearch phải sống thì lineage mới nạp được
+
+Server OM lưu entity ở postgres, nên **table PUT được ngay cả khi ES chết** — nhưng bước
+`PUT /api/v1/lineage` ghi vào chỉ mục search, ES chết là **500 `[elasticsearch]`**. Ở máy này
+container `openmetadata_elasticsearch` từng bị **OOM-kill (exit 137)**. Trước khi chạy deployer
+phải chắc ES `yellow`/`green`: `curl -s localhost:9200/_cluster/health`. Nếu chết thì
+`docker compose -f openmetadata/docker-compose-openmetadata.yml up -d elasticsearch` (heap 1GB,
+đủ chỗ khi stack chính đang dừng).
 
 ## Hệ quả
 
@@ -49,9 +60,9 @@ Nạp xong, verify qua API OM:
 
 **Khó hơn / phải chấp nhận:**
 - Trên máy này catalog là **công cụ phiên-riêng** (dừng stack chính trước). Máy nhiều RAM hơn thì chạy song song được.
-- Đích sink ngoài (ES index, ClickHouse table, S3) **chưa tạo thành table** → 13/25 cạnh lineare tới chúng bị bỏ
-  (giữ 12 cạnh nội bộ dataset↔lake). Thêm chúng là increment sau.
-- Push qua REST thô (không cài SDK `openmetadata-ingestion` cho nhẹ). Cột lake chưa có schema chi tiết.
+- ES là mắt xích bắt buộc cho lineage; RAM eo hẹp nên nó dễ OOM (xem cú vấp ở phần Kiểm chứng).
+- Push qua REST thô (không cài SDK `openmetadata-ingestion` cho nhẹ). Cột lake + cột sink ngoài chưa có
+  schema chi tiết (chỉ 1 cột placeholder) — table sink ngoài hiện chỉ để **neo lineage**, chưa mô tả cột.
 
 ## Phương án đã cân nhắc
 

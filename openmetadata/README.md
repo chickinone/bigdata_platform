@@ -12,11 +12,15 @@ docker compose stop
 # 2. Bật OpenMetadata (chỉ server + postgres + es + migrate; BỎ Airflow bằng cách chỉ start server)
 docker compose -f openmetadata/docker-compose-openmetadata.yml up -d openmetadata-server
 
-# 3. Nạp catalog TỪ metadata (Git là nguồn sự thật, không gõ tay trên UI)
-python -m dataplatform.cli write                       # đảm bảo lineage/graph.json mới nhất
-python -m dataplatform.deployers.openmetadata apply    # push dataset + PII + lineage
+# 3. Kiểm Elasticsearch sống trước khi nạp (lineage ghi vào ES; ES chết -> 500)
+curl -s localhost:9200/_cluster/health   # phải yellow/green; nếu chết:
+#   docker compose -f openmetadata/docker-compose-openmetadata.yml up -d elasticsearch
 
-# 4. Mở UI: http://localhost:8585   (admin@open-metadata.org / admin)
+# 4. Nạp catalog TỪ metadata (Git là nguồn sự thật, không gõ tay trên UI)
+python -m dataplatform.cli write                       # đảm bảo lineage/graph.json mới nhất
+python -m dataplatform.deployers.openmetadata apply    # push 24 table + PII + 25 cạnh lineage
+
+# 5. Mở UI: http://localhost:8585   (admin@open-metadata.org / admin)
 ```
 
 ## Đảo lại (chạy pipeline chính)
