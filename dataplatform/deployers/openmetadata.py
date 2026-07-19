@@ -25,6 +25,9 @@ OM_PASSWORD_B64 = os.getenv("OM_PASSWORD_B64", "YWRtaW4=")  # "admin"
 SERVICE = "bdp"
 DATABASE = "bank"
 
+# Prefix node đích ngoài (từ graph.json) -> schema OM.
+_SINK_SCHEMA = {"es": "elasticsearch", "s3": "s3", "clickhouse": "clickhouse"}
+
 # Kiểu logic -> OM dataType.
 _OM_TYPE = {
     "long": "BIGINT", "int": "INT", "string": "STRING", "boolean": "BOOLEAN",
@@ -100,9 +103,14 @@ def apply() -> int:
     }, token, "service")
     _put("/api/v1/databases", {"name": DATABASE, "service": SERVICE}, token, "database")
 
-    # 2. Schemas (theo layer) + tags PII.
+    # Đích sink ngoài (es/s3/clickhouse) suy từ endpoint cạnh không phải dataset/lake.
+    internal = {n["id"] for n in graph["dataset_nodes"]} | {n["id"] for n in graph["lake_nodes"]}
+    externals = sorted({x for e in graph["edges"] for x in (e["from"], e["to"]) if x not in internal})
+
+    # 2. Schemas: layer của dataset/lake + schema của sink ngoài.
     schemas = {_schema_of(n) for n in graph["dataset_nodes"]}
     schemas |= {n["layer"] for n in graph["lake_nodes"]}
+    schemas |= {_SINK_SCHEMA.get(x.split(":", 1)[0], "external") for x in externals}
     for s in sorted(schemas):
         _put("/api/v1/databaseSchemas", {"name": s, "database": f"{SERVICE}.{DATABASE}"}, token, f"schema {s}")
 
@@ -135,7 +143,19 @@ def apply() -> int:
         }, token, f"lake {tname}")
         node_fqn[n["id"]] = _fqn(n["layer"], tname)
 
-    # 5. Lineage — chỉ giữa các node đã tạo table (bỏ đích ngoài như es:/s3:/clickhouse:).
+    # 4b. Tables — đích sink ngoài (ES index, ClickHouse table, S3 bucket).
+    for nid in externals:
+        prefix, rest = nid.split(":", 1)
+        schema = _SINK_SCHEMA.get(prefix, "external")
+        tname = rest.replace(".", "_").replace("-", "_")
+        _put("/api/v1/tables", {
+            "name": tname, "databaseSchema": f"{SERVICE}.{DATABASE}.{schema}",
+            "description": f"Đích sink ngoài ({prefix}) — {rest}.",
+            "columns": [{"name": "_", "dataType": "STRING"}],
+        }, token, f"sink {tname}")
+        node_fqn[nid] = _fqn(schema, tname)
+
+    # 5. Lineage — nay mọi endpoint đều có table (gồm cả đích sink ngoài).
     fqn_to_id: dict[str, str] = {}
     added = 0
     for e in graph["edges"]:
