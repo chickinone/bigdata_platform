@@ -415,8 +415,12 @@ khuôn** (dedup/join/agg/filter), khác Flink metric đồng khuôn. Xem [ADR-00
 
 ### Pha 7 — Orchestration, CI/CD & Governance
 
-1. **Orchestration (Airflow/Dagster):** DAG **sinh từ phụ thuộc dataset** (bronze → silver → gold). Có
+1. 🟡 **Orchestration (Airflow/Dagster):** DAG **sinh từ phụ thuộc dataset** (bronze → silver → gold). Có
    lịch, retry, backfill, SLA.
+   - ✅ **`generators/airflow_dag.py`** — sinh `airflow/dags/medallion_batch_dag.py` từ phụ thuộc input/output
+     batch spec (silver root → 3 gold + iceberg), mỗi task = `submit_argv` chung với deployer. `check` 19/19,
+     DAG construct + đồ thị verify (stub Airflow); compose standalone phiên-riêng ([ADR-0031](../decisions/0031-airflow-dag-from-metadata.md)).
+   - ⬜ Chạy Airflow runtime thật (phiên riêng), backfill, schedule override per-pipeline.
 2. 🟡 **CI/CD "plan → apply"**: PR sửa contract → CI **validate** (JSON Schema) + **compatibility gate**
    (Avro BACKWARD, chặn breaking change) → CI **render + diff** artifact ("plan") để reviewer thấy
    đúng những gì sẽ đổi → merge → **deployer apply** idempotent, có **rollback**.

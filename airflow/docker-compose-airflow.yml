@@ -1,0 +1,33 @@
+# Airflow (standalone) để CHẠY DAG orchestration sinh từ metadata — phiên RIÊNG.
+#
+# Vì sao standalone: lab một máy, không cần scheduler/web/worker tách rời. `airflow
+# standalone` chạy tất cả trong một tiến trình (SequentialExecutor + SQLite) — đủ để
+# xem DAG, trigger, theo dõi. KHÔNG dùng cho production.
+#
+# Task DAG chạy `docker exec bigdata-spark-master spark-submit ...` nên container này
+# cần: (1) docker CLI (cài lúc khởi động), (2) mount docker.sock, (3) cùng mạng
+# bigdata-net để với tới spark-master. Stack chính (spark-master, minio...) phải đang chạy.
+services:
+  airflow:
+    image: apache/airflow:2.10.4
+    container_name: bigdata-airflow
+    user: "0:0"   # root để apt cài docker CLI + đọc docker.sock
+    command:
+      - bash
+      - -c
+      - "apt-get update -qq && apt-get install -y -qq docker.io >/dev/null 2>&1 && airflow standalone"
+    environment:
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+    ports:
+      - "8090:8080"   # UI: http://localhost:8090
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags:ro          # DAG sinh từ metadata (đừng sửa tay)
+      - /var/run/docker.sock:/var/run/docker.sock     # để BashOperator gọi docker exec
+    networks:
+      - bigdata-net
+
+networks:
+  bigdata-net:
+    external: true
+    name: bigdata-net

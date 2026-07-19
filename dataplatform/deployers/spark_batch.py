@@ -57,6 +57,24 @@ def load_batch_specs() -> list[dict]:
     return sorted(specs, key=lambda s: (_stage(s), s["name"]))
 
 
+def container_plan_path(spec: dict) -> str:
+    """Đường dẫn job plan TRONG container (nơi spark-submit đọc)."""
+    return f"{PLAN_DIR_CONTAINER}/{spec['name']}.json"
+
+
+def submit_argv(spec: dict) -> list[str]:
+    """Lệnh `docker exec ... spark-submit` chạy MỘT batch job — MỘT nguồn sự thật cho
+    'chạy job thế nào'. Deployer dùng để submit; generator Airflow dùng để dựng
+    bash_command của task (cùng một lệnh -> DAG chạy y hệt tay/deployer)."""
+    return [
+        "docker", "exec", "-e", f"JOB_PLAN={container_plan_path(spec)}", SPARK_CONTAINER,
+        SPARK_SUBMIT, "--master", SPARK_MASTER,
+        # ivy về /tmp: thư mục mặc định không ghi được khi container fresh.
+        "--conf", "spark.jars.ivy=/tmp/.ivy2",
+        "--packages", _packages(spec), CONTAINER_RUNNER,
+    ]
+
+
 def _write_plan(spec: dict) -> str:
     """Ghi job plan JSON, trả về đường dẫn TRONG container."""
     plan = {
@@ -70,7 +88,7 @@ def _write_plan(spec: dict) -> str:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(plan, ensure_ascii=False, indent=2) + "\n",
                     encoding="utf-8", newline="\n")
-    return f"{PLAN_DIR_CONTAINER}/{spec['name']}.json"
+    return container_plan_path(spec)
 
 
 def cmd_plan() -> int:
@@ -90,16 +108,9 @@ def cmd_plan() -> int:
 
 
 def _submit(spec: dict) -> bool:
-    container_plan = _write_plan(spec)
+    _write_plan(spec)
     print(f"  spark-submit {spec['name']} (layer {spec.get('layer')}) ...")
-    proc = subprocess.run(
-        ["docker", "exec", "-e", f"JOB_PLAN={container_plan}", SPARK_CONTAINER,
-         SPARK_SUBMIT, "--master", SPARK_MASTER,
-         # ivy về /tmp: thư mục mặc định không ghi được khi container fresh.
-         "--conf", "spark.jars.ivy=/tmp/.ivy2",
-         "--packages", _packages(spec), CONTAINER_RUNNER],
-        capture_output=True, text=True,
-    )
+    proc = subprocess.run(submit_argv(spec), capture_output=True, text=True)
     out = (proc.stdout + proc.stderr).splitlines()
     wrote = [ln for ln in out if ln.startswith("WROTE")]
     if proc.returncode == 0 and wrote:

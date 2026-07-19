@@ -18,6 +18,7 @@ from pathlib import Path
 
 from . import compat
 from .generators import (
+    airflow_dag,
     clickhouse_ddl,
     debezium,
     dlq,
@@ -67,7 +68,9 @@ def _collect() -> dict:
     targets.update(clickhouse_ddl.targets(datasets))
     targets.update(topic_manifest.targets(datasets, conns))
     targets.update(trino_catalog.targets(load_connections()))
-    targets.update(lineage.targets(datasets, load_pipelines()))
+    pipelines = load_pipelines()
+    targets.update(lineage.targets(datasets, pipelines))
+    targets.update(airflow_dag.targets(pipelines))
     return targets
 
 
