@@ -20,11 +20,13 @@ from .generators import (
     debezium,
     dlq,
     es_sink,
+    lineage,
     postgres_publication,
     s3_sink,
     topic_manifest,
     trino_catalog,
 )
+from .generators.flink_sql import load_pipelines
 from .registry import REPO_ROOT, ContractError, load_connections, load_datasets
 
 # Ghi JSON với indent 2 + newline cuối file. Đây là QUY ƯỚC, không phải yêu cầu
@@ -56,6 +58,7 @@ def _collect() -> dict:
     targets.update(clickhouse_ddl.targets(datasets))
     targets.update(topic_manifest.targets(datasets))
     targets.update(trino_catalog.targets(load_connections()))
+    targets.update(lineage.targets(datasets, load_pipelines()))
     return targets
 
 

@@ -13,7 +13,7 @@
 > Khai báo mỗi thực thể **một lần** trong `metadata/datasets/*.yaml`, rồi để generator sinh ra mọi
 > file cấu hình của thực thể đó — thay vì chép tay cùng thông tin sang từng công cụ.
 
-**Trạng thái hiện tại — 16 artifact:**
+**Trạng thái hiện tại — 18 artifact:**
 
 | Artifact | Số file | Ghi chú |
 |---|---|---|
@@ -25,6 +25,7 @@
 | Bản kê topic DLQ | 1 | `dlq-processor/dlq_topics.json` ([ADR-0017](../decisions/0017-dlq-flow-observe-then-park.md)) |
 | Bản kê topic Kafka | 2 | `kafka/topics.json` + `create-topics.sh`, gộp dataset + DLQ + hạ tầng — [ADR-0020](../decisions/0020-generate-kafka-topic-manifest.md) |
 | Trino catalog | 3 | `trino/etc/catalog/*.properties` từ **connection registry** — [ADR-0025](../decisions/0025-connection-registry-trino-catalog.md) |
+| Lineage + catalog | 2 | `lineage/graph.json` + `LINEAGE.md` — dòng chảy + PII/owner + lineage cột — [ADR-0026](../decisions/0026-lineage-catalog-from-metadata.md) |
 
 Cấu hình DLQ của **cả 6 connector** cũng sinh từ đây. Runtime (Flink runner, Spark medallion) sinh từ
 pipeline spec riêng, không qua `check`. Còn viết tay ngoài `check`: mapping ES, DAG orchestration — theo lộ trình.
@@ -112,6 +113,7 @@ dataplatform/
     dlq.py                   # chính sách DLQ + bản kê topic cho dlq-processor
     topic_manifest.py        # N dataset + DLQ + hạ tầng -> bản kê topic + script tạo
     trino_catalog.py         # N connection -> Trino catalog .properties
+    lineage.py               # datasets + pipelines -> lineage graph + data catalog
 ```
 
 Hai **hình dạng generator** khác nhau, đáng để ý:

@@ -1,0 +1,530 @@
+{
+  "_comment": "FILE SINH TỰ ĐỘNG - đừng sửa tay. Nguồn: metadata/. Sinh lại: python -m dataplatform.cli write",
+  "dataset_nodes": [
+    {
+      "id": "bank.alerts.fraud_alerts",
+      "layer": "alert",
+      "kind": "stream",
+      "owner": "team-fraud",
+      "connection": null,
+      "topic": "fraud-alerts",
+      "columns": [],
+      "pii_columns": [],
+      "tags": [
+        "fraud",
+        "alert",
+        "generated"
+      ]
+    },
+    {
+      "id": "bank.metric.breakdown",
+      "layer": "metric",
+      "kind": "olap_table",
+      "owner": "team-analytics",
+      "connection": null,
+      "topic": "metrics.breakdown",
+      "columns": [
+        "window_start",
+        "window_end",
+        "tx_type",
+        "tx_count",
+        "total_value",
+        "success_count",
+        "failed_count"
+      ],
+      "pii_columns": [],
+      "tags": [
+        "metric",
+        "realtime",
+        "dashboard"
+      ]
+    },
+    {
+      "id": "bank.metric.kpi",
+      "layer": "metric",
+      "kind": "olap_table",
+      "owner": "team-analytics",
+      "connection": null,
+      "topic": "metrics.kpi",
+      "columns": [
+        "window_start",
+        "window_end",
+        "total_count",
+        "total_value",
+        "success_count",
+        "failed_count",
+        "success_rate",
+        "active_users"
+      ],
+      "pii_columns": [],
+      "tags": [
+        "metric",
+        "realtime",
+        "dashboard"
+      ]
+    },
+    {
+      "id": "bank.metric.timeseries",
+      "layer": "metric",
+      "kind": "olap_table",
+      "owner": "team-analytics",
+      "connection": null,
+      "topic": "metrics.timeseries",
+      "columns": [
+        "window_start",
+        "window_end",
+        "tx_type",
+        "tx_count",
+        "total_amount"
+      ],
+      "pii_columns": [],
+      "tags": [
+        "metric",
+        "realtime",
+        "dashboard"
+      ]
+    },
+    {
+      "id": "bank.metric.topn",
+      "layer": "metric",
+      "kind": "olap_table",
+      "owner": "team-analytics",
+      "connection": null,
+      "topic": "metrics.topn",
+      "columns": [
+        "window_start",
+        "window_end",
+        "rank_num",
+        "account_id",
+        "tx_count",
+        "total_value"
+      ],
+      "pii_columns": [],
+      "tags": [
+        "metric",
+        "realtime",
+        "dashboard"
+      ]
+    },
+    {
+      "id": "bank.public.accounts",
+      "layer": "oltp",
+      "kind": "source_table",
+      "owner": "team-core-banking",
+      "connection": "postgres_main",
+      "topic": "bankdb.public.accounts",
+      "columns": [
+        "account_id",
+        "customer_id",
+        "account_number",
+        "account_type",
+        "currency",
+        "balance",
+        "status",
+        "opened_at",
+        "closed_at",
+        "updated_at"
+      ],
+      "pii_columns": [
+        "account_number"
+      ],
+      "tags": [
+        "banking",
+        "dimension"
+      ]
+    },
+    {
+      "id": "bank.public.customers",
+      "layer": "oltp",
+      "kind": "source_table",
+      "owner": "team-core-banking",
+      "connection": "postgres_main",
+      "topic": "bankdb.public.customers",
+      "columns": [
+        "customer_id",
+        "full_name",
+        "email",
+        "phone",
+        "country_code",
+        "kyc_status",
+        "risk_score",
+        "created_at",
+        "updated_at"
+      ],
+      "pii_columns": [
+        "full_name",
+        "email",
+        "phone"
+      ],
+      "tags": [
+        "banking",
+        "dimension",
+        "pii"
+      ]
+    },
+    {
+      "id": "bank.public.transactions",
+      "layer": "oltp",
+      "kind": "source_table",
+      "owner": "team-core-banking",
+      "connection": "postgres_main",
+      "topic": "bankdb.public.transactions",
+      "columns": [
+        "transaction_id",
+        "account_id",
+        "amount",
+        "balance_after",
+        "transaction_type",
+        "currency",
+        "merchant_name",
+        "merchant_category",
+        "description",
+        "status",
+        "created_at",
+        "posted_at"
+      ],
+      "pii_columns": [],
+      "tags": [
+        "banking",
+        "fact",
+        "high-throughput"
+      ]
+    },
+    {
+      "id": "bank.public.transfers",
+      "layer": "oltp",
+      "kind": "source_table",
+      "owner": "team-core-banking",
+      "connection": "postgres_main",
+      "topic": "bankdb.public.transfers",
+      "columns": [
+        "transfer_id",
+        "from_account_id",
+        "to_account_id",
+        "amount",
+        "currency",
+        "status",
+        "reference_code",
+        "failure_reason",
+        "initiated_at",
+        "completed_at",
+        "updated_at"
+      ],
+      "pii_columns": [],
+      "tags": [
+        "banking",
+        "fact",
+        "lifecycle"
+      ]
+    }
+  ],
+  "lake_nodes": [
+    {
+      "id": "gold:customer_lifetime_metrics",
+      "layer": "gold",
+      "label": "customer_lifetime_metrics"
+    },
+    {
+      "id": "gold:daily_transaction_summary",
+      "layer": "gold",
+      "label": "daily_transaction_summary"
+    },
+    {
+      "id": "gold:high_risk_transactions",
+      "layer": "gold",
+      "label": "high_risk_transactions"
+    },
+    {
+      "id": "iceberg:lakehouse.silver.enriched_transactions",
+      "layer": "iceberg",
+      "label": "lakehouse.silver.enriched_transactions"
+    },
+    {
+      "id": "silver:enriched_transactions",
+      "layer": "silver",
+      "label": "enriched_transactions"
+    }
+  ],
+  "edges": [
+    {
+      "from": "bank.alerts.fraud_alerts",
+      "to": "es:fraud-alerts",
+      "via": "es-sink-fraud-alerts",
+      "kind": "sink"
+    },
+    {
+      "from": "bank.metric.breakdown",
+      "to": "clickhouse:metrics.breakdown",
+      "via": "ch-kafka-engine",
+      "kind": "sink"
+    },
+    {
+      "from": "bank.metric.kpi",
+      "to": "clickhouse:metrics.kpi",
+      "via": "ch-kafka-engine",
+      "kind": "sink"
+    },
+    {
+      "from": "bank.metric.timeseries",
+      "to": "clickhouse:metrics.timeseries",
+      "via": "ch-kafka-engine",
+      "kind": "sink"
+    },
+    {
+      "from": "bank.metric.topn",
+      "to": "clickhouse:metrics.topn",
+      "via": "ch-kafka-engine",
+      "kind": "sink"
+    },
+    {
+      "from": "bank.public.accounts",
+      "to": "es:accounts",
+      "via": "es-sink-accounts",
+      "kind": "sink"
+    },
+    {
+      "from": "bank.public.accounts",
+      "to": "s3:data-lake-bronze",
+      "via": "s3-sink-cdc",
+      "kind": "sink"
+    },
+    {
+      "from": "bank.public.accounts",
+      "to": "silver:enriched_transactions",
+      "via": "spark:silver_enriched_transactions",
+      "kind": "batch"
+    },
+    {
+      "from": "bank.public.customers",
+      "to": "es:customers",
+      "via": "es-sink-customers",
+      "kind": "sink"
+    },
+    {
+      "from": "bank.public.customers",
+      "to": "s3:data-lake-bronze",
+      "via": "s3-sink-cdc",
+      "kind": "sink"
+    },
+    {
+      "from": "bank.public.customers",
+      "to": "silver:enriched_transactions",
+      "via": "spark:silver_enriched_transactions",
+      "kind": "batch"
+    },
+    {
+      "from": "bank.public.transactions",
+      "to": "bank.alerts.fraud_alerts",
+      "via": "flink:fraud_detection",
+      "kind": "stream"
+    },
+    {
+      "from": "bank.public.transactions",
+      "to": "bank.metric.breakdown",
+      "via": "flink:metric_breakdown",
+      "kind": "stream"
+    },
+    {
+      "from": "bank.public.transactions",
+      "to": "bank.metric.kpi",
+      "via": "flink:metric_kpi",
+      "kind": "stream"
+    },
+    {
+      "from": "bank.public.transactions",
+      "to": "bank.metric.timeseries",
+      "via": "flink:metric_timeseries",
+      "kind": "stream"
+    },
+    {
+      "from": "bank.public.transactions",
+      "to": "bank.metric.topn",
+      "via": "flink:metric_topn",
+      "kind": "stream"
+    },
+    {
+      "from": "bank.public.transactions",
+      "to": "es:transactions",
+      "via": "es-sink-transactions",
+      "kind": "sink"
+    },
+    {
+      "from": "bank.public.transactions",
+      "to": "s3:data-lake-bronze",
+      "via": "s3-sink-cdc",
+      "kind": "sink"
+    },
+    {
+      "from": "bank.public.transactions",
+      "to": "silver:enriched_transactions",
+      "via": "spark:silver_enriched_transactions",
+      "kind": "batch"
+    },
+    {
+      "from": "bank.public.transfers",
+      "to": "es:transfers",
+      "via": "es-sink-transfers",
+      "kind": "sink"
+    },
+    {
+      "from": "bank.public.transfers",
+      "to": "s3:data-lake-bronze",
+      "via": "s3-sink-cdc",
+      "kind": "sink"
+    },
+    {
+      "from": "silver:enriched_transactions",
+      "to": "gold:customer_lifetime_metrics",
+      "via": "spark:gold_customer_lifetime_metrics",
+      "kind": "batch"
+    },
+    {
+      "from": "silver:enriched_transactions",
+      "to": "gold:daily_transaction_summary",
+      "via": "spark:gold_daily_transaction_summary",
+      "kind": "batch"
+    },
+    {
+      "from": "silver:enriched_transactions",
+      "to": "gold:high_risk_transactions",
+      "via": "spark:gold_high_risk_transactions",
+      "kind": "batch"
+    },
+    {
+      "from": "silver:enriched_transactions",
+      "to": "iceberg:lakehouse.silver.enriched_transactions",
+      "via": "spark:iceberg_silver_enriched",
+      "kind": "batch"
+    }
+  ],
+  "column_lineage": [
+    {
+      "pipeline": "metric_breakdown",
+      "output": "bank.metric.breakdown.tx_type",
+      "expr": "`after`.transaction_type",
+      "inputs": [
+        "bank.public.transactions.transaction_type"
+      ]
+    },
+    {
+      "pipeline": "metric_breakdown",
+      "output": "bank.metric.breakdown.tx_count",
+      "expr": "COUNT(*)",
+      "inputs": []
+    },
+    {
+      "pipeline": "metric_breakdown",
+      "output": "bank.metric.breakdown.total_value",
+      "expr": "SUM(CAST(`after`.amount AS DECIMAL(19, 4)))",
+      "inputs": [
+        "bank.public.transactions.amount"
+      ]
+    },
+    {
+      "pipeline": "metric_breakdown",
+      "output": "bank.metric.breakdown.success_count",
+      "expr": "COUNT(*) FILTER (WHERE `after`.status = 'completed')",
+      "inputs": [
+        "bank.public.transactions.status"
+      ]
+    },
+    {
+      "pipeline": "metric_breakdown",
+      "output": "bank.metric.breakdown.failed_count",
+      "expr": "COUNT(*) FILTER (WHERE `after`.status = 'failed')",
+      "inputs": [
+        "bank.public.transactions.status"
+      ]
+    },
+    {
+      "pipeline": "metric_kpi",
+      "output": "bank.metric.kpi.total_count",
+      "expr": "COUNT(*)",
+      "inputs": []
+    },
+    {
+      "pipeline": "metric_kpi",
+      "output": "bank.metric.kpi.total_value",
+      "expr": "SUM(CAST(`after`.amount AS DECIMAL(19, 4)))",
+      "inputs": [
+        "bank.public.transactions.amount"
+      ]
+    },
+    {
+      "pipeline": "metric_kpi",
+      "output": "bank.metric.kpi.success_count",
+      "expr": "COUNT(*) FILTER (WHERE `after`.status = 'completed')",
+      "inputs": [
+        "bank.public.transactions.status"
+      ]
+    },
+    {
+      "pipeline": "metric_kpi",
+      "output": "bank.metric.kpi.failed_count",
+      "expr": "COUNT(*) FILTER (WHERE `after`.status = 'failed')",
+      "inputs": [
+        "bank.public.transactions.status"
+      ]
+    },
+    {
+      "pipeline": "metric_kpi",
+      "output": "bank.metric.kpi.success_rate",
+      "expr": "CAST(COUNT(*) FILTER (WHERE `after`.status = 'completed') * 100.0 / NULLIF(COUNT(*), 0) AS DECIMAL(5, 2))",
+      "inputs": [
+        "bank.public.transactions.status"
+      ]
+    },
+    {
+      "pipeline": "metric_kpi",
+      "output": "bank.metric.kpi.active_users",
+      "expr": "COUNT(DISTINCT `after`.account_id)",
+      "inputs": [
+        "bank.public.transactions.account_id"
+      ]
+    },
+    {
+      "pipeline": "metric_timeseries",
+      "output": "bank.metric.timeseries.tx_type",
+      "expr": "`after`.transaction_type",
+      "inputs": [
+        "bank.public.transactions.transaction_type"
+      ]
+    },
+    {
+      "pipeline": "metric_timeseries",
+      "output": "bank.metric.timeseries.tx_count",
+      "expr": "COUNT(*)",
+      "inputs": []
+    },
+    {
+      "pipeline": "metric_timeseries",
+      "output": "bank.metric.timeseries.total_amount",
+      "expr": "SUM(CAST(`after`.amount AS DECIMAL(19, 4)))",
+      "inputs": [
+        "bank.public.transactions.amount"
+      ]
+    },
+    {
+      "pipeline": "metric_topn",
+      "output": "bank.metric.topn.account_id",
+      "expr": "`after`.account_id",
+      "inputs": [
+        "bank.public.transactions.account_id"
+      ]
+    },
+    {
+      "pipeline": "metric_topn",
+      "output": "bank.metric.topn.tx_count",
+      "expr": "COUNT(*)",
+      "inputs": []
+    },
+    {
+      "pipeline": "metric_topn",
+      "output": "bank.metric.topn.total_value",
+      "expr": "SUM(CAST(`after`.amount AS DECIMAL(19, 4)))",
+      "inputs": [
+        "bank.public.transactions.amount"
+      ]
+    }
+  ]
+}
