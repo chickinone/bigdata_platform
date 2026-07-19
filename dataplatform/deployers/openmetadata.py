@@ -133,13 +133,14 @@ def apply() -> int:
         }, token, f"table {tname}")
         node_fqn[n["id"]] = _fqn(schema, tname)
 
-    # 4. Tables — lake node (không cột chi tiết).
+    # 4. Tables — lake node (cột suy từ column_lineage, xem generators/lineage.py).
     for n in graph["lake_nodes"]:
         tname = _table_name(n["id"])
+        cols = [{"name": c, "dataType": "STRING"} for c in n.get("columns", [])]
         _put("/api/v1/tables", {
             "name": tname, "databaseSchema": f"{SERVICE}.{DATABASE}.{n['layer']}",
             "description": f"Lake table ({n['layer']}) — sinh từ Spark medallion.",
-            "columns": [{"name": "_", "dataType": "STRING"}],
+            "columns": cols or [{"name": "_", "dataType": "STRING"}],
         }, token, f"lake {tname}")
         node_fqn[n["id"]] = _fqn(n["layer"], tname)
 
@@ -155,9 +156,21 @@ def apply() -> int:
         }, token, f"sink {tname}")
         node_fqn[nid] = _fqn(schema, tname)
 
-    # 5. Lineage — nay mọi endpoint đều có table (gồm cả đích sink ngoài).
+    # 5a. Lineage cột: gom column_lineage theo cạnh (node nguồn -> node đích) để đính vào
+    #     lineageDetails của cạnh tương ứng. output = "node.col", inputs = ["node.col", ...].
+    col_edges: dict[tuple[str, str], list[tuple[list[str], str]]] = {}
+    for rec in graph.get("column_lineage", []):
+        dst_node, dst_col = rec["output"].rsplit(".", 1)
+        by_src: dict[str, list[str]] = {}
+        for inp in rec["inputs"]:
+            src_node, src_col = inp.rsplit(".", 1)
+            by_src.setdefault(src_node, []).append(src_col)
+        for src_node, src_cols in by_src.items():
+            col_edges.setdefault((src_node, dst_node), []).append((src_cols, dst_col))
+
+    # 5b. Lineage — nay mọi endpoint đều có table (gồm cả đích sink ngoài).
     fqn_to_id: dict[str, str] = {}
-    added = 0
+    added = col_pairs = 0
     for e in graph["edges"]:
         src, dst = node_fqn.get(e["from"]), node_fqn.get(e["to"])
         if not src or not dst:
@@ -166,13 +179,21 @@ def apply() -> int:
             if fqn not in fqn_to_id:
                 code, t = _req("GET", f"/api/v1/tables/name/{fqn}", token)
                 fqn_to_id[fqn] = t["id"]
-        _put("/api/v1/lineage", {"edge": {
+        edge = {
             "fromEntity": {"id": fqn_to_id[src], "type": "table"},
             "toEntity": {"id": fqn_to_id[dst], "type": "table"},
-        }}, token, f"lineage {e['from']}->{e['to']}")
+        }
+        cols = col_edges.get((e["from"], e["to"]))
+        if cols:
+            edge["lineageDetails"] = {"columnsLineage": [
+                {"fromColumns": [f"{src}.{c}" for c in from_cols], "toColumn": f"{dst}.{to_col}"}
+                for from_cols, to_col in cols
+            ]}
+            col_pairs += len(cols)
+        _put("/api/v1/lineage", {"edge": edge}, token, f"lineage {e['from']}->{e['to']}")
         added += 1
 
-    print(f"KẾT QUẢ: nạp xong. Lineage cạnh nội bộ: {added}. UI: {OM_URL}")
+    print(f"KẾT QUẢ: nạp xong. Cạnh lineage: {added} (kèm {col_pairs} liên kết cột). UI: {OM_URL}")
     return 0
 
 

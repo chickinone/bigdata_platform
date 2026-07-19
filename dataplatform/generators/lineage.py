@@ -194,6 +194,15 @@ def build_graph(datasets: list[Dataset], pipelines: list[dict], batch_specs: lis
     batch_edges, lake_nodes = _batch_edges(batch_specs, topic_to_urn)
     column_lineage = (_flink_column_lineage(pipelines)
                       + _spark_column_lineage(batch_specs, datasets, topic_to_urn))
+    # Gán cột cho lake node từ chính column_lineage (cột nào là đích của một transform) —
+    # để catalog tạo lake table có cột thật + đẩy được lineage cấp cột. Tự nhất quán: cột
+    # tạo ra đúng bằng cột mà lineage tham chiếu.
+    lake_cols: dict[str, set[str]] = {}
+    for rec in column_lineage:
+        node, col = rec["output"].rsplit(".", 1)
+        lake_cols.setdefault(node, set()).add(col)
+    for n in lake_nodes:
+        n["columns"] = sorted(lake_cols.get(n["id"], []))
     return {
         "_comment": "FILE SINH TỰ ĐỘNG - đừng sửa tay. Nguồn: metadata/. Sinh lại: python -m dataplatform.cli write",
         "dataset_nodes": _dataset_nodes(datasets),

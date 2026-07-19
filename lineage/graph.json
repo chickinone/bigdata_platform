@@ -222,27 +222,107 @@
     {
       "id": "gold:customer_lifetime_metrics",
       "layer": "gold",
-      "label": "customer_lifetime_metrics"
+      "label": "customer_lifetime_metrics",
+      "columns": [
+        "account_count",
+        "avg_txn_amount",
+        "country_code",
+        "customer_id",
+        "customer_name",
+        "first_activity",
+        "kyc_status",
+        "last_activity",
+        "lifetime_value",
+        "risk_score",
+        "total_txn_count"
+      ]
     },
     {
       "id": "gold:daily_transaction_summary",
       "layer": "gold",
-      "label": "daily_transaction_summary"
+      "label": "daily_transaction_summary",
+      "columns": [
+        "avg_amount",
+        "country_code",
+        "day",
+        "failed_count",
+        "month",
+        "total_volume",
+        "transaction_type",
+        "txn_count",
+        "unique_customers",
+        "year"
+      ]
     },
     {
       "id": "gold:high_risk_transactions",
       "layer": "gold",
-      "label": "high_risk_transactions"
+      "label": "high_risk_transactions",
+      "columns": [
+        "account_id",
+        "account_type",
+        "amount",
+        "country_code",
+        "currency",
+        "customer_id",
+        "customer_name",
+        "day",
+        "month",
+        "posted_at",
+        "risk_score",
+        "status",
+        "transaction_id",
+        "transaction_type",
+        "year"
+      ]
     },
     {
       "id": "iceberg:lakehouse.silver.enriched_transactions",
       "layer": "iceberg",
-      "label": "lakehouse.silver.enriched_transactions"
+      "label": "lakehouse.silver.enriched_transactions",
+      "columns": [
+        "account_id",
+        "account_number",
+        "account_type",
+        "amount",
+        "country_code",
+        "currency",
+        "customer_id",
+        "customer_name",
+        "day",
+        "kyc_status",
+        "month",
+        "posted_at",
+        "risk_score",
+        "status",
+        "transaction_id",
+        "transaction_type",
+        "year"
+      ]
     },
     {
       "id": "silver:enriched_transactions",
       "layer": "silver",
-      "label": "enriched_transactions"
+      "label": "enriched_transactions",
+      "columns": [
+        "account_id",
+        "account_number",
+        "account_type",
+        "amount",
+        "country_code",
+        "currency",
+        "customer_id",
+        "customer_name",
+        "day",
+        "kyc_status",
+        "month",
+        "posted_at",
+        "risk_score",
+        "status",
+        "transaction_id",
+        "transaction_type",
+        "year"
+      ]
     }
   ],
   "edges": [

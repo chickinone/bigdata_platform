@@ -65,5 +65,10 @@ lineage tự sinh lại — không bảo trì tay.
   về `full_name`. Mong manh, đúng loại nợ kỹ thuật cần tránh.
 - **Chạy Spark thật, đọc lineage từ engine (SparkListener/`explain`).** Loại: nặng, cần cụm sống; trái
   triết lý "suy từ metadata, không cần chạy engine".
-- **Đẩy luôn lineage cột lên OpenMetadata UI.** Để tăng sau (increment): nay lineage cột nằm ở
-  `graph.json`/`LINEAGE.md` — ngang hàng Flink; đẩy `columnsLineage` vào OM là bước kế.
+## Tăng thêm — đẩy lineage cột vào OpenMetadata UI
+
+Không dừng ở `graph.json`/`LINEAGE.md`: `deployers/openmetadata.py` nay gom `column_lineage` theo cạnh
+(node nguồn→đích) và đẩy vào `lineageDetails.columnsLineage`. Để đích cột tồn tại, generator gắn **cột
+thật cho lake node** (suy từ chính `column_lineage`) và deployer tạo lake table với cột đó. Verify trên
+OM: **83 liên kết cột**, `silver.enriched_transactions.customer_name` ← `oltp.customers.full_name` hiện
+đúng trên UI (ADR-0027).
