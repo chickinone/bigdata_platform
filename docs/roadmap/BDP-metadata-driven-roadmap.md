@@ -398,7 +398,8 @@ khuôn** (dedup/join/agg/filter), khác Flink metric đồng khuôn. Xem [ADR-00
    ✅ **OpenMetadata UI** — chọn OpenMetadata (không DataHub, [ADR-0027](../decisions/0027-openmetadata-catalog.md));
    `deployers/openmetadata.py` nạp `graph.json` (**24 table** = 9 dataset + 5 lake + 10 sink ngoài, tag PII,
    **đủ 25 cạnh lineage**), verify qua API. Máy 15.3GB đủ khi tạm dừng stack chính (OM ~3GB). ✅ tạo table cho
-   đích sink ES/CH/S3 (lineage không còn cụt). ⬜ Lineage cột Spark (parse SQL).
+   đích sink ES/CH/S3 (lineage không còn cụt). ✅ **Lineage cột Spark** — sqlglot parse SQL batch (qua CTE/join),
+   87 bản ghi lineage cột (17 Flink + 70 Spark), lần được PII `full_name`→`customer_name`→gold ([ADR-0028](../decisions/0028-spark-column-lineage-sqlglot.md)).
 3. ✅ Trả lời được (qua `LINEAGE.md`): "cột `amount` chảy tới đâu?", "dataset nào chứa PII?", "ai sở hữu?".
    Đã lôi ra: PII customers/accounts **chảy vào Silver lake**.
 

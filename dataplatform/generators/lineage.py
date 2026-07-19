@@ -18,6 +18,9 @@ from __future__ import annotations
 import json
 import re
 
+from sqlglot import exp, parse_one
+from sqlglot.lineage import lineage as _sql_lineage
+
 from ..registry import Dataset
 
 _AFTER = re.compile(r"`?after`?\.(\w+)")
@@ -106,7 +109,7 @@ def _batch_edges(batch_specs: list[dict], topic_to_urn: dict[str, str]) -> tuple
 
 
 # ---------- column lineage (Flink) ----------
-def _column_lineage(pipelines: list[dict]) -> list[dict]:
+def _flink_column_lineage(pipelines: list[dict]) -> list[dict]:
     out = []
     for p in pipelines:
         if p.get("engine") != "flink_sql":
@@ -114,7 +117,7 @@ def _column_lineage(pipelines: list[dict]) -> list[dict]:
         for col in p.get("dimensions", []) + p.get("aggregations", []):
             inputs = sorted({f"{p['source_urn']}.{c}" for c in _AFTER.findall(col["expr"])})
             out.append({
-                "pipeline": p["name"],
+                "engine": "flink", "pipeline": p["name"],
                 "output": f"{p['sink_urn']}.{col['as']}",
                 "expr": col["expr"],
                 "inputs": inputs,
@@ -122,10 +125,75 @@ def _column_lineage(pipelines: list[dict]) -> list[dict]:
     return out
 
 
+# ---------- column lineage (Spark) — parse SQL bằng sqlglot ----------
+def _batch_out_node(out: dict) -> str:
+    """Node id đích của một batch spec (khớp _lake_ref dùng ở _batch_edges)."""
+    return _lake_ref(out.get("table") or out["path"])[0]
+
+
+def _batch_in_node(path: str, topic_to_urn: dict[str, str]) -> str:
+    """Node id nguồn: bronze topic -> dataset urn; silver/gold/iceberg -> lake node."""
+    ref = _lake_ref(path)
+    if ref is None:
+        topic = [p for p in path.split("/") if p][-1]
+        return topic_to_urn.get(topic, f"bronze:{topic}")
+    return ref[0]
+
+
+def _spark_column_lineage(batch_specs: list[dict], datasets: list[Dataset],
+                          topic_to_urn: dict[str, str]) -> list[dict]:
+    """Lineage cột cho batch Spark. sqlglot parse SQL (kể cả CTE/join) và lần mỗi cột
+    output về cột nguồn. Cấp `schema` (cột từng input) để sqlglot expand `SELECT *` và
+    giải cột không định danh bảng. Cột nguồn/đích quy về đúng node id của graph."""
+    # node id -> tên cột: dataset (bronze) + đích lake (từ output.columns của spec sinh ra nó).
+    node_cols: dict[str, list[str]] = {d.urn: [c["name"] for c in d.columns()] for d in datasets}
+    for s in batch_specs:
+        node_cols[_batch_out_node(s["output"])] = [c["name"] for c in s["output"].get("columns", [])]
+
+    recs = []
+    for s in batch_specs:
+        out_id = _batch_out_node(s["output"])
+        view_node = {inp["view"]: _batch_in_node(inp["path"], topic_to_urn) for inp in s["inputs"]}
+        schema = {v: {c: "STRING" for c in node_cols.get(nid, [])} for v, nid in view_node.items()}
+        parsed = parse_one(s["sql"], dialect="spark")
+        # alias bảng -> tên thật (chuẩn hoá qualifier như `t.` về đúng view).
+        alias_to_table = {t.alias_or_name: t.name for t in parsed.find_all(exp.Table)}
+
+        def to_node(qualifier: str) -> str | None:
+            view = qualifier if qualifier in view_node else alias_to_table.get(qualifier)
+            return view_node.get(view)
+
+        # SELECT * -> passthrough toàn bộ cột của input đầu tiên.
+        if any(isinstance(p, exp.Star) for p in parsed.selects):
+            sid = view_node[s["inputs"][0]["view"]]
+            for c in node_cols.get(sid, []):
+                recs.append({"engine": "spark", "pipeline": s["name"],
+                             "output": f"{out_id}.{c}", "expr": "*", "inputs": [f"{sid}.{c}"]})
+            continue
+
+        for proj in parsed.selects:
+            out_col = proj.alias_or_name
+            node = _sql_lineage(out_col, s["sql"], schema=schema, dialect="spark")
+            inputs = set()
+            for leaf in (n for n in node.walk() if not n.downstream):
+                if "." not in leaf.name:      # `*` chưa giải được -> bỏ (hiện là "không nguồn").
+                    continue
+                qual, col = leaf.name.split(".", 1)
+                nid = to_node(qual)
+                if nid:
+                    inputs.add(f"{nid}.{col}")
+            recs.append({"engine": "spark", "pipeline": s["name"],
+                         "output": f"{out_id}.{out_col}", "expr": proj.sql(dialect="spark"),
+                         "inputs": sorted(inputs)})
+    return recs
+
+
 # ---------- build ----------
 def build_graph(datasets: list[Dataset], pipelines: list[dict], batch_specs: list[dict]) -> dict:
     topic_to_urn = {d.topic: d.urn for d in datasets}
     batch_edges, lake_nodes = _batch_edges(batch_specs, topic_to_urn)
+    column_lineage = (_flink_column_lineage(pipelines)
+                      + _spark_column_lineage(batch_specs, datasets, topic_to_urn))
     return {
         "_comment": "FILE SINH TỰ ĐỘNG - đừng sửa tay. Nguồn: metadata/. Sinh lại: python -m dataplatform.cli write",
         "dataset_nodes": _dataset_nodes(datasets),
@@ -134,7 +202,7 @@ def build_graph(datasets: list[Dataset], pipelines: list[dict], batch_specs: lis
             _sink_edges(datasets) + _stream_edges(pipelines) + batch_edges,
             key=lambda e: (e["from"], e["to"]),
         ),
-        "column_lineage": _column_lineage(pipelines),
+        "column_lineage": column_lineage,
     }
 
 
@@ -181,13 +249,23 @@ def render_report(graph: dict) -> str:
     else:
         parts.append("_Không dataset nào đánh dấu PII._")
 
-    parts.append("\n## 4. Lineage cột (Flink metric)\n")
-    parts.append("| Cột đầu ra | Từ cột nguồn | Biểu thức |")
-    parts.append("|---|---|---|")
-    for cl in graph["column_lineage"]:
-        src = ", ".join(f'`{i}`' for i in cl["inputs"]) or "— (không cột nguồn cụ thể)"
-        parts.append(f'| `{cl["output"]}` | {src} | `{cl["expr"]}` |')
+    parts.append("\n## 4. Lineage cột — cột đầu ra bắt nguồn từ cột nào\n")
+    _column_section(parts, graph, "flink", "4.1 Flink (streaming metric) — từ `expr` trong pipeline")
+    _column_section(parts, graph, "spark", "4.2 Spark (batch medallion) — sqlglot parse SQL, lần qua CTE/join")
     return "\n".join(parts) + "\n"
+
+
+def _column_section(parts: list[str], graph: dict, engine: str, title: str) -> None:
+    rows = [c for c in graph["column_lineage"] if c.get("engine") == engine]
+    parts.append(f"\n### {title}\n")
+    if not rows:
+        parts.append("_Không có._")
+        return
+    parts.append("| Pipeline | Cột đầu ra | Từ cột nguồn | Biểu thức |")
+    parts.append("|---|---|---|---|")
+    for cl in rows:
+        src = ", ".join(f'`{i}`' for i in cl["inputs"]) or "— (không cột nguồn cụ thể)"
+        parts.append(f'| {cl["pipeline"]} | `{cl["output"]}` | {src} | `{cl["expr"]}` |')
 
 
 def targets(datasets: list[Dataset], pipelines: list[dict]) -> dict[str, str]:

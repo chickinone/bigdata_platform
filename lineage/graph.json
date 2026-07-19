@@ -399,6 +399,7 @@
   ],
   "column_lineage": [
     {
+      "engine": "flink",
       "pipeline": "metric_breakdown",
       "output": "bank.metric.breakdown.tx_type",
       "expr": "`after`.transaction_type",
@@ -407,12 +408,14 @@
       ]
     },
     {
+      "engine": "flink",
       "pipeline": "metric_breakdown",
       "output": "bank.metric.breakdown.tx_count",
       "expr": "COUNT(*)",
       "inputs": []
     },
     {
+      "engine": "flink",
       "pipeline": "metric_breakdown",
       "output": "bank.metric.breakdown.total_value",
       "expr": "SUM(CAST(`after`.amount AS DECIMAL(19, 4)))",
@@ -421,6 +424,7 @@
       ]
     },
     {
+      "engine": "flink",
       "pipeline": "metric_breakdown",
       "output": "bank.metric.breakdown.success_count",
       "expr": "COUNT(*) FILTER (WHERE `after`.status = 'completed')",
@@ -429,6 +433,7 @@
       ]
     },
     {
+      "engine": "flink",
       "pipeline": "metric_breakdown",
       "output": "bank.metric.breakdown.failed_count",
       "expr": "COUNT(*) FILTER (WHERE `after`.status = 'failed')",
@@ -437,12 +442,14 @@
       ]
     },
     {
+      "engine": "flink",
       "pipeline": "metric_kpi",
       "output": "bank.metric.kpi.total_count",
       "expr": "COUNT(*)",
       "inputs": []
     },
     {
+      "engine": "flink",
       "pipeline": "metric_kpi",
       "output": "bank.metric.kpi.total_value",
       "expr": "SUM(CAST(`after`.amount AS DECIMAL(19, 4)))",
@@ -451,6 +458,7 @@
       ]
     },
     {
+      "engine": "flink",
       "pipeline": "metric_kpi",
       "output": "bank.metric.kpi.success_count",
       "expr": "COUNT(*) FILTER (WHERE `after`.status = 'completed')",
@@ -459,6 +467,7 @@
       ]
     },
     {
+      "engine": "flink",
       "pipeline": "metric_kpi",
       "output": "bank.metric.kpi.failed_count",
       "expr": "COUNT(*) FILTER (WHERE `after`.status = 'failed')",
@@ -467,6 +476,7 @@
       ]
     },
     {
+      "engine": "flink",
       "pipeline": "metric_kpi",
       "output": "bank.metric.kpi.success_rate",
       "expr": "CAST(COUNT(*) FILTER (WHERE `after`.status = 'completed') * 100.0 / NULLIF(COUNT(*), 0) AS DECIMAL(5, 2))",
@@ -475,6 +485,7 @@
       ]
     },
     {
+      "engine": "flink",
       "pipeline": "metric_kpi",
       "output": "bank.metric.kpi.active_users",
       "expr": "COUNT(DISTINCT `after`.account_id)",
@@ -483,6 +494,7 @@
       ]
     },
     {
+      "engine": "flink",
       "pipeline": "metric_timeseries",
       "output": "bank.metric.timeseries.tx_type",
       "expr": "`after`.transaction_type",
@@ -491,12 +503,14 @@
       ]
     },
     {
+      "engine": "flink",
       "pipeline": "metric_timeseries",
       "output": "bank.metric.timeseries.tx_count",
       "expr": "COUNT(*)",
       "inputs": []
     },
     {
+      "engine": "flink",
       "pipeline": "metric_timeseries",
       "output": "bank.metric.timeseries.total_amount",
       "expr": "SUM(CAST(`after`.amount AS DECIMAL(19, 4)))",
@@ -505,6 +519,7 @@
       ]
     },
     {
+      "engine": "flink",
       "pipeline": "metric_topn",
       "output": "bank.metric.topn.account_id",
       "expr": "`after`.account_id",
@@ -513,17 +528,649 @@
       ]
     },
     {
+      "engine": "flink",
       "pipeline": "metric_topn",
       "output": "bank.metric.topn.tx_count",
       "expr": "COUNT(*)",
       "inputs": []
     },
     {
+      "engine": "flink",
       "pipeline": "metric_topn",
       "output": "bank.metric.topn.total_value",
       "expr": "SUM(CAST(`after`.amount AS DECIMAL(19, 4)))",
       "inputs": [
         "bank.public.transactions.amount"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "gold_customer_lifetime_metrics",
+      "output": "gold:customer_lifetime_metrics.customer_id",
+      "expr": "customer_id",
+      "inputs": [
+        "silver:enriched_transactions.customer_id"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "gold_customer_lifetime_metrics",
+      "output": "gold:customer_lifetime_metrics.customer_name",
+      "expr": "customer_name",
+      "inputs": [
+        "silver:enriched_transactions.customer_name"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "gold_customer_lifetime_metrics",
+      "output": "gold:customer_lifetime_metrics.country_code",
+      "expr": "country_code",
+      "inputs": [
+        "silver:enriched_transactions.country_code"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "gold_customer_lifetime_metrics",
+      "output": "gold:customer_lifetime_metrics.kyc_status",
+      "expr": "kyc_status",
+      "inputs": [
+        "silver:enriched_transactions.kyc_status"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "gold_customer_lifetime_metrics",
+      "output": "gold:customer_lifetime_metrics.risk_score",
+      "expr": "risk_score",
+      "inputs": [
+        "silver:enriched_transactions.risk_score"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "gold_customer_lifetime_metrics",
+      "output": "gold:customer_lifetime_metrics.total_txn_count",
+      "expr": "COUNT(transaction_id) AS total_txn_count",
+      "inputs": [
+        "silver:enriched_transactions.transaction_id"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "gold_customer_lifetime_metrics",
+      "output": "gold:customer_lifetime_metrics.lifetime_value",
+      "expr": "SUM(CAST(amount AS DOUBLE)) AS lifetime_value",
+      "inputs": [
+        "silver:enriched_transactions.amount"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "gold_customer_lifetime_metrics",
+      "output": "gold:customer_lifetime_metrics.avg_txn_amount",
+      "expr": "AVG(CAST(amount AS DOUBLE)) AS avg_txn_amount",
+      "inputs": [
+        "silver:enriched_transactions.amount"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "gold_customer_lifetime_metrics",
+      "output": "gold:customer_lifetime_metrics.last_activity",
+      "expr": "MAX(posted_at) AS last_activity",
+      "inputs": [
+        "silver:enriched_transactions.posted_at"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "gold_customer_lifetime_metrics",
+      "output": "gold:customer_lifetime_metrics.first_activity",
+      "expr": "MIN(posted_at) AS first_activity",
+      "inputs": [
+        "silver:enriched_transactions.posted_at"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "gold_customer_lifetime_metrics",
+      "output": "gold:customer_lifetime_metrics.account_count",
+      "expr": "COUNT(DISTINCT account_id) AS account_count",
+      "inputs": [
+        "silver:enriched_transactions.account_id"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "gold_daily_transaction_summary",
+      "output": "gold:daily_transaction_summary.year",
+      "expr": "year",
+      "inputs": [
+        "silver:enriched_transactions.year"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "gold_daily_transaction_summary",
+      "output": "gold:daily_transaction_summary.month",
+      "expr": "month",
+      "inputs": [
+        "silver:enriched_transactions.month"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "gold_daily_transaction_summary",
+      "output": "gold:daily_transaction_summary.day",
+      "expr": "day",
+      "inputs": [
+        "silver:enriched_transactions.day"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "gold_daily_transaction_summary",
+      "output": "gold:daily_transaction_summary.country_code",
+      "expr": "country_code",
+      "inputs": [
+        "silver:enriched_transactions.country_code"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "gold_daily_transaction_summary",
+      "output": "gold:daily_transaction_summary.transaction_type",
+      "expr": "transaction_type",
+      "inputs": [
+        "silver:enriched_transactions.transaction_type"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "gold_daily_transaction_summary",
+      "output": "gold:daily_transaction_summary.txn_count",
+      "expr": "COUNT(transaction_id) AS txn_count",
+      "inputs": [
+        "silver:enriched_transactions.transaction_id"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "gold_daily_transaction_summary",
+      "output": "gold:daily_transaction_summary.total_volume",
+      "expr": "SUM(CAST(amount AS DOUBLE)) AS total_volume",
+      "inputs": [
+        "silver:enriched_transactions.amount"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "gold_daily_transaction_summary",
+      "output": "gold:daily_transaction_summary.avg_amount",
+      "expr": "AVG(CAST(amount AS DOUBLE)) AS avg_amount",
+      "inputs": [
+        "silver:enriched_transactions.amount"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "gold_daily_transaction_summary",
+      "output": "gold:daily_transaction_summary.unique_customers",
+      "expr": "COUNT(DISTINCT customer_id) AS unique_customers",
+      "inputs": [
+        "silver:enriched_transactions.customer_id"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "gold_daily_transaction_summary",
+      "output": "gold:daily_transaction_summary.failed_count",
+      "expr": "SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed_count",
+      "inputs": [
+        "silver:enriched_transactions.status"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "gold_high_risk_transactions",
+      "output": "gold:high_risk_transactions.transaction_id",
+      "expr": "transaction_id",
+      "inputs": [
+        "silver:enriched_transactions.transaction_id"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "gold_high_risk_transactions",
+      "output": "gold:high_risk_transactions.posted_at",
+      "expr": "posted_at",
+      "inputs": [
+        "silver:enriched_transactions.posted_at"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "gold_high_risk_transactions",
+      "output": "gold:high_risk_transactions.amount",
+      "expr": "amount",
+      "inputs": [
+        "silver:enriched_transactions.amount"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "gold_high_risk_transactions",
+      "output": "gold:high_risk_transactions.currency",
+      "expr": "currency",
+      "inputs": [
+        "silver:enriched_transactions.currency"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "gold_high_risk_transactions",
+      "output": "gold:high_risk_transactions.transaction_type",
+      "expr": "transaction_type",
+      "inputs": [
+        "silver:enriched_transactions.transaction_type"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "gold_high_risk_transactions",
+      "output": "gold:high_risk_transactions.status",
+      "expr": "status",
+      "inputs": [
+        "silver:enriched_transactions.status"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "gold_high_risk_transactions",
+      "output": "gold:high_risk_transactions.customer_id",
+      "expr": "customer_id",
+      "inputs": [
+        "silver:enriched_transactions.customer_id"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "gold_high_risk_transactions",
+      "output": "gold:high_risk_transactions.customer_name",
+      "expr": "customer_name",
+      "inputs": [
+        "silver:enriched_transactions.customer_name"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "gold_high_risk_transactions",
+      "output": "gold:high_risk_transactions.country_code",
+      "expr": "country_code",
+      "inputs": [
+        "silver:enriched_transactions.country_code"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "gold_high_risk_transactions",
+      "output": "gold:high_risk_transactions.risk_score",
+      "expr": "risk_score",
+      "inputs": [
+        "silver:enriched_transactions.risk_score"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "gold_high_risk_transactions",
+      "output": "gold:high_risk_transactions.account_id",
+      "expr": "account_id",
+      "inputs": [
+        "silver:enriched_transactions.account_id"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "gold_high_risk_transactions",
+      "output": "gold:high_risk_transactions.account_type",
+      "expr": "account_type",
+      "inputs": [
+        "silver:enriched_transactions.account_type"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "gold_high_risk_transactions",
+      "output": "gold:high_risk_transactions.year",
+      "expr": "year",
+      "inputs": [
+        "silver:enriched_transactions.year"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "gold_high_risk_transactions",
+      "output": "gold:high_risk_transactions.month",
+      "expr": "month",
+      "inputs": [
+        "silver:enriched_transactions.month"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "gold_high_risk_transactions",
+      "output": "gold:high_risk_transactions.day",
+      "expr": "day",
+      "inputs": [
+        "silver:enriched_transactions.day"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "iceberg_silver_enriched",
+      "output": "iceberg:lakehouse.silver.enriched_transactions.transaction_id",
+      "expr": "*",
+      "inputs": [
+        "silver:enriched_transactions.transaction_id"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "iceberg_silver_enriched",
+      "output": "iceberg:lakehouse.silver.enriched_transactions.transaction_type",
+      "expr": "*",
+      "inputs": [
+        "silver:enriched_transactions.transaction_type"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "iceberg_silver_enriched",
+      "output": "iceberg:lakehouse.silver.enriched_transactions.amount",
+      "expr": "*",
+      "inputs": [
+        "silver:enriched_transactions.amount"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "iceberg_silver_enriched",
+      "output": "iceberg:lakehouse.silver.enriched_transactions.currency",
+      "expr": "*",
+      "inputs": [
+        "silver:enriched_transactions.currency"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "iceberg_silver_enriched",
+      "output": "iceberg:lakehouse.silver.enriched_transactions.status",
+      "expr": "*",
+      "inputs": [
+        "silver:enriched_transactions.status"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "iceberg_silver_enriched",
+      "output": "iceberg:lakehouse.silver.enriched_transactions.posted_at",
+      "expr": "*",
+      "inputs": [
+        "silver:enriched_transactions.posted_at"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "iceberg_silver_enriched",
+      "output": "iceberg:lakehouse.silver.enriched_transactions.account_id",
+      "expr": "*",
+      "inputs": [
+        "silver:enriched_transactions.account_id"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "iceberg_silver_enriched",
+      "output": "iceberg:lakehouse.silver.enriched_transactions.account_type",
+      "expr": "*",
+      "inputs": [
+        "silver:enriched_transactions.account_type"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "iceberg_silver_enriched",
+      "output": "iceberg:lakehouse.silver.enriched_transactions.account_number",
+      "expr": "*",
+      "inputs": [
+        "silver:enriched_transactions.account_number"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "iceberg_silver_enriched",
+      "output": "iceberg:lakehouse.silver.enriched_transactions.customer_id",
+      "expr": "*",
+      "inputs": [
+        "silver:enriched_transactions.customer_id"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "iceberg_silver_enriched",
+      "output": "iceberg:lakehouse.silver.enriched_transactions.customer_name",
+      "expr": "*",
+      "inputs": [
+        "silver:enriched_transactions.customer_name"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "iceberg_silver_enriched",
+      "output": "iceberg:lakehouse.silver.enriched_transactions.country_code",
+      "expr": "*",
+      "inputs": [
+        "silver:enriched_transactions.country_code"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "iceberg_silver_enriched",
+      "output": "iceberg:lakehouse.silver.enriched_transactions.kyc_status",
+      "expr": "*",
+      "inputs": [
+        "silver:enriched_transactions.kyc_status"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "iceberg_silver_enriched",
+      "output": "iceberg:lakehouse.silver.enriched_transactions.risk_score",
+      "expr": "*",
+      "inputs": [
+        "silver:enriched_transactions.risk_score"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "iceberg_silver_enriched",
+      "output": "iceberg:lakehouse.silver.enriched_transactions.year",
+      "expr": "*",
+      "inputs": [
+        "silver:enriched_transactions.year"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "iceberg_silver_enriched",
+      "output": "iceberg:lakehouse.silver.enriched_transactions.month",
+      "expr": "*",
+      "inputs": [
+        "silver:enriched_transactions.month"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "iceberg_silver_enriched",
+      "output": "iceberg:lakehouse.silver.enriched_transactions.day",
+      "expr": "*",
+      "inputs": [
+        "silver:enriched_transactions.day"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "silver_enriched_transactions",
+      "output": "silver:enriched_transactions.transaction_id",
+      "expr": "t.transaction_id",
+      "inputs": [
+        "bank.public.transactions.transaction_id"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "silver_enriched_transactions",
+      "output": "silver:enriched_transactions.transaction_type",
+      "expr": "t.transaction_type",
+      "inputs": [
+        "bank.public.transactions.transaction_type"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "silver_enriched_transactions",
+      "output": "silver:enriched_transactions.amount",
+      "expr": "t.amount",
+      "inputs": [
+        "bank.public.transactions.amount"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "silver_enriched_transactions",
+      "output": "silver:enriched_transactions.currency",
+      "expr": "t.currency",
+      "inputs": [
+        "bank.public.transactions.currency"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "silver_enriched_transactions",
+      "output": "silver:enriched_transactions.status",
+      "expr": "t.status",
+      "inputs": [
+        "bank.public.transactions.status"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "silver_enriched_transactions",
+      "output": "silver:enriched_transactions.posted_at",
+      "expr": "t.posted_at",
+      "inputs": [
+        "bank.public.transactions.posted_at"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "silver_enriched_transactions",
+      "output": "silver:enriched_transactions.account_id",
+      "expr": "a.account_id",
+      "inputs": [
+        "bank.public.accounts.account_id"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "silver_enriched_transactions",
+      "output": "silver:enriched_transactions.account_type",
+      "expr": "a.account_type",
+      "inputs": [
+        "bank.public.accounts.account_type"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "silver_enriched_transactions",
+      "output": "silver:enriched_transactions.account_number",
+      "expr": "a.account_number",
+      "inputs": [
+        "bank.public.accounts.account_number"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "silver_enriched_transactions",
+      "output": "silver:enriched_transactions.customer_id",
+      "expr": "c.customer_id",
+      "inputs": [
+        "bank.public.customers.customer_id"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "silver_enriched_transactions",
+      "output": "silver:enriched_transactions.customer_name",
+      "expr": "c.full_name AS customer_name",
+      "inputs": [
+        "bank.public.customers.full_name"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "silver_enriched_transactions",
+      "output": "silver:enriched_transactions.country_code",
+      "expr": "c.country_code",
+      "inputs": [
+        "bank.public.customers.country_code"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "silver_enriched_transactions",
+      "output": "silver:enriched_transactions.kyc_status",
+      "expr": "c.kyc_status",
+      "inputs": [
+        "bank.public.customers.kyc_status"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "silver_enriched_transactions",
+      "output": "silver:enriched_transactions.risk_score",
+      "expr": "c.risk_score",
+      "inputs": [
+        "bank.public.customers.risk_score"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "silver_enriched_transactions",
+      "output": "silver:enriched_transactions.year",
+      "expr": "YEAR(t.posted_at) AS year",
+      "inputs": [
+        "bank.public.transactions.posted_at"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "silver_enriched_transactions",
+      "output": "silver:enriched_transactions.month",
+      "expr": "MONTH(t.posted_at) AS month",
+      "inputs": [
+        "bank.public.transactions.posted_at"
+      ]
+    },
+    {
+      "engine": "spark",
+      "pipeline": "silver_enriched_transactions",
+      "output": "silver:enriched_transactions.day",
+      "expr": "DAYOFMONTH(t.posted_at) AS day",
+      "inputs": [
+        "bank.public.transactions.posted_at"
       ]
     }
   ]

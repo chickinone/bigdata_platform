@@ -6,3 +6,4 @@
 
 PyYAML>=6.0          # đọc dataset contract
 jsonschema>=4.0      # validate contract theo dataplatform/schemas/*.json
+sqlglot>=25.0        # parse SQL batch Spark -> lineage cột (generators/lineage.py, ADR-0028)
