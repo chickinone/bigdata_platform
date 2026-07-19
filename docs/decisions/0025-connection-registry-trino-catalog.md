@@ -1,6 +1,6 @@
 # ADR-0025: Connection registry + sinh Trino catalog — mở Pha 6
 
-- **Status:** Accepted (sinh + oracle byte-exact); runtime Trino chờ (Docker bất ổn)
+- **Status:** Accepted — sinh + oracle byte-exact + federation runtime (postgres/clickhouse) đã verify
 - **Date:** 2026-07-19
 - **Deciders:** Phan Trường
 
@@ -53,8 +53,15 @@ lineage đọc nó), không phải việc chẻ nhỏ property.
 [KHỚP] trino/etc/catalog/postgres.properties
 ```
 
-Vì sinh == viết tay từng byte, và Trino đọc đúng file đó, việc sinh là **trong suốt** với runtime — Trino
-hành xử y như trước. (Federation query trực tiếp còn chờ Docker ổn để chạy `SHOW CATALOGS` / query chéo.)
+Vì sinh == viết tay từng byte, và Trino đọc đúng file đó, việc sinh là **trong suốt** với runtime.
+
+**Federation runtime đã verify:** `SHOW CATALOGS` liệt kê cả 3 catalog sinh; query thật trả đúng dữ liệu:
+```
+postgres.public.transactions        = 1046   (khớp Postgres)
+clickhouse.metrics.timeseries       = 7      (khớp ClickHouse)
+```
+Iceberg catalog **load được** nhưng query treo — vấn đề runtime Trino↔iceberg-rest↔MinIO (độc lập với file
+catalog, vì nó byte-exact bản cũ). Ghi nhận là nợ runtime riêng, không phải lỗi generation.
 
 ## Hệ quả
 

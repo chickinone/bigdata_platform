@@ -390,7 +390,8 @@ khuôn** (dedup/join/agg/filter), khác Flink metric đồng khuôn. Xem [ADR-00
      hạng nhất, không còn tên treo lơ lửng). 3 connection Trino: postgres, clickhouse, iceberg.
    - ✅ Generator `trino_catalog.py` — sinh 3 catalog, **oracle byte-exact khớp bản viết tay** (`check` 16/16);
      diệt sprawl #13 ([ADR-0025](../decisions/0025-connection-registry-trino-catalog.md)). Secret vẫn `${ENV:...}`.
-   - ⬜ Verify Trino federation runtime (query chéo) — chờ Docker; ⬜ encode connection non-Trino (kafka/es/s3).
+   - ✅ Federation runtime verify: `postgres.transactions=1046`, `clickhouse.metrics.timeseries=7` (khớp nguồn).
+     Iceberg load được nhưng query treo (nợ runtime Trino↔iceberg↔MinIO, không phải file). ⬜ encode connection non-Trino.
 2. 🟡 **Lineage + catalog** — `generators/lineage.py` sinh `lineage/graph.json` + `LINEAGE.md` THUẦN từ
    metadata ([ADR-0026](../decisions/0026-lineage-catalog-from-metadata.md)): sơ đồ dòng chảy chéo engine,
    catalog owner/PII, **lineage cột (Flink)**. `check` 18/18. ⬜ Lineage cột Spark (parse SQL); ⬜ nạp
