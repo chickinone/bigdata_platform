@@ -10,7 +10,7 @@ một nguồn (danh sách dataset CDC).
 """
 from __future__ import annotations
 
-from ..registry import Dataset
+from ..registry import Dataset, endpoint
 
 CONNECTOR_NAME = "postgres-source-connector"
 CONNECTOR_CLASS = "io.debezium.connector.postgresql.PostgresConnector"
@@ -40,16 +40,18 @@ def table_include_list(datasets: list[Dataset]) -> str:
     )
 
 
-def render(datasets: list[Dataset]) -> dict:
+def render(datasets: list[Dataset], conns: dict[str, dict]) -> dict:
+    sr = endpoint(conns, "schema_registry", "connect_url")
     config = {
         "connector.class": CONNECTOR_CLASS,
         "tasks.max": "1",
 
-        "database.hostname": "${env:POSTGRES_HOST}",
-        "database.port": "${env:POSTGRES_PORT}",
-        "database.user": "${env:REPLICATION_USER}",
-        "database.password": "${env:REPLICATION_PASSWORD}",
-        "database.dbname": "${env:POSTGRES_DB}",
+        # Postgres nguồn + role replication đọc TỪ connection postgres_main.endpoints.
+        "database.hostname": endpoint(conns, "postgres_main", "connect_hostname"),
+        "database.port": endpoint(conns, "postgres_main", "connect_port"),
+        "database.user": endpoint(conns, "postgres_main", "connect_user"),
+        "database.password": endpoint(conns, "postgres_main", "connect_password"),
+        "database.dbname": endpoint(conns, "postgres_main", "connect_dbname"),
 
         "plugin.name": "pgoutput",
         "slot.name": SLOT_NAME,
@@ -72,14 +74,14 @@ def render(datasets: list[Dataset]) -> dict:
         "tombstones.on.delete": "false",
 
         "key.converter": "io.confluent.connect.avro.AvroConverter",
-        "key.converter.schema.registry.url": "${env:SCHEMA_REGISTRY_URL}",
+        "key.converter.schema.registry.url": sr,
         "key.converter.apicurio.registry.auto-register": "true",
         "key.converter.apicurio.registry.find-latest": "true",
         "key.converter.apicurio.registry.as-confluent": "true",
         "key.converter.apicurio.registry.id-handler": "io.apicurio.registry.serde.Legacy4ByteIdHandler",
 
         "value.converter": "io.confluent.connect.avro.AvroConverter",
-        "value.converter.schema.registry.url": "${env:SCHEMA_REGISTRY_URL}",
+        "value.converter.schema.registry.url": sr,
         "value.converter.apicurio.registry.auto-register": "true",
         "value.converter.apicurio.registry.find-latest": "true",
         "value.converter.apicurio.registry.as-confluent": "true",
@@ -90,7 +92,7 @@ def render(datasets: list[Dataset]) -> dict:
     return {"name": CONNECTOR_NAME, "config": config}
 
 
-def targets(datasets: list[Dataset]) -> dict[str, dict]:
+def targets(datasets: list[Dataset], conns: dict[str, dict]) -> dict[str, dict]:
     if not cdc_datasets(datasets):
         return {}
-    return {"debezium/postgres-connector.json": render(datasets)}
+    return {"debezium/postgres-connector.json": render(datasets, conns)}

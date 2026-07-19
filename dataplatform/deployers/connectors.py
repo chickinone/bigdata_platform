@@ -30,7 +30,7 @@ import urllib.error
 import urllib.request
 
 from ..generators import debezium, es_sink, s3_sink
-from ..registry import ContractError, load_datasets
+from ..registry import ContractError, connections_by_name, load_datasets
 
 # Từ máy host, Connect REST ở localhost:8083 (cổng map trong docker-compose).
 # Bên trong mạng compose thì là http://kafka-connect:8083 — override bằng env.
@@ -44,11 +44,12 @@ def desired_connectors() -> dict[str, dict]:
     không phải connector. Thêm loại connector mới = thêm một generator vào đây.
     """
     datasets = load_datasets()
+    conns = connections_by_name()
     out: dict[str, dict] = {}
     for payload in {
-        **es_sink.targets(datasets),
-        **s3_sink.targets(datasets),
-        **debezium.targets(datasets),
+        **es_sink.targets(datasets, conns),
+        **s3_sink.targets(datasets, conns),
+        **debezium.targets(datasets, conns),
     }.values():
         out[payload["name"]] = payload["config"]
     return dict(sorted(out.items()))

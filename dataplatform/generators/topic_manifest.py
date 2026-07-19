@@ -39,7 +39,7 @@ from __future__ import annotations
 
 import json
 
-from ..registry import Dataset
+from ..registry import Dataset, endpoint
 from . import debezium, dlq
 
 # RF=1 vì Kafka single-node (ADR-0005). Khoá ở MỘT chỗ; lên multi-broker thì đây là
@@ -154,12 +154,12 @@ def render_manifest(datasets: list[Dataset]) -> str:
     return json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
 
 
-def render_script(datasets: list[Dataset]) -> str:
+def render_script(datasets: list[Dataset], bootstrap: str) -> str:
     """Script tạo topic idempotent, chạy được trong image confluent cp-kafka.
 
     `--if-not-exists`: topic đã có thì bỏ qua, không lỗi -> chạy lại bao nhiêu lần
     cũng an toàn. Đây là dạng THỰC THI của manifest; cả hai sinh từ cùng _entries()
-    nên không thể lệch nhau.
+    nên không thể lệch nhau. `bootstrap` (địa chỉ broker) đọc từ connection kafka.
     """
     lines = [
         "#!/usr/bin/env bash",
@@ -170,7 +170,7 @@ def render_script(datasets: list[Dataset]) -> str:
         "#   docker exec bigdata-kafka bash /opt/bitnami/kafka/create-topics.sh",
         "set -euo pipefail",
         "",
-        'BOOTSTRAP="${KAFKA_BOOTSTRAP:-kafka:9092}"',
+        f'BOOTSTRAP="${{KAFKA_BOOTSTRAP:-{bootstrap}}}"',
         "",
     ]
 
@@ -200,8 +200,9 @@ def render_script(datasets: list[Dataset]) -> str:
     return "\n".join(lines)
 
 
-def targets(datasets: list[Dataset]) -> dict[str, str]:
+def targets(datasets: list[Dataset], conns: dict[str, dict]) -> dict[str, str]:
+    bootstrap = endpoint(conns, "kafka", "bootstrap")
     return {
         "kafka/topics.json": render_manifest(datasets),
-        "kafka/create-topics.sh": render_script(datasets),
+        "kafka/create-topics.sh": render_script(datasets, bootstrap),
     }

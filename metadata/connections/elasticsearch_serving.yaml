@@ -1,0 +1,9 @@
+# Connection: Elasticsearch serving (ES sink connector ghi vao day; Kibana doc).
+# Khong co khoi trino (Trino khong query ES o du an nay) -> chi la registry entry +
+# endpoint cho generators/es_sink.py. Dong no Pha 1: "elasticsearch" khong con la ten treo.
+name: elasticsearch_serving
+type: elasticsearch
+description: Tầng serving tìm kiếm — ES index cho mỗi CDC dataset + fraud-alerts.
+
+endpoints:
+  connect_url: "${env:ELASTICSEARCH_URL}"

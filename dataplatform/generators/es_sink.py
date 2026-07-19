@@ -12,7 +12,7 @@ extractKey → connector chết lúc chạy). Sinh ra thì chúng không thể l
 """
 from __future__ import annotations
 
-from ..registry import Dataset
+from ..registry import Dataset, endpoint
 
 CONNECTOR_CLASS = "io.confluent.connect.elasticsearch.ElasticsearchSinkConnector"
 
@@ -21,21 +21,23 @@ def connector_name(ds: Dataset) -> str:
     return f"es-sink-{ds.entity}"
 
 
-def render(ds: Dataset) -> dict:
+def render(ds: Dataset, conns: dict[str, dict]) -> dict:
     """Dựng config connector cho một dataset.
 
     Rẽ nhánh theo `source.type` chứ không theo tên dataset — nhờ vậy thêm một
     stream mới kiểu app_json sẽ tự đi đúng nhánh, không cần sửa generator.
+
+    Endpoint (ES url + schema registry) đọc TỪ connection registry, không hardcode.
     """
     config = {
         "connector.class": CONNECTOR_CLASS,
         "tasks.max": "1",
         "topics": ds.topic,
-        "connection.url": "${env:ELASTICSEARCH_URL}",
+        "connection.url": endpoint(conns, "elasticsearch_serving", "connect_url"),
     }
 
     if ds.is_cdc:
-        config.update(_cdc_converters())
+        config.update(_cdc_converters(endpoint(conns, "schema_registry", "connect_url")))
     else:
         config.update(_json_converters())
 
@@ -67,13 +69,13 @@ def render(ds: Dataset) -> dict:
     return {"name": connector_name(ds), "config": config}
 
 
-def _cdc_converters() -> dict:
+def _cdc_converters(schema_registry_url: str) -> dict:
     """CDC đi qua Debezium + Schema Registry nên phải dùng Avro converter."""
     return {
         "key.converter": "io.confluent.connect.avro.AvroConverter",
-        "key.converter.schema.registry.url": "${env:SCHEMA_REGISTRY_URL}",
+        "key.converter.schema.registry.url": schema_registry_url,
         "value.converter": "io.confluent.connect.avro.AvroConverter",
-        "value.converter.schema.registry.url": "${env:SCHEMA_REGISTRY_URL}",
+        "value.converter.schema.registry.url": schema_registry_url,
     }
 
 
@@ -108,11 +110,11 @@ def _cdc_transforms(ds: Dataset) -> dict:
     }
 
 
-def targets(datasets: list[Dataset]) -> dict[str, dict]:
+def targets(datasets: list[Dataset], conns: dict[str, dict]) -> dict[str, dict]:
     """Trả về {đường_dẫn_tương_đối: nội_dung} cho mọi dataset bật ES sink."""
     out = {}
     for ds in datasets:
         if not ds.sink_enabled("elasticsearch"):
             continue
-        out[f"kafka-connect/es-sinks/{connector_name(ds)}.json"] = render(ds)
+        out[f"kafka-connect/es-sinks/{connector_name(ds)}.json"] = render(ds, conns)
     return out

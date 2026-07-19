@@ -1,0 +1,11 @@
+# Connection: Schema Registry (Apicurio, che do Confluent-compat). Nguon su that cho
+# Avro schema tren day. HAI dang endpoint vi hai lop consumer khac cach resolve:
+#   - connect_url: Kafka Connect resolve ${env:...} qua EnvVarConfigProvider trong container.
+#   - url:         Flink DDL nhung LITERAL vao job (khong co lop config provider).
+name: schema_registry
+type: schema_registry
+description: Apicurio Schema Registry — Avro schema cho CDC + stream Avro.
+
+endpoints:
+  connect_url: "${env:SCHEMA_REGISTRY_URL}"
+  url: "http://schema-registry:8081"

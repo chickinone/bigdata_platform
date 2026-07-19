@@ -15,6 +15,13 @@
     },
     "description": { "type": "string" },
 
+    "endpoints": {
+      "description": "Placeholder endpoint cho consumer NGOÀI Trino (Kafka Connect, Debezium, Spark, Flink). Map key ổn định -> chuỗi ${env:...}/${ENV:...} hoặc literal host:port. Consumer đọc theo key. KHÔNG chứa secret thật.",
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "type": "string" }
+    },
+
     "trino": {
       "description": "Có khối này = sinh trino/etc/catalog/<catalog>.properties.",
       "type": "object",

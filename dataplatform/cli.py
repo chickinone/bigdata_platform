@@ -27,7 +27,13 @@ from .generators import (
     trino_catalog,
 )
 from .generators.flink_sql import load_pipelines
-from .registry import REPO_ROOT, ContractError, load_connections, load_datasets
+from .registry import (
+    REPO_ROOT,
+    ContractError,
+    connections_by_name,
+    load_connections,
+    load_datasets,
+)
 
 # Ghi JSON với indent 2 + newline cuối file. Đây là QUY ƯỚC, không phải yêu cầu
 # của Kafka Connect - chọn một kiểu rồi giữ nguyên để diff giữa các lần chạy chỉ
@@ -49,14 +55,15 @@ def _serialize(payload) -> str:
 
 def _collect() -> dict:
     datasets = load_datasets()
+    conns = connections_by_name()
     targets: dict = {}
-    targets.update(debezium.targets(datasets))
-    targets.update(es_sink.targets(datasets))
-    targets.update(s3_sink.targets(datasets))
+    targets.update(debezium.targets(datasets, conns))
+    targets.update(es_sink.targets(datasets, conns))
+    targets.update(s3_sink.targets(datasets, conns))
     targets.update(dlq.targets(datasets))
     targets.update(postgres_publication.targets(datasets))
     targets.update(clickhouse_ddl.targets(datasets))
-    targets.update(topic_manifest.targets(datasets))
+    targets.update(topic_manifest.targets(datasets, conns))
     targets.update(trino_catalog.targets(load_connections()))
     targets.update(lineage.targets(datasets, load_pipelines()))
     return targets

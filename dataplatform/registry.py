@@ -141,6 +141,24 @@ def load_connections(connections_dir: Path = CONNECTIONS_DIR) -> list[dict]:
     return sorted(conns, key=lambda c: c["name"])
 
 
+def connections_by_name(connections_dir: Path = CONNECTIONS_DIR) -> dict[str, dict]:
+    """{name -> connection} để generator tra cứu theo tên. Connection là nguồn sự
+    thật cho endpoint; generator đọc qua đây thay vì hardcode `${env:...}` rải rác."""
+    return {c["name"]: c for c in load_connections(connections_dir)}
+
+
+def endpoint(conns: dict[str, dict], name: str, key: str) -> str:
+    """Lấy một endpoint placeholder từ connection. Lỗi rõ ràng (ContractError) nếu
+    thiếu — thà đứt ở generation còn hơn sinh config trỏ sai/thiếu env âm thầm."""
+    conn = conns.get(name)
+    if conn is None:
+        raise ContractError(f"connection '{name}' không có trong metadata/connections/")
+    eps = conn.get("endpoints", {})
+    if key not in eps:
+        raise ContractError(f"connection '{name}' thiếu endpoints.{key}")
+    return eps[key]
+
+
 def _check_unique_urns(datasets: list[Dataset]) -> None:
     """URN trùng nhau là lỗi chí mạng: hai contract cùng mô tả một thực thể thì
     generator sẽ ghi đè artifact của nhau một cách không xác định. JSON Schema

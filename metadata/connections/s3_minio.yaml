@@ -1,0 +1,14 @@
+# Connection: S3/MinIO object store (S3 sink connector ghi Bronze parquet vao day;
+# Spark doc/ghi lake; Iceberg warehouse). Khong khoi trino rieng — Iceberg da mang
+# hive.s3.* trong iceberg_lakehouse. Day la endpoint cho generators/s3_sink.py.
+name: s3_minio
+type: s3
+description: Object store lake — bucket Bronze (CDC parquet) + warehouse Silver/Gold/Iceberg.
+
+endpoints:
+  bucket_bronze: "${env:S3_BUCKET_BRONZE}"
+  region: "${env:S3_REGION}"
+  store_url: "${env:S3_ENDPOINT}"
+  access_key: "${env:S3_ACCESS_KEY}"
+  secret_key: "${env:S3_SECRET_KEY}"
+  path_style_access: "${env:S3_PATH_STYLE_ACCESS}"

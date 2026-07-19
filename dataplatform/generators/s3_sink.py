@@ -10,7 +10,7 @@ chỉ một contract. Cũng chính là hình dạng mà Debezium `table.include.
 """
 from __future__ import annotations
 
-from ..registry import Dataset
+from ..registry import Dataset, endpoint
 
 CONNECTOR_NAME = "s3-sink-cdc"
 CONNECTOR_CLASS = "io.confluent.connect.s3.S3SinkConnector"
@@ -26,8 +26,9 @@ def _members(datasets: list[Dataset]) -> list[Dataset]:
     return [d for d in datasets if d.is_cdc and d.sink_enabled("s3_bronze")]
 
 
-def render(datasets: list[Dataset]) -> dict:
+def render(datasets: list[Dataset], conns: dict[str, dict]) -> dict:
     members = _members(datasets)
+    sr = endpoint(conns, "schema_registry", "connect_url")
     config = {
         "connector.class": CONNECTOR_CLASS,
         "tasks.max": "2",
@@ -36,21 +37,22 @@ def render(datasets: list[Dataset]) -> dict:
         # (metadata sprawl #4).
         "topics": ",".join(d.topic for d in members),
 
-        "s3.bucket.name": "${env:S3_BUCKET_BRONZE}",
-        "s3.region": "${env:S3_REGION}",
-        "store.url": "${env:S3_ENDPOINT}",
-        "aws.access.key.id": "${env:S3_ACCESS_KEY}",
-        "aws.secret.access.key": "${env:S3_SECRET_KEY}",
-        "s3.path.style.access.enabled": "${env:S3_PATH_STYLE_ACCESS}",
+        # Endpoint object store đọc TỪ connection s3_minio, không hardcode.
+        "s3.bucket.name": endpoint(conns, "s3_minio", "bucket_bronze"),
+        "s3.region": endpoint(conns, "s3_minio", "region"),
+        "store.url": endpoint(conns, "s3_minio", "store_url"),
+        "aws.access.key.id": endpoint(conns, "s3_minio", "access_key"),
+        "aws.secret.access.key": endpoint(conns, "s3_minio", "secret_key"),
+        "s3.path.style.access.enabled": endpoint(conns, "s3_minio", "path_style_access"),
 
         "storage.class": "io.confluent.connect.s3.storage.S3Storage",
         "format.class": "io.confluent.connect.s3.format.parquet.ParquetFormat",
         "parquet.codec": "snappy",
 
         "key.converter": "io.confluent.connect.avro.AvroConverter",
-        "key.converter.schema.registry.url": "${env:SCHEMA_REGISTRY_URL}",
+        "key.converter.schema.registry.url": sr,
         "value.converter": "io.confluent.connect.avro.AvroConverter",
-        "value.converter.schema.registry.url": "${env:SCHEMA_REGISTRY_URL}",
+        "value.converter.schema.registry.url": sr,
 
         # Ghi file khi đủ 1000 record HOẶC sau 5 phút - cái nào tới trước.
         "flush.size": "1000",
@@ -82,7 +84,7 @@ def render(datasets: list[Dataset]) -> dict:
     return {"name": CONNECTOR_NAME, "config": config}
 
 
-def targets(datasets: list[Dataset]) -> dict[str, dict]:
+def targets(datasets: list[Dataset], conns: dict[str, dict]) -> dict[str, dict]:
     if not _members(datasets):
         return {}
-    return {f"kafka-connect/s3-sinks/{CONNECTOR_NAME}.json": render(datasets)}
+    return {f"kafka-connect/s3-sinks/{CONNECTOR_NAME}.json": render(datasets, conns)}

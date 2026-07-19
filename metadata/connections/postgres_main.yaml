@@ -5,6 +5,16 @@ name: postgres_main
 type: postgres
 description: Nguồn OLTP ngân hàng — 4 bảng (customers, accounts, transactions, transfers).
 
+# Khoi endpoints: placeholder cho consumer NGOAI Trino. Day la Postgres nguon, duoc
+# Debezium (CDC) doc bang role replication rieng -> generators/debezium.py doc tu day
+# thay vi hardcode. Vay doi host/role = sua MOT noi.
+endpoints:
+  connect_hostname: "${env:POSTGRES_HOST}"
+  connect_port: "${env:POSTGRES_PORT}"
+  connect_dbname: "${env:POSTGRES_DB}"
+  connect_user: "${env:REPLICATION_USER}"
+  connect_password: "${env:REPLICATION_PASSWORD}"
+
 # Khoi trino: co khoi nay -> sinh trino/etc/catalog/<catalog>.properties.
 trino:
   catalog: postgres

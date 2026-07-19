@@ -385,13 +385,17 @@ khuôn** (dedup/join/agg/filter), khác Flink metric đồng khuôn. Xem [ADR-00
 
 ### Pha 6 — Federation & Catalog/Lineage
 
-1. 🟡 Sinh `trino/etc/catalog/*.properties` từ **connection registry**.
+1. ✅ Sinh `trino/etc/catalog/*.properties` từ **connection registry**.
    - ✅ **Connection registry** (`metadata/connections/*.yaml`) — đóng nợ Pha 1 (connection nay là contract
-     hạng nhất, không còn tên treo lơ lửng). 3 connection Trino: postgres, clickhouse, iceberg.
-   - ✅ Generator `trino_catalog.py` — sinh 3 catalog, **oracle byte-exact khớp bản viết tay** (`check` 16/16);
+     hạng nhất, không còn tên treo lơ lửng). **7 connection**: 3 Trino (postgres, clickhouse, iceberg) +
+     4 non-Trino (kafka, schema_registry, elasticsearch, s3_minio).
+   - ✅ Generator `trino_catalog.py` — sinh 3 catalog, **oracle byte-exact khớp bản viết tay** (`check` 18/18);
      diệt sprawl #13 ([ADR-0025](../decisions/0025-connection-registry-trino-catalog.md)). Secret vẫn `${ENV:...}`.
    - ✅ Federation runtime verify: `postgres.transactions=1046`, `clickhouse.metrics.timeseries=7` (khớp nguồn).
-     Iceberg load được nhưng query treo (nợ runtime Trino↔iceberg↔MinIO, không phải file). ⬜ encode connection non-Trino.
+     Iceberg load được nhưng query treo (nợ runtime Trino↔iceberg↔MinIO, không phải file).
+   - ✅ **Encode connection non-Trino** ([ADR-0029](../decisions/0029-encode-connection-non-trino.md)): es_sink/
+     s3_sink/debezium/topic_manifest/flink_metrics đọc endpoint TỪ registry thay vì hardcode; registry là nguồn
+     endpoint duy nhất, `check` 18/18 byte-exact.
 2. ✅ **Lineage + catalog** — `generators/lineage.py` sinh `lineage/graph.json` + `LINEAGE.md` THUẦN từ
    metadata ([ADR-0026](../decisions/0026-lineage-catalog-from-metadata.md)): sơ đồ dòng chảy chéo engine,
    catalog owner/PII, **lineage cột (Flink)**. `check` 18/18.

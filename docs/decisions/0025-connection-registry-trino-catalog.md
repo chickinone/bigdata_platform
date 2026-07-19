@@ -69,8 +69,9 @@ catalog, vì nó byte-exact bản cũ). Ghi nhận là nợ runtime riêng, khô
 không sửa `.properties` tay. Nợ Pha 1 (mã hoá connection) đóng cho các connection Trino.
 
 **Khó hơn / phải chấp nhận:**
-- Mới encode 3 connection có Trino (postgres, clickhouse, iceberg). Các connection khác (kafka, es, s3,
-  schema-registry) chưa vào registry — thêm khi cần (chúng không sinh Trino catalog, chỉ là registry entry).
+- ~~Mới encode 3 connection có Trino; kafka/es/s3/schema-registry chưa vào registry.~~ **ĐÃ ĐÓNG**
+  ([ADR-0029](0029-encode-connection-non-trino.md)): 4 connection non-Trino nay vào registry, generator đọc
+  endpoint từ đó thay vì hardcode. Nợ Pha 1 (mã hoá connection) đóng hoàn toàn.
 - Runtime Trino chưa verify (Docker bất ổn phiên này) — nhưng byte-exact nên rủi ro thấp.
 
 ## Việc còn lại của Pha 6

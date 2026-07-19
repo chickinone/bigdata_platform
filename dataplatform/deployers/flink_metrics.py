@@ -22,11 +22,14 @@ import subprocess
 import sys
 
 from ..generators import flink_sql
-from ..registry import REPO_ROOT, ContractError
+from ..registry import REPO_ROOT, ContractError, endpoint, connections_by_name
 
-# URL nội bộ mạng compose (job chạy TRONG container Flink).
-BOOTSTRAP = "kafka:9092"
-SCHEMA_REGISTRY = "http://schema-registry:8081"
+# Endpoint nội bộ mạng compose (job chạy TRONG container Flink) — nay đọc TỪ connection
+# registry (kafka.bootstrap + schema_registry.url), không hardcode nữa. Flink nhúng
+# literal (không có lớp EnvVarConfigProvider như Kafka Connect) nên dùng dạng `url`.
+_CONNS = connections_by_name()
+BOOTSTRAP = endpoint(_CONNS, "kafka", "bootstrap")
+SCHEMA_REGISTRY = endpoint(_CONNS, "schema_registry", "url")
 GROUP_ID = "flink-metrics-runner"
 STARTUP = "earliest-offset"
 

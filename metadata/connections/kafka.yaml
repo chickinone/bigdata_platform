@@ -1,0 +1,10 @@
+# Connection: Kafka broker (single-node, ADR-0005). Xuong song cua nen tang — moi
+# topic/CDC/stream di qua day. Consumer nhung bootstrap literal:
+#   - Flink DDL (generators/flink_sql.py qua deployer flink_metrics).
+#   - Script tao topic (generators/topic_manifest.py), boc trong ${KAFKA_BOOTSTRAP:-...}.
+name: kafka
+type: kafka
+description: Kafka broker — trung tam ingestion (CDC, stream, DLQ).
+
+endpoints:
+  bootstrap: "kafka:9092"
