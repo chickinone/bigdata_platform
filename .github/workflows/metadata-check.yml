@@ -1,12 +1,10 @@
-# Cổng CI của control plane: chặn "drift" giữa metadata và artifact sinh.
+# Cổng CI của control plane — GitOps "plan -> gate -> apply" cho metadata.
 #
-# Vì sao cần: sau khi deploy đọc từ metadata (ADR-0021), metadata đã gánh tải thật.
-# Nhưng nếu ai đó sửa contract mà QUÊN chạy generator, file trên đĩa lệch với
-# metadata mà không gì báo. `check` phát hiện đúng chỗ đó — cắm vào CI để lỗi này
-# làm PR ĐỎ thay vì lọt vào main.
+#   check   (mọi push/PR): chặn "drift" — contract sửa mà quên chạy generator (ADR-0021).
+#   compat  (chỉ PR):      chặn breaking change phá BACKWARD (Avro/Schema-Registry, ADR-0030).
+#   plan    (chỉ PR):      render HỆ QUẢ vận hành — artifact NÀO đổi khi merge, vào job summary.
 #
-# `check` thuần tĩnh (chỉ đọc metadata/ + so với file trên đĩa), KHÔNG cần engine
-# nào chạy — nên chạy được trên runner sạch, nhanh, rẻ.
+# Tất cả THUẦN TĨNH (chỉ đọc metadata/ + git), KHÔNG cần engine — chạy trên runner sạch.
 name: metadata-check
 
 on:
@@ -19,6 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # cần lịch sử để 'plan'/'compat' so với base ref
 
       - uses: actions/setup-python@v5
         with:
@@ -27,7 +27,25 @@ jobs:
       - name: Cài phụ thuộc control plane
         run: pip install -r requirements-dev.txt
 
-      - name: Đối chiếu artifact sinh vs file trên đĩa
-        # Exit 1 nếu lệch (contract sửa mà quên generator), exit 2 nếu contract sai
-        # schema. Cả hai làm job ĐỎ.
+      - name: Đối chiếu artifact sinh vs file trên đĩa (drift gate)
+        # Exit 1 nếu lệch (contract sửa mà quên generator), exit 2 nếu contract sai schema.
         run: python -m dataplatform.cli check
+
+      # ----- chỉ trên PR: so với nhánh đích -----
+      - name: Nạp base ref
+        if: github.event_name == 'pull_request'
+        run: git fetch origin "${GITHUB_BASE_REF}:refs/remotes/origin/${GITHUB_BASE_REF}"
+
+      - name: Compat gate (BACKWARD) — chặn breaking change
+        if: github.event_name == 'pull_request'
+        run: python -m dataplatform.cli compat
+
+      - name: Plan — hệ quả artifact khi merge (informational)
+        if: github.event_name == 'pull_request'
+        run: |
+          {
+            echo '### Plan — artifact đổi khi merge';
+            echo '```';
+            python -m dataplatform.cli plan;
+            echo '```';
+          } >> "$GITHUB_STEP_SUMMARY"

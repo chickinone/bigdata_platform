@@ -12,9 +12,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
+from . import compat
 from .generators import (
     clickhouse_ddl,
     debezium,
@@ -206,6 +208,92 @@ def cmd_show() -> int:
     return 0
 
 
+def _default_base() -> str:
+    """Ref nền để so 'plan'/'compat'. CI đặt GITHUB_BASE_REF cho PR; local mặc định main."""
+    ref = os.getenv("GITHUB_BASE_REF")
+    return f"origin/{ref}" if ref else "origin/main"
+
+
+def _compare_against(base_text: str, generated) -> tuple[str, list[str]]:
+    """Như _compare nhưng so với NỘI DUNG ở ref nền (không phải file trên đĩa).
+    Hướng diff: nền -> bản sinh từ metadata hiện tại."""
+    if isinstance(generated, str):
+        if base_text == generated:
+            return "SAME", []
+        return "ĐỔI", _diff_text(base_text, generated)
+    base_obj = json.loads(base_text)
+    if _normalize(base_obj) == _normalize(generated):
+        return "SAME", []
+    return "ĐỔI", _diff_keys(_normalize(base_obj), _normalize(generated))
+
+
+def cmd_plan(base: str) -> int:
+    """'terraform plan' cho metadata: artifact NÀO sẽ đổi khi merge PR vào `base`.
+
+    So bản sinh từ metadata HIỆN TẠI với artifact đã commit ở `base` — reviewer thấy
+    HỆ QUẢ vận hành của một thay đổi contract, không chỉ diff YAML. Thuần tĩnh + git,
+    không cần engine. Informational (exit 0)."""
+    targets = _collect()
+    new: list[str] = []
+    changed: list[tuple[str, list[str]]] = []
+    for rel, payload in sorted(targets.items()):
+        base_text = compat.git_show(base, rel)
+        if base_text is None:
+            new.append(rel)
+            continue
+        status, diffs = _compare_against(base_text, payload)
+        if status == "ĐỔI":
+            changed.append((rel, diffs))
+
+    print(f"PLAN vs `{base}` — hệ quả khi merge:\n")
+    for rel in new:
+        print(f"  [MỚI ] {rel}")
+    for rel, diffs in changed:
+        print(f"  [ĐỔI ] {rel}")
+        for d in diffs:
+            print(f"          {d}")
+    if not new and not changed:
+        print("  (không artifact nào đổi)")
+    print(f"\nKẾT QUẢ: {len(new) + len(changed)} artifact đổi — {len(new)} mới, {len(changed)} sửa.")
+    return 0
+
+
+def cmd_compat(base: str) -> int:
+    """Gate BACKWARD: chặn thay đổi contract phá tương thích ngược (xem compat.py).
+    So dataset ở `base` với working tree. Exit 1 nếu có breaking change."""
+    base_ds = compat.datasets_at_ref(base)
+    if not base_ds:
+        print(f"Không đọc được dataset ở '{base}' (ref mới/nông?) — bỏ qua gate.")
+        return 0
+    cur_ds = {d.urn: d.raw for d in load_datasets()}
+
+    breaks = 0
+    print(f"COMPAT (BACKWARD) vs `{base}`:\n")
+    for urn, cur in sorted(cur_ds.items()):
+        base_raw = base_ds.get(urn)
+        if base_raw is None:
+            continue  # dataset mới — không có gì để phá
+        base_cols, cur_cols = base_raw.get("columns", []), cur.get("columns", [])
+        msgs = compat.compare_columns(base_cols, cur_cols)
+        removed = compat.removed_columns(base_cols, cur_cols)
+        if msgs:
+            print(f"  [VỠ] {urn}")
+            for m in msgs:
+                print(f"        {m}")
+            breaks += len(msgs)
+        if removed:
+            print(f"  [note] {urn}: xoá cột {removed} — BACKWARD cho phép, kiểm consumer.")
+    for urn in sorted(set(base_ds) - set(cur_ds)):
+        print(f"  [note] xoá dataset `{urn}` — kiểm consumer hạ nguồn.")
+
+    print()
+    if breaks:
+        print(f"KẾT QUẢ: {breaks} thay đổi PHÁ BACKWARD -> chặn merge.")
+        return 1
+    print("KẾT QUẢ: không có thay đổi phá BACKWARD.")
+    return 0
+
+
 def _force_utf8_output() -> None:
     """Console Windows mặc định là cp1252, không in nổi tiếng Việt và sẽ ném
     UnicodeEncodeError. Ép UTF-8 để công cụ chạy được ở mọi terminal thay vì bắt
@@ -222,10 +310,17 @@ def main(argv: list[str] | None = None) -> int:
         prog="dataplatform.cli",
         description="Sinh artifact vận hành từ dataset contract trong metadata/.",
     )
-    parser.add_argument("command", choices=["check", "write", "show"])
+    parser.add_argument("command", choices=["check", "write", "show", "plan", "compat"])
+    parser.add_argument("--base", default=None,
+                        help="Git ref nền để so 'plan'/'compat' (mặc định origin/main hoặc GITHUB_BASE_REF).")
     args = parser.parse_args(argv)
 
+    base = args.base or _default_base()
     try:
+        if args.command == "plan":
+            return cmd_plan(base)
+        if args.command == "compat":
+            return cmd_compat(base)
         return {"check": cmd_check, "write": cmd_write, "show": cmd_show}[args.command]()
     except ContractError as exc:
         print(f"LỖI CONTRACT\n{exc}", file=sys.stderr)

@@ -417,9 +417,13 @@ khuôn** (dedup/join/agg/filter), khác Flink metric đồng khuôn. Xem [ADR-00
 
 1. **Orchestration (Airflow/Dagster):** DAG **sinh từ phụ thuộc dataset** (bronze → silver → gold). Có
    lịch, retry, backfill, SLA.
-2. **CI/CD "plan → apply"**: PR sửa contract → CI **validate** (JSON Schema) + **compatibility gate**
+2. 🟡 **CI/CD "plan → apply"**: PR sửa contract → CI **validate** (JSON Schema) + **compatibility gate**
    (Avro BACKWARD, chặn breaking change) → CI **render + diff** artifact ("plan") để reviewer thấy
    đúng những gì sẽ đổi → merge → **deployer apply** idempotent, có **rollback**.
+   - ✅ **`cli plan`** — render hệ quả artifact khi merge (mới/sửa vs base ref).
+   - ✅ **`cli compat`** — gate BACKWARD, chặn breaking change ở PR ([ADR-0030](../decisions/0030-ci-plan-compat-gate.md));
+     verify: chặn `int->string`+cột required, cho qua additive. Cắm vào `metadata-check.yml`.
+   - ⬜ Rollback tường minh cho deployer apply (nay idempotent nhưng chưa có `rollback`).
 3. **Migration có version** cho DDL (ClickHouse/Iceberg) — không init-once.
 4. **Data quality gate:** rule trong `metadata/quality/` (not-null, range, uniqueness, freshness) thực
    thi bằng **Great Expectations / Soda**; fail thì chặn promote.
