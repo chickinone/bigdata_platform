@@ -3,7 +3,13 @@
 > Tài liệu này mô tả hệ thống **như nó đang tồn tại trong repo**, không phải mục tiêu. Nó lý giải *vì
 > sao* cần metadata-driven. Mục tiêu và cách chuyển đổi nằm ở
 > [`../roadmap/BDP-metadata-driven-roadmap.md`](../roadmap/BDP-metadata-driven-roadmap.md).
-> Cập nhật lần cuối: 2026-07-15.
+> Audit gốc: 2026-07-15. **Cập nhật: 2026-07-20.**
+>
+> **Tiến độ tới 2026-07-20:** Pha 1–6 ✅ (mô hình+mã hoá connection, ingestion, Flink/ClickHouse/Spark sinh
+> từ contract, federation Trino 3 nguồn, lineage cột + OpenMetadata). Pha 7 🟡 đang mở (CI plan+compat gate,
+> Airflow DAG sinh từ deps). Phần audit "metadata sprawl" bên dưới giữ làm **bối cảnh lịch sử** (vì sao đi
+> con đường này); các ✅ trong ngoặc ~~gạch~~ là những sprawl đã đóng. Trạng thái từng pha: xem roadmap +
+> [index ADR](../decisions/README.md).
 
 ---
 
@@ -21,16 +27,20 @@ tảng *chức năng tốt* nhưng *vận hành thủ công*.
 
 ## 2. Ma trận độ trưởng thành
 
-| Khía cạnh | Hiện tại | Mục tiêu production |
+Cột "Hiện tại" = trạng thái **2026-07-20** (audit gốc 15/07 hầu hết là ❌; các ô nay ✅ là kết quả Pha 1–7).
+
+| Khía cạnh | Hiện tại (20/07) | Mục tiêu production |
 |---|---|---|
-| Nguồn sự thật schema | ❌ Rải rác ~10 nơi | ✅ 1 registry / data contract |
-| Thêm cột/bảng | ❌ Sửa tay nhiều file | ✅ Sửa 1 contract → sinh tự động |
-| Triển khai artifact | ❌ Thủ công qua REST/`docker compose` | ✅ Generator + CI/CD |
-| Kiểm soát schema evolution | ❌ Không (Schema Registry có nhưng không gate) | ✅ Compatibility gate |
-| Lineage / catalog | ❌ Không | ✅ Tự động (DataHub/OpenMetadata) |
-| Data quality | ❌ Không | ✅ Rule trong metadata + gate |
-| Orchestration | ❌ Chạy tay, không lịch, không retry | ✅ DAG sinh từ phụ thuộc dataset |
+| Nguồn sự thật schema | ✅ 1 registry `metadata/` (dataset + connection) | ✅ 1 registry / data contract |
+| Thêm cột/bảng | ✅ Sửa 1 contract → `cli write` sinh tự động | ✅ Sửa 1 contract → sinh tự động |
+| Triển khai artifact | ✅ Generator + deployer idempotent (connectors/spark/flink/OM); 🟡 CI apply+rollback | ✅ Generator + CI/CD |
+| Kiểm soát schema evolution | ✅ `cli compat` gate BACKWARD ở PR ([ADR-0030](../decisions/0030-ci-plan-compat-gate.md)) | ✅ Compatibility gate |
+| Lineage / catalog | ✅ OpenMetadata + lineage cột Flink/Spark ([ADR-0026](../decisions/0026-lineage-catalog-from-metadata.md)/[27](../decisions/0027-openmetadata-catalog.md)/[28](../decisions/0028-spark-column-lineage-sqlglot.md)) | ✅ Tự động (DataHub/OpenMetadata) |
+| Data quality | ❌ Chưa (Pha 7 — `metadata/quality/`) | ✅ Rule trong metadata + gate |
+| Orchestration | 🟡 Airflow DAG sinh từ deps ([ADR-0031](../decisions/0031-airflow-dag-from-metadata.md)); runtime phiên riêng | ✅ DAG sinh từ phụ thuộc dataset |
+| Federation (query chéo nguồn) | ✅ Trino 3 nguồn verify runtime ([ADR-0025](../decisions/0025-connection-registry-trino-catalog.md)) | ✅ Trino/engine liên thông |
 | Quản lý secrets | ⚠️ `.env` local, đã gitignore, không có manager | ✅ Vault/SOPS + `secret_ref` |
+| RBAC / audit | ❌ Chưa (Pha 7) | ✅ Ai sửa contract nào + dấu vết |
 | HA / chịu lỗi | ❌ Single node toàn bộ | ⚠️ Ngoài phạm vi metadata (nhưng cần) |
 
 ---
@@ -128,9 +138,9 @@ Xác minh trực tiếp từ code, không phải suy đoán.
 |---|---|---|
 | 7 | **Single-node mọi thứ** | Kafka RF=1, ES single-node, 1 Spark worker, checkpoint 30s. Không HA, không chịu lỗi. |
 | 8 | ✅ ~~**`AUTO_CREATE_TOPICS_ENABLE=true`**~~ | **ĐÃ TẮT** — topic tạo tường minh qua bản kê sinh từ registry + service `kafka-init`; `auto.create.topics=false`, chứng minh live 21/21 topic khớp và topic ma không bị tạo ([ADR-0020](../decisions/0020-generate-kafka-topic-manifest.md)). |
-| 9 | **Không orchestration** | Job Spark chạy tay; không lịch, không phụ thuộc, không retry/backfill. |
-| 10 | **Không data quality gate & lineage** | Không kiểm tra chất lượng, không truy vết nguồn-đích tự động. |
-| 11 | **Không CI/CD** | Thay đổi cấu hình áp thủ công qua REST/`docker compose`. |
+| 9 | 🟡 ~~**Không orchestration**~~ | **DAG sinh từ deps** ([ADR-0031](../decisions/0031-airflow-dag-from-metadata.md)): silver→gold/iceberg, có lịch/retry/SLA. Còn nợ: boot Airflow runtime + backfill. |
+| 10 | 🟡 ~~**Không lineage**~~ / **Không data quality gate** | **Lineage + catalog XONG** (OpenMetadata, lineage cột — ADR-0026/27/28). **Data quality vẫn chưa** (Pha 7). |
+| 11 | 🟡 ~~**Không CI/CD**~~ | CI có `check` (drift) + `compat` (BACKWARD) + `plan` (hệ quả) ở PR ([ADR-0030](../decisions/0030-ci-plan-compat-gate.md)). Còn nợ: apply tự động + rollback. |
 | 12 | **Không auth ở hầu hết service** | ES tắt security (`xpack.security.enabled=false`), Kafka PLAINTEXT, Trino/MinIO/Kafka UI không auth. |
 | 13 | **Silver là full refresh** | `enrich_transactions.py` dùng `mode("overwrite")` — đọc lại toàn bộ Bronze mỗi lần chạy. |
 
