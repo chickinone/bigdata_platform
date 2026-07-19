@@ -391,8 +391,10 @@ khuôn** (dedup/join/agg/filter), khác Flink metric đồng khuôn. Xem [ADR-00
      4 non-Trino (kafka, schema_registry, elasticsearch, s3_minio).
    - ✅ Generator `trino_catalog.py` — sinh 3 catalog, **oracle byte-exact khớp bản viết tay** (`check` 18/18);
      diệt sprawl #13 ([ADR-0025](../decisions/0025-connection-registry-trino-catalog.md)). Secret vẫn `${ENV:...}`.
-   - ✅ Federation runtime verify: `postgres.transactions=1046`, `clickhouse.metrics.timeseries=7` (khớp nguồn).
-     Iceberg load được nhưng query treo (nợ runtime Trino↔iceberg↔MinIO, không phải file).
+   - ✅ Federation runtime verify **đủ 3 nguồn** (2026-07-20): `postgres.transactions=1046`,
+     `clickhouse.metrics.timeseries=7`, `iceberg.silver.enriched_transactions=1072` + join chéo engine chạy
+     sạch. Nợ "iceberg query treo" ĐÓNG: là sự cố Docker nhất thời, không phải config (bẫy: iceberg-rest lưu
+     catalog trong RAM, restart mất bảng — chạy lại Spark job để đăng ký lại trước khi query).
    - ✅ **Encode connection non-Trino** ([ADR-0029](../decisions/0029-encode-connection-non-trino.md)): es_sink/
      s3_sink/debezium/topic_manifest/flink_metrics đọc endpoint TỪ registry thay vì hardcode; registry là nguồn
      endpoint duy nhất, `check` 18/18 byte-exact.
@@ -407,7 +409,7 @@ khuôn** (dedup/join/agg/filter), khác Flink metric đồng khuôn. Xem [ADR-00
 3. ✅ Trả lời được (qua `LINEAGE.md`): "cột `amount` chảy tới đâu?", "dataset nào chứa PII?", "ai sở hữu?".
    Đã lôi ra: PII customers/accounts **chảy vào Silver lake**.
 
-**Đầu ra:** discovery + lineage tự động. **Ước lượng:** 1.5–2 tuần *(catalog/lineage cốt lõi xong; còn UI + lineage cột Spark)*.
+**Đầu ra:** discovery + lineage tự động. **Ước lượng:** 1.5–2 tuần *(**XONG** — federation 3 nguồn, OpenMetadata UI, lineage cột Flink+Spark, connection non-Trino đều verify; chỉ còn nợ runtime chung: HA Flink/Spark + iceberg-rest lưu RAM)*.
 
 ---
 

@@ -55,13 +55,20 @@ lineage đọc nó), không phải việc chẻ nhỏ property.
 
 Vì sinh == viết tay từng byte, và Trino đọc đúng file đó, việc sinh là **trong suốt** với runtime.
 
-**Federation runtime đã verify:** `SHOW CATALOGS` liệt kê cả 3 catalog sinh; query thật trả đúng dữ liệu:
+**Federation runtime đã verify ĐỦ 3 NGUỒN** (cập nhật 2026-07-20) — một câu Trino chạm cả ba engine:
 ```
-postgres.public.transactions        = 1046   (khớp Postgres)
-clickhouse.metrics.timeseries       = 7      (khớp ClickHouse)
+postgres.public.transactions              = 1046   (khớp Postgres)
+clickhouse.metrics.timeseries             = 7      (khớp ClickHouse)
+iceberg.silver.enriched_transactions      = 1072   (khớp Spark ghi)
 ```
-Iceberg catalog **load được** nhưng query treo — vấn đề runtime Trino↔iceberg-rest↔MinIO (độc lập với file
-catalog, vì nó byte-exact bản cũ). Ghi nhận là nợ runtime riêng, không phải lỗi generation.
+Cả join chéo engine (`iceberg ⋈ postgres ON transaction_id`) lẫn đọc cột thật + aggregate trên iceberg
+đều chạy, không treo.
+
+> **Nợ "iceberg query treo" ĐÃ ĐÓNG.** Phiên trước treo là **sự cố Docker nhất thời**, KHÔNG phải lỗi
+> config: `SELECT`/`COUNT`/CTAS trên iceberg nay chạy sạch với đúng `iceberg.properties` sinh từ registry.
+> **Bẫy vận hành cần nhớ** (khớp [ADR-0009](0009-iceberg-rest-catalog.md)): `tabulario/iceberg-rest` lưu
+> catalog **trong RAM** — restart là `namespaces:[]` rỗng, bảng "biến mất" (dễ nhầm là treo/lỗi). Phải chạy
+> lại Spark iceberg job để đăng ký lại bảng trước khi Trino query.
 
 ## Hệ quả
 
@@ -72,14 +79,16 @@ không sửa `.properties` tay. Nợ Pha 1 (mã hoá connection) đóng cho các
 - ~~Mới encode 3 connection có Trino; kafka/es/s3/schema-registry chưa vào registry.~~ **ĐÃ ĐÓNG**
   ([ADR-0029](0029-encode-connection-non-trino.md)): 4 connection non-Trino nay vào registry, generator đọc
   endpoint từ đó thay vì hardcode. Nợ Pha 1 (mã hoá connection) đóng hoàn toàn.
-- Runtime Trino chưa verify (Docker bất ổn phiên này) — nhưng byte-exact nên rủi ro thấp.
+- ✅ ~~Runtime Trino chưa verify.~~ Federation 3 nguồn đã verify (xem Kiểm chứng ở trên).
 
 ## Việc còn lại của Pha 6
 
-- ⬜ Verify Trino federation runtime (query chéo postgres × clickhouse × iceberg).
-- ⬜ **Lineage cột-tới-cột** (suy từ pipeline spec: `source_urn`→`sink_urn` + SQL; parse logical plan Spark).
-- ⬜ **Catalog chuẩn ngành** (OpenMetadata / DataHub): ingest schema, ownership, tag PII từ contract. Cần
-  hạ tầng mới — increment riêng.
+- ✅ Verify Trino federation runtime (query chéo postgres × clickhouse × iceberg) — **XONG** (2026-07-20).
+- ✅ **Lineage cột-tới-cột** — Flink (regex) + Spark (sqlglot, [ADR-0028](0028-spark-column-lineage-sqlglot.md)).
+- ✅ **Catalog chuẩn ngành** (OpenMetadata): schema, ownership, tag PII, lineage cột từ contract
+  ([ADR-0027](0027-openmetadata-catalog.md)).
+
+**→ Pha 6 đóng.** Ba câu hỏi discovery/lineage/federation đều trả lời được từ metadata + verify runtime.
 
 ## Phương án đã cân nhắc
 
