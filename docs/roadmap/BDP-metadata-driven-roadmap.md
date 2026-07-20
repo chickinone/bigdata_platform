@@ -428,7 +428,11 @@ khuôn** (dedup/join/agg/filter), khác Flink metric đồng khuôn. Xem [ADR-00
    - ✅ **`cli compat`** — gate BACKWARD, chặn breaking change ở PR ([ADR-0030](../decisions/0030-ci-plan-compat-gate.md));
      verify: chặn `int->string`+cột required, cho qua additive. Cắm vào `metadata-check.yml`.
    - ⬜ Rollback tường minh cho deployer apply (nay idempotent nhưng chưa có `rollback`).
-3. **Migration có version** cho DDL (ClickHouse/Iceberg) — không init-once.
+3. 🟡 **Migration có version** cho DDL (ClickHouse/Iceberg) — không init-once.
+   - ✅ **ClickHouse**: runner `clickhouse_migrate` + `migrations/clickhouse/NNNN_*.sql`, sổ cái
+     `schema_migrations`, idempotent + bất biến (checksum) ([ADR-0032](../decisions/0032-versioned-migration-clickhouse.md));
+     migration đầu đóng nợ `notification_events`. Verify trên CH thật.
+   - ⬜ Iceberg (schema evolution native qua REST catalog — làm khi cần); ⬜ tự sinh migration từ diff contract.
 4. **Data quality gate:** rule trong `metadata/quality/` (not-null, range, uniqueness, freshness) thực
    thi bằng **Great Expectations / Soda**; fail thì chặn promote.
 5. **RBAC & audit:** ai được sửa contract nào; mọi thay đổi có dấu vết Git + catalog.

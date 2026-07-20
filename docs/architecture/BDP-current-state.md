@@ -124,11 +124,11 @@ Xác minh trực tiếp từ code, không phải suy đoán.
 
 | # | Vấn đề | Bằng chứng | Hệ quả |
 |---|---|---|---|
-| 1 | **ClickHouse init không tự chạy** | `docker-compose.yml` không mount `clickhouse/init/` vào `/docker-entrypoint-initdb.d` | Không bảng `metrics.*` → MV không tồn tại → Grafana rỗng. Phải chạy tay. |
+| 1 | 🟡 **ClickHouse init không tự chạy** | `docker-compose.yml` không mount `clickhouse/init/`. **Nay có runner versioned** (`clickhouse_migrate`, [ADR-0032](../decisions/0032-versioned-migration-clickhouse.md)) áp thay đổi lên DB sống. Init baseline vẫn chạy lúc dựng stack. |
 | 2 | ✅ ~~**Bucket lake không được tạo**~~ | **ĐÃ XỬ LÝ** 2026-07-18 — `minio-init` nay tạo cả `data-lake-{bronze,silver,gold,iceberg}` | S3 sink chạy được ngay khi `up`; không phải tạo tay. |
 | 3 | ~~**DLQ chưa được nối**~~ | **ĐÃ XỬ LÝ** 2026-07-16 — [ADR-0017](../decisions/0017-dlq-flow-observe-then-park.md) | Mọi sink bật DLQ; lỗi chảy vào `metrics.dlq_events`. Kèm sửa lỗi replay làm hỏng metric. |
 | 4 | ~~**`metrics.dlq_events` không tồn tại**~~ | **ĐÃ XỬ LÝ** — [`clickhouse/init/03_dlq.sql`](../../clickhouse/init/03_dlq.sql) | Vẫn phải chạy tay như mọi init ClickHouse (mục 1). |
-| 4b | **`metrics.notification_events` không tồn tại** | `fraud_notifier.py:177` INSERT vào bảng này; không init nào tạo nó | Mọi lần ghi đều fail (nuốt trong `try/except`). **Còn nợ.** |
+| 4b | ✅ ~~**`metrics.notification_events` không tồn tại**~~ | **ĐÃ TẠO** qua migration `migrations/clickhouse/0001_notification_events.sql` ([ADR-0032](../decisions/0032-versioned-migration-clickhouse.md)) | Bảng tồn tại; fraud-notifier ghi được. |
 | 5 | ~~**4 job Flink trùng lặp**~~ | **ĐÃ XÓA** 2026-07-16 — `lane1_{timeseries,kpi,breakdown,topn}.py` (di sản print-sink) | Còn 2 file Flink; hết bẫy chạy trùng topic. |
 | 6 | ✅ ~~**Print sink còn trong job fraud**~~ | **ĐÃ BỎ** — `fraud_runner.py` (thay `lane3_fraud_detection.py`) không còn `ds.print` ([ADR-0023](../decisions/0023-flink-metric-runner-declarative.md)) | ~~In mọi transaction ra log ở 150 RPS~~ |
 

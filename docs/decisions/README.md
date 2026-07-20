@@ -60,3 +60,4 @@
 |---|---|
 | [0030](0030-ci-plan-compat-gate.md) | CI plan → compat gate (BACKWARD) — GitOps cho contract |
 | [0031](0031-airflow-dag-from-metadata.md) | Airflow DAG sinh từ phụ thuộc batch spec |
+| [0032](0032-versioned-migration-clickhouse.md) | Migration có version cho ClickHouse — bỏ init-once |
