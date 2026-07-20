@@ -449,12 +449,16 @@ khuôn** (dedup/join/agg/filter), khác Flink metric đồng khuôn. Xem [ADR-00
 
 ---
 
-### Pha 8 — Cắt chuyển & vận hành hóa
+### Pha 8 — Cắt chuyển & vận hành hóa — ✅ XONG (2026-07-20, [ADR-0037](../decisions/0037-cutover-complete-single-source.md))
 
-1. Với từng thành phần: xác nhận artifact sinh chạy ổn định → **xóa file viết tay** tương ứng.
-2. Viết **runbook**: thêm cột, thêm bảng, thêm metric, xử lý breaking change, backfill, rollback —
-   tất cả quy về "sửa metadata + chạy pipeline".
-3. Bàn giao & đào tạo; chốt: hệ thống chỉ còn **một nơi để sửa — `metadata/`**.
+1. ✅ Cutover diễn ra dần qua Pha 2–7 (chứng minh byte-exact → xoá bản viết tay). Audit cuối: chỉ còn
+   `trino/iceberg.properties.bak` di sản → đã xoá. Không còn file viết tay song song bản sinh.
+2. ✅ **Runbook** [`docs/guide/runbook.md`](../guide/runbook.md): thêm cột/bảng/metric/connection, breaking
+   change, migration, rollback, backfill, quality — quy về "sửa metadata + chạy" + tham chiếu lệnh + gotchas.
+3. ✅ Chốt: **một nơi để sửa — `metadata/`**. 19 artifact sinh, `check` 19/19, sprawl #1–#13 đóng.
+
+**Ngoài phạm vi metadata-driven (phase riêng):** bảo mật (secret manager + auth), HA/robustness, Airflow
+task e2e, Silver incremental.
 
 **Đầu ra:** hệ thống metadata-driven hoàn chỉnh. **Ước lượng:** 1–1.5 tuần.
 

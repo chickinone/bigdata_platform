@@ -5,11 +5,12 @@
 > [`../roadmap/BDP-metadata-driven-roadmap.md`](../roadmap/BDP-metadata-driven-roadmap.md).
 > Audit gốc: 2026-07-15. **Cập nhật: 2026-07-20.**
 >
-> **Tiến độ tới 2026-07-20:** Pha 1–6 ✅. **Pha 7 ✅ gần trọn** — CI plan+compat gate, Airflow DAG sinh từ
-> deps, migration versioned (CH runner + Iceberg native), data quality gate, rollback từ git ref, RBAC
-> CODEOWNERS. Còn: boot Airflow runtime + secret manager (Pha bảo mật). Phần audit "metadata sprawl" bên
-> dưới giữ làm **bối cảnh lịch sử** (vì sao đi con đường này); các ✅ ~~gạch~~ là sprawl đã đóng. Trạng thái
-> từng pha: xem roadmap + [index ADR](../decisions/README.md).
+> **Tiến độ tới 2026-07-20: Pha 1–8 ✅ XONG** — lộ trình metadata-driven hoàn tất. Ingestion → serving →
+> lakehouse → federation → catalog/lineage → orchestration/CI/quality/migration/rollback/RBAC → **cutover
+> chốt** ([ADR-0037](../decisions/0037-cutover-complete-single-source.md)): `metadata/` là nguồn sự thật duy
+> nhất, 19 artifact sinh, `check` 19/19, sprawl #1–#13 đóng. Vận hành: [runbook](../guide/runbook.md).
+> **Ngoài phạm vi metadata-driven (phase riêng):** bảo mật (secret+auth), HA/robustness, Airflow task e2e.
+> Phần audit "metadata sprawl" bên dưới giữ làm **bối cảnh lịch sử**; các ✅ ~~gạch~~ là sprawl đã đóng.
 
 ---
 

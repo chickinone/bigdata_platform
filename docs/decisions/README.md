@@ -65,3 +65,9 @@
 | [0034](0034-rollback-via-git-ref.md) | Rollback deployer — áp lại desired state từ git ref |
 | [0035](0035-rbac-codeowners.md) | RBAC & audit — CODEOWNERS + owner contract |
 | [0036](0036-iceberg-native-evolution.md) | Iceberg dùng schema evolution native (không runner) |
+
+## Cắt chuyển & vận hành hoá (Pha 8)
+
+| ADR | Quyết định |
+|---|---|
+| [0037](0037-cutover-complete-single-source.md) | Chốt cutover — `metadata/` là nguồn sự thật duy nhất |
