@@ -47,8 +47,12 @@ mô hình (sensor chờ Bronze là increment sau nếu cần).
   5 task dựng được, `silver` là root, 4 leaf phụ thuộc đúng silver, **không chu trình**. `ast.parse` OK.
 - **Compose runtime hợp lệ** (`airflow/docker-compose-airflow.yml`, `docker compose config` pass).
 
-Bật Airflow thật để xem DAG chạy trên UI là **phiên riêng** (cần stack chính + RAM) — như OM/Trino trong
-dự án này. Scaffolding sẵn: [`airflow/README.md`](../../airflow/README.md).
+**Cập nhật 2026-07-20 — boot Airflow thật:** đã dựng `apache/airflow:2.10.4` standalone (compose
+`airflow/docker-compose-airflow.yml`) và load DAG qua **DagBag trong Airflow THẬT**: `import_errors: {}`,
+DAG `medallion_batch` 5 task, phụ thuộc đúng (silver → 3 gold + iceberg). Xác nhận cú pháp DAG (`schedule=`,
+BashOperator...) hợp lệ với Airflow thật, không chỉ stub. (Cú vấp đã sửa: volume `./airflow/dags` sai vì
+project-dir là `airflow/` khi chạy `-f airflow/...yml` → đổi `./dags`.) Chạy một task spark-submit end-to-end
+cần thêm stack Spark — phiên nặng hơn, để khi cần. Scaffolding: [`airflow/README.md`](../../airflow/README.md).
 
 ## Hệ quả
 

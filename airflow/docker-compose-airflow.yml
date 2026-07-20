@@ -22,7 +22,9 @@ services:
     ports:
       - "8090:8080"   # UI: http://localhost:8090
     volumes:
-      - ./airflow/dags:/opt/airflow/dags:ro          # DAG sinh từ metadata (đừng sửa tay)
+      # Path TƯƠNG ĐỐI với thư mục compose (airflow/) — vì chạy `-f airflow/...yml`,
+      # project dir là airflow/, nên là ./dags (KHÔNG ./airflow/dags).
+      - ./dags:/opt/airflow/dags:ro                   # DAG sinh từ metadata (đừng sửa tay)
       - /var/run/docker.sock:/var/run/docker.sock     # để BashOperator gọi docker exec
     networks:
       - bigdata-net
