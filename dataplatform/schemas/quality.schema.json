@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bigdata-platform/schemas/quality.schema.json",
+  "title": "Data quality rules cho một dataset",
+  "description": "Luật chất lượng TƯỜNG MINH (ngoài not-null/unique tự suy từ contract). Chạy bằng verifiers/quality.py; fail thì chặn promote.",
+
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["dataset", "rules"],
+
+  "properties": {
+    "dataset": { "type": "string", "minLength": 1, "description": "URN dataset (khớp metadata/datasets)" },
+    "rules": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["column", "type"],
+        "properties": {
+          "column": { "type": "string", "minLength": 1 },
+          "type": { "enum": ["not_null", "unique", "accepted_values", "range"] },
+          "values": { "type": "array", "items": { "type": "string" }, "description": "cho accepted_values" },
+          "min": { "type": "number", "description": "cho range" },
+          "max": { "type": "number", "description": "cho range" }
+        }
+      }
+    }
+  }
+}

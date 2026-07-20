@@ -1,0 +1,9 @@
+# Data quality — bank.public.customers.
+# not_null (mọi cột nullable:false) + unique (customer_id, PK) TỰ SUY từ contract, không
+# khai lại ở đây. Dưới đây là luật TƯỜNG MINH mà contract không diễn đạt được.
+dataset: bank.public.customers
+rules:
+  # risk_score mô tả "0-100" trong contract nhưng đó là comment; đây là luật chạy được.
+  - { column: risk_score, type: range, min: 0, max: 100 }
+  # kyc_status mô tả "pending|verified|rejected|expired" — biến thành accepted_values.
+  - { column: kyc_status, type: accepted_values, values: [pending, verified, rejected, expired] }
