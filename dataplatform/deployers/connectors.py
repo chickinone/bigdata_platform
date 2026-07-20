@@ -29,6 +29,7 @@ import time
 import urllib.error
 import urllib.request
 
+from .. import compat
 from ..generators import debezium, es_sink, s3_sink
 from ..registry import ContractError, connections_by_name, load_datasets
 
@@ -36,13 +37,19 @@ from ..registry import ContractError, connections_by_name, load_datasets
 # Bên trong mạng compose thì là http://kafka-connect:8083 — override bằng env.
 CONNECT_URL = os.getenv("CONNECT_URL", "http://localhost:8083")
 
+# Thư mục chứa artifact connector đã commit (dùng cho rollback --ref).
+_CONNECTOR_DIRS = ("debezium", "kafka-connect/es-sinks", "kafka-connect/s3-sinks")
 
-def desired_connectors() -> dict[str, dict]:
-    """{tên connector -> config} suy THẲNG từ generator.
 
-    Gộp đúng ba generator sinh ra connector. Không đụng dlq/topic/DDL — chúng
-    không phải connector. Thêm loại connector mới = thêm một generator vào đây.
-    """
+def desired_connectors(ref: str | None = None) -> dict[str, dict]:
+    """{tên connector -> config} là desired state.
+
+    ref=None: suy THẲNG từ generator (metadata working tree) — deploy bình thường.
+    ref='<git-ref>': đọc artifact connector ĐÃ COMMIT ở ref đó — ROLLBACK về trạng
+    thái lịch sử. Vì `check` bảo đảm artifact == metadata, áp lại artifact ở ref =
+    áp lại desired state của ref (không cần chạy lại generator ở ref)."""
+    if ref is not None:
+        return _connectors_at_ref(ref)
     datasets = load_datasets()
     conns = connections_by_name()
     out: dict[str, dict] = {}
@@ -52,6 +59,18 @@ def desired_connectors() -> dict[str, dict]:
         **debezium.targets(datasets, conns),
     }.values():
         out[payload["name"]] = payload["config"]
+    return dict(sorted(out.items()))
+
+
+def _connectors_at_ref(ref: str) -> dict[str, dict]:
+    out: dict[str, dict] = {}
+    for d in _CONNECTOR_DIRS:
+        for path in compat.git_ls(ref, d):
+            if not path.endswith(".json"):
+                continue
+            payload = json.loads(compat.git_show(ref, path) or "{}")
+            if "name" in payload and "config" in payload:
+                out[payload["name"]] = payload["config"]
     return dict(sorted(out.items()))
 
 
@@ -101,18 +120,19 @@ def _diff(desired: dict, current: dict | None) -> tuple[str, list[str]]:
     return ("UPDATE" if diffs else "UNCHANGED"), diffs
 
 
-def _plan() -> list[tuple[str, str, list[str]]]:
+def _plan(ref: str | None = None) -> list[tuple[str, str, list[str]]]:
     """Tính kế hoạch mà KHÔNG ghi gì. Đây là 'check' cho deployer."""
     plan = []
-    for name, cfg in desired_connectors().items():
+    for name, cfg in desired_connectors(ref).items():
         action, diffs = _diff(cfg, _current_config(name))
         plan.append((name, action, diffs))
     return plan
 
 
-def cmd_plan() -> int:
-    print(f"Kế hoạch deploy connector (Connect: {CONNECT_URL}) — KHÔNG ghi gì:\n")
-    for name, action, diffs in _plan():
+def cmd_plan(ref: str | None = None) -> int:
+    tag = f" ROLLBACK về `{ref}`" if ref else ""
+    print(f"Kế hoạch deploy connector{tag} (Connect: {CONNECT_URL}) — KHÔNG ghi gì:\n")
+    for name, action, diffs in _plan(ref):
         print(f"  [{action:<9}] {name}")
         for d in diffs:
             print(f"              {d}")
@@ -149,15 +169,16 @@ def _wait_running(names: list[str], attempts: int = 10, delay: float = 2.0) -> d
     return result
 
 
-def cmd_apply() -> int:
-    plan = _plan()
+def cmd_apply(ref: str | None = None) -> int:
+    plan = _plan(ref)
     changed = [(n, a) for n, a, _ in plan if a in ("CREATE", "UPDATE")]
     if not changed:
         print("Mọi connector đã khớp desired state — không có gì để áp.")
         return 0
 
-    desired = desired_connectors()
-    print(f"Áp {len(changed)} connector lên {CONNECT_URL}:\n")
+    desired = desired_connectors(ref)
+    tag = f" (ROLLBACK về `{ref}`)" if ref else ""
+    print(f"Áp {len(changed)} connector lên {CONNECT_URL}{tag}:\n")
     applied = []
     for name, action in changed:
         code, payload = _req("PUT", f"/connectors/{name}/config", desired[name])
@@ -195,9 +216,11 @@ def main(argv: list[str] | None = None) -> int:
     _force_utf8()
     parser = argparse.ArgumentParser(prog="dataplatform.deployers.connectors")
     parser.add_argument("command", nargs="?", default="plan", choices=["plan", "apply"])
+    parser.add_argument("--ref", default=None,
+                        help="Git ref để ROLLBACK: áp lại config connector đã commit ở ref đó.")
     args = parser.parse_args(argv)
     try:
-        return {"plan": cmd_plan, "apply": cmd_apply}[args.command]()
+        return {"plan": cmd_plan, "apply": cmd_apply}[args.command](args.ref)
     except ContractError as exc:
         print(f"LỖI CONTRACT\n{exc}", file=sys.stderr)
         return 2
