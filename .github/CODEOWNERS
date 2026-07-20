@@ -1,0 +1,27 @@
+# CODEOWNERS — RBAC cho contract (Pha 7).
+#
+# Kết hợp với branch protection "Require review from Code Owners" trên `main`:
+# thay đổi một vùng metadata BẮT BUỘC có review của owner vùng đó. Đây là "ai được
+# sửa contract nào" — thực thi bằng GitHub, dấu vết ở Git (audit). Xem ADR-0033.
+#
+# Lab hiện một người (@chickinone). Thêm team = đổi owner từng dòng theo DATA DOMAIN
+# (vd nhóm risk sở hữu metadata/datasets/oltp/, nhóm platform sở hữu dataplatform/).
+
+# Mặc định: mọi thứ thuộc chủ dự án.
+*                           @chickinone
+
+# --- Contract dữ liệu: nhạy nhất, đổi là ảnh hưởng hạ nguồn ---
+/metadata/datasets/         @chickinone
+/metadata/connections/      @chickinone
+/metadata/pipelines/        @chickinone
+/metadata/quality/          @chickinone
+
+# --- Control plane (generator/deployer/verifier): đổi là ảnh hưởng MỌI artifact ---
+/dataplatform/              @chickinone
+/dataplatform/schemas/      @chickinone
+
+# --- Migration (bất biến sau khi áp) + hạ tầng ---
+/migrations/                @chickinone
+
+# --- Quyết định kiến trúc: đứng tên tác giả ---
+/docs/decisions/            @chickinone
