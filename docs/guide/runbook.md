@@ -121,6 +121,9 @@ Dừng bớt để nhường RAM: `docker compose stop` (stack chính) / `... -f
 | `docker exec /opt/...` → `C:/Program Files/Git/opt/...` | Git Bash mangle path Unix | Prefix `MSYS_NO_PATHCONV=1` |
 | Migration runner treo | Bảng `ENGINE=Kafka` cần broker; Kafka down | Runner chỉ áp `migrations/`, không áp baseline init (cần Kafka) |
 | Airflow DAG không load, dags rỗng | Volume `./airflow/dags` sai (project-dir là `airflow/`) | Dùng `./dags` trong compose airflow |
+| CDC không produce, log `UNKNOWN_TOPIC_OR_PARTITION` | `auto.create.topics=false` (ADR-0020) + chưa tạo topic | `docker compose up -d kafka-init` (chạy create-topics.sh) TRƯỚC khi CDC produce |
+| Sau restart chỉ vài bảng có Avro schema | Slot Debezium bền (PG volume) nhưng Schema Registry reset → resume từ offset cũ, không re-snapshot | Xoá connector → đợi slot `active=f` → `pg_drop_replication_slot` → re-apply (fresh snapshot). Bảng rỗng thì không có schema — đúng, không phải lỗi |
+| OM search trả 0 table (entity vẫn còn) | ES của OM chết → search rỗng dù postgres còn entity | Bật lại ES; hoặc nạp lại `openmetadata apply` (catalog tái tạo từ `graph.json`) |
 | File cứ hiện "modified" (LF↔CRLF) | Generator ghi LF, Git chuẩn hoá CRLF | Nhiễu vô hại; `git checkout -- <file>` nếu không có diff thật |
 
 ---
