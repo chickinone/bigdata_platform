@@ -15,6 +15,10 @@
   <img alt="Drift gate" src="https://img.shields.io/badge/cli%20check-19%2F19%20byte--exact-success" />
 </p>
 
+<p align="center">
+  <img src="assets/images/data_flow.png" alt="Kiến trúc tổng quan" width="90%" />
+</p>
+
 ---
 
 ## Điểm nhấn kỹ thuật
@@ -37,52 +41,86 @@ biến metadata thành nguồn sự thật duy nhất** — giải quyết "meta
 
 ---
 
-## Kiến trúc
+## Control plane — metadata sinh ra mọi thứ
 
-<p align="center">
-  <img src="assets/images/data_flow.png" alt="Data flow" />
-</p>
+Đây là tầng cốt lõi. `metadata/` là đầu vào duy nhất; **generators** sinh artifact, `cli check` gác
+**byte-exact**, **deployers** áp lên runtime, **verifiers** đối chiếu ngược với hệ thống thật:
 
-**Hai tầng, tách bạch:**
-
-- **Control plane** (`dataplatform/`) — chạy lúc *phát triển/CI*: đọc `metadata/`, **sinh** artifact, **gác**
-  drift/tương thích, **áp** lên hệ thống sống, **đối chiếu** với schema thật. Không đi vào runtime service nào.
-- **Runtime plane** (`docker-compose.yml`) — các service chạy dữ liệu thật:
-
+```mermaid
+flowchart LR
+    subgraph SOT["metadata/ — NGUỒN SỰ THẬT DUY NHẤT"]
+        direction TB
+        DS["datasets<br/>(oltp · metrics · alerts)"]
+        CN["connections"]
+        PP["pipelines<br/>(stream · batch)"]
+        QL["quality"]
+    end
+    SOT --> GEN["generators (11)<br/>contract → artifact"]
+    GEN --> ART["19 artifact SINH<br/>connector JSON · DDL · topic<br/>Trino catalog · Airflow DAG · lineage"]
+    ART --> CHK{"cli check<br/>byte-exact?"}
+    CHK -->|"khớp 19/19"| DEP["deployers (5)<br/>plan · apply · rollback"]
+    CHK -.->|"lệch → CI ĐỎ"| SOT
+    DEP --> RT["RUNTIME<br/>Kafka Connect · ClickHouse<br/>Flink · Spark · Trino · OpenMetadata"]
+    RT --> VER["verifiers (4)<br/>đối chiếu contract vs hệ thống THẬT"]
+    VER -.->|"phát hiện drift"| SOT
 ```
-PostgreSQL ──Debezium CDC──▶ Kafka ──┬─▶ Flink ──▶ ClickHouse ──▶ Grafana        (realtime metrics)
-                                     ├─▶ Flink fraud ──▶ fraud-alerts ──▶ ES/Kibana + notifier
-                                     ├─▶ ES sink ──▶ Elasticsearch/Kibana         (search/investigation)
-                                     └─▶ S3 sink ──▶ MinIO (Bronze) ──▶ Spark ──▶ Silver/Gold + Iceberg
-                                                                                        │
-                       Trino federation (Postgres × ClickHouse × Iceberg) ◀────────────┘
-                       OpenMetadata (catalog + lineage cấp cột) ◀── sinh từ metadata
+
+Mọi thay đổi đi qua **một vòng lặp 6 bước** (chiến lược *strangler-fig* — bóp nghẹt dần bản viết tay):
+
+```mermaid
+flowchart LR
+    A["① sửa<br/>contract"] --> B["② cli write<br/>(sinh)"]
+    B --> C["③ cli check<br/>byte-exact vs bản cũ"]
+    C --> D["④ deployer apply<br/>(cắt chuyển)"]
+    D --> E["⑤ xóa<br/>bản viết tay"]
+    E --> F["⑥ verify<br/>+ ADR"]
+    F --> A
 ```
 
----
-
-## Control plane — cách metadata thành artifact
-
-Mọi thay đổi đi qua **một khuôn 6 bước** (chiến lược "strangler-fig", chi tiết:
-[`METADATA-DRIVEN-cac-buoc-trien-khai.md`](METADATA-DRIVEN-cac-buoc-trien-khai.md)):
-
-```
-sửa metadata/  →  cli write (sinh)  →  cli check (byte-exact vs bản cũ)  →  cắt chuyển  →  xóa bản cũ  →  verify + ADR
-```
+> Bước ③ chứng minh bản sinh == bản cũ **trước khi** dám thay → cắt chuyển không rủi ro. Chi tiết trình tự:
+> [`METADATA-DRIVEN-cac-buoc-trien-khai.md`](METADATA-DRIVEN-cac-buoc-trien-khai.md).
 
 **Ba lớp trong `dataplatform/`:**
 
-| Lớp | Thư mục | Vai trò | Ví dụ |
+| Lớp | Số | Vai trò | Ví dụ |
 |---|---|---|---|
-| **Generators** | `generators/` (11) | Contract → artifact | debezium, clickhouse_ddl, es_sink, s3_sink, flink_sql, topic_manifest, trino_catalog, lineage, airflow_dag, postgres_publication, dlq |
-| **Deployers** | `deployers/` (5) | Áp desired state (idempotent, plan/apply, rollback) | connectors, clickhouse_migrate, spark_batch, flink_metrics, openmetadata |
-| **Verifiers** | `verifiers/` (4) | Đối chiếu contract vs hệ thống THẬT | postgres_schema, clickhouse_schema, avro_schema, quality |
+| **generators** | 11 | Contract → artifact | debezium · clickhouse_ddl · es_sink · s3_sink · flink_sql · topic_manifest · trino_catalog · lineage · airflow_dag · postgres_publication · dlq |
+| **deployers** | 5 | Áp desired state (idempotent, plan/apply, rollback) | connectors · clickhouse_migrate · spark_batch · flink_metrics · openmetadata |
+| **verifiers** | 4 | Đối chiếu contract vs hệ thống THẬT | postgres_schema · clickhouse_schema · avro_schema · quality |
 
-**CLI** (`cli.py`): `write` (sinh) · `check` (gác drift, 19/19) · `plan` (hệ quả artifact khi merge) ·
-`compat` (gate BACKWARD chặn breaking change).
+---
 
-**Metadata là đầu vào duy nhất** (`metadata/`): `datasets/` (oltp, metrics, alerts) · `connections/` ·
-`pipelines/` (stream Flink, batch Spark) · `quality/`.
+## Runtime — luồng dữ liệu
+
+```mermaid
+flowchart LR
+    PG[("PostgreSQL<br/>OLTP")] -->|"Debezium CDC (WAL→Avro)"| K[("Kafka")]
+    K --> FM["Flink<br/>metrics"] --> CH[("ClickHouse")] --> GR["Grafana"]
+    K --> FR["Flink<br/>fraud"] --> FA["fraud-alerts"]
+    K --> ESK["ES sink"] --> ES[("Elasticsearch")] --> KB["Kibana"]
+    FA --> ES
+    K --> S3["S3 sink"] --> MO[("MinIO<br/>Bronze")]
+    MO --> SP["Spark<br/>medallion"] --> LK[("Silver / Gold<br/>+ Iceberg")]
+    PG --> TR["Trino<br/>federation"]
+    CH --> TR
+    LK --> TR
+    OM["OpenMetadata<br/>catalog + lineage cột<br/>(sinh từ metadata)"]
+```
+
+<table>
+<tr>
+<td width="50%"><b>CDC nguồn (Debezium)</b><br/><img src="assets/images/postgres_source.png" /></td>
+<td width="50%"><b>Kafka topics (CDC · metrics · fraud)</b><br/><img src="assets/images/kafka.png" /></td>
+</tr>
+<tr>
+<td><b>Flink jobs (streaming)</b><br/><img src="assets/images/flink.png" /></td>
+<td><b>Grafana realtime dashboard</b><br/><img src="assets/images/dashboard.png" /></td>
+</tr>
+<tr>
+<td><b>MinIO lakehouse (Bronze/Silver/Gold/Iceberg)</b><br/><img src="assets/images/MinIO.png" /></td>
+<td><b>Kibana — điều tra fraud/failed</b><br/><img src="assets/images/dashboard_els.png" /></td>
+</tr>
+</table>
 
 ---
 
@@ -90,12 +128,12 @@ sửa metadata/  →  cli write (sinh)  →  cli check (byte-exact vs bản cũ)
 
 | Pha | Năng lực | Kiểm chứng live |
 |---|---|---|
-| 1–2 | Contract registry + sinh ingestion (Debezium, publication, topic, ClickHouse DDL) + deployer idempotent + CI drift gate | `check` 19/19; `avro_schema` 0 lệch; auto-create.topics tắt |
-| 3 | Flink runner khai báo (metric + fraud) sinh từ pipeline spec | job chạy; DDL khớp ClickHouse |
+| 1–2 | Contract registry + sinh ingestion (Debezium, publication, topic, ClickHouse DDL) + deployer idempotent + CI drift gate | `check` 19/19 · `avro_schema` 0 lệch · auto-create.topics tắt |
+| 3 | Flink runner khai báo (metric + fraud) sinh từ pipeline spec | job chạy · DDL khớp ClickHouse |
 | 4 | ClickHouse serving sinh từ contract | `clickhouse_schema` 0 drift |
 | 5 | Spark medallion (Silver/Gold/Iceberg) SQL-in-spec, chạy theo phụ thuộc | Iceberg 1.072 rows |
-| 6 | Trino federation + lineage cấp cột (sqlglot) + OpenMetadata catalog | query 3 nguồn; OM 24 table, 25 cạnh |
-| 7 | CI plan/compat gate · Airflow DAG sinh từ deps · migration versioned · **data quality gate** · rollback · RBAC | quality 66 check; DAG load OK; migration idempotent |
+| 6 | Trino federation + lineage cấp cột (sqlglot) + OpenMetadata catalog | query 3 nguồn · OM 24 table, 25 cạnh |
+| 7 | CI plan/compat gate · Airflow DAG sinh từ deps · migration versioned · **data quality gate** · rollback · RBAC | quality 66 check · DAG load OK · migration idempotent |
 | 8 | Cutover chốt + runbook — "một nơi để sửa: `metadata/`" | không còn file viết tay song song |
 
 *Ngoài phạm vi metadata-driven (trục riêng, chưa làm):* bảo mật (secret manager + auth service),
@@ -138,7 +176,7 @@ bigdata-platform/
 | Control plane | Python 3.12, PyYAML, jsonschema, sqlglot | Sinh/gác/áp/đối chiếu từ metadata |
 | Source DB | PostgreSQL 16 | OLTP nguồn, logical replication |
 | CDC | Debezium | WAL → Avro CDC event |
-| Backbone | Kafka (KRaft) + Confluent/Apicurio Schema Registry | Truyền sự kiện + Avro schema |
+| Backbone | Kafka (KRaft) + Schema Registry | Truyền sự kiện + Avro schema |
 | Streaming | Apache Flink 1.18 (PyFlink) | Realtime metrics + fraud detection |
 | Serving OLAP | ClickHouse (Kafka Engine + MV) + Grafana | Metrics tốc độ cao + dashboard |
 | Search | Elasticsearch + Kibana | Tra cứu/điều tra CDC + fraud alert |
@@ -152,7 +190,7 @@ bigdata-platform/
 
 ## Quick start
 
-### 1) Chạy control plane (không cần Docker — thuần tĩnh)
+**1) Control plane** (không cần Docker — thuần tĩnh):
 
 ```bash
 pip install -r requirements-dev.txt
@@ -162,7 +200,7 @@ python -m dataplatform.cli plan       # (trên PR) hệ quả artifact khi merge
 python -m dataplatform.cli compat     # (trên PR) gate BACKWARD
 ```
 
-### 2) Chạy runtime platform
+**2) Runtime platform:**
 
 ```bash
 cp .env.example .env                  # điền secret (không commit)
@@ -170,16 +208,20 @@ docker compose up -d                  # dựng toàn bộ stack
 docker compose up -d kafka-init       # tạo topic (auto.create.topics=false)
 ```
 
-### 3) Áp cấu hình từ metadata (thay cho đăng ký connector thủ công)
+<p align="center">
+  <img src="assets/images/start.png" alt="Các service đã khởi động" width="80%" />
+</p>
+
+**3) Áp cấu hình từ metadata** (thay cho đăng ký connector thủ công):
 
 ```bash
-python -m dataplatform.deployers.connectors      apply   # Debezium + ES/S3 sink
-python -m dataplatform.deployers.clickhouse_migrate apply # schema + migration
-python -m dataplatform.deployers.flink_metrics   apply   # Flink runner
-python -m dataplatform.deployers.spark_batch     apply   # medallion Silver→Gold→Iceberg
+python -m dataplatform.deployers.connectors        apply   # Debezium + ES/S3 sink
+python -m dataplatform.deployers.clickhouse_migrate apply   # schema + migration
+python -m dataplatform.deployers.flink_metrics     apply   # Flink runner
+python -m dataplatform.deployers.spark_batch       apply   # medallion Silver→Gold→Iceberg
 ```
 
-### 4) Đối chiếu với hệ thống thật
+**4) Đối chiếu với hệ thống thật:**
 
 ```bash
 python -m dataplatform.verifiers.avro_schema        # Avro trên dây vs contract
@@ -190,11 +232,23 @@ python -m dataplatform.verifiers.quality            # data quality gate
 > Catalog UI (OpenMetadata) và orchestration (Airflow) chạy **phiên-riêng** (compose riêng, RAM) — xem
 > [`docs/guide/runbook.md`](docs/guide/runbook.md).
 
-### Service URLs (runtime)
+**Service URLs:** Kafka UI `:8080` · Connect `:8083` · Schema Registry `:8081` · Flink `:8082` ·
+ClickHouse `:8123` · Grafana `:3000` · MinIO `:9001` · Kibana `:5601` · Trino `:8085` ·
+OpenMetadata `:8585` · Airflow `:8090`
 
-| Kafka UI `:8080` · Connect `:8083` · Schema Registry `:8081` · Flink `:8082` · ClickHouse `:8123` ·
-Grafana `:3000` · MinIO `:9001` · Kibana `:5601` · Trino `:8085` · OpenMetadata `:8585` · Airflow `:8090` |
-|---|
+---
+
+## Reliability & Observability
+
+Mọi sink bật **dead-letter queue**; DLQ processor phân loại lỗi transient/permanent/unknown thành dữ liệu
+truy vấn được. Theo dõi qua Kafka UI · Flink UI · Spark UI · Grafana · Kibana · MinIO Console.
+
+<table>
+<tr>
+<td width="50%"><b>DLQ processor — phân loại lỗi</b><br/><img src="assets/images/DLQ.png" /></td>
+<td width="50%"><b>Fault handling / observability</b><br/><img src="assets/images/fault.png" /></td>
+</tr>
+</table>
 
 ---
 
@@ -202,11 +256,9 @@ Grafana `:3000` · MinIO `:9001` · Kibana `:5601` · Trino `:8085` · OpenMetad
 
 - **ADR-first:** mọi quyết định đáng kể có một ADR (bối cảnh · quyết định · hệ quả · phương án đã cân nhắc) —
   [37 ADR](docs/decisions/README.md).
-- **Oracle byte-exact:** generator được chứng minh sinh ra *đúng từng byte* bản viết tay trước khi cắt chuyển
-  → cắt chuyển không rủi ro (strangler-fig).
+- **Oracle byte-exact:** generator được chứng minh sinh ra *đúng từng byte* bản viết tay trước khi cắt chuyển.
 - **CI gates** (`.github/workflows/metadata-check.yml`): drift (`check`) + BACKWARD (`compat`) + plan hệ quả, thuần tĩnh.
-- **Verify runtime:** đối chiếu contract với schema THẬT (Postgres/ClickHouse/Avro-trên-dây) — không tin
-  "chắc là khớp".
+- **Verify runtime:** đối chiếu contract với schema THẬT (Postgres/ClickHouse/Avro-trên-dây).
 - **RBAC/audit:** `.github/CODEOWNERS` theo vùng metadata + `owner` trong contract + audit Git/lineage.
 
 ---
