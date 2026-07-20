@@ -61,3 +61,7 @@
 | [0030](0030-ci-plan-compat-gate.md) | CI plan → compat gate (BACKWARD) — GitOps cho contract |
 | [0031](0031-airflow-dag-from-metadata.md) | Airflow DAG sinh từ phụ thuộc batch spec |
 | [0032](0032-versioned-migration-clickhouse.md) | Migration có version cho ClickHouse — bỏ init-once |
+| [0033](0033-data-quality-gate.md) | Data quality gate — luật chạy trên dữ liệu thật |
+| [0034](0034-rollback-via-git-ref.md) | Rollback deployer — áp lại desired state từ git ref |
+| [0035](0035-rbac-codeowners.md) | RBAC & audit — CODEOWNERS + owner contract |
+| [0036](0036-iceberg-native-evolution.md) | Iceberg dùng schema evolution native (không runner) |

@@ -420,7 +420,9 @@ khuôn** (dedup/join/agg/filter), khác Flink metric đồng khuôn. Xem [ADR-00
    - ✅ **`generators/airflow_dag.py`** — sinh `airflow/dags/medallion_batch_dag.py` từ phụ thuộc input/output
      batch spec (silver root → 3 gold + iceberg), mỗi task = `submit_argv` chung với deployer. `check` 19/19,
      DAG construct + đồ thị verify (stub Airflow); compose standalone phiên-riêng ([ADR-0031](../decisions/0031-airflow-dag-from-metadata.md)).
-   - ⬜ Chạy Airflow runtime thật (phiên riêng), backfill, schedule override per-pipeline.
+   - ✅ **Boot Airflow runtime** (2026-07-20): `apache/airflow:2.10.4` standalone, DAG load qua DagBag thật
+     (`import_errors: {}`, 5 task, phụ thuộc đúng). ⬜ chạy task spark-submit end-to-end (cần stack Spark),
+     backfill, schedule override per-pipeline.
 2. 🟡 **CI/CD "plan → apply"**: PR sửa contract → CI **validate** (JSON Schema) + **compatibility gate**
    (Avro BACKWARD, chặn breaking change) → CI **render + diff** artifact ("plan") để reviewer thấy
    đúng những gì sẽ đổi → merge → **deployer apply** idempotent, có **rollback**.
@@ -433,9 +435,15 @@ khuôn** (dedup/join/agg/filter), khác Flink metric đồng khuôn. Xem [ADR-00
      `schema_migrations`, idempotent + bất biến (checksum) ([ADR-0032](../decisions/0032-versioned-migration-clickhouse.md));
      migration đầu đóng nợ `notification_events`. Verify trên CH thật.
    - ⬜ Iceberg (schema evolution native qua REST catalog — làm khi cần); ⬜ tự sinh migration từ diff contract.
-4. **Data quality gate:** rule trong `metadata/quality/` (not-null, range, uniqueness, freshness) thực
-   thi bằng **Great Expectations / Soda**; fail thì chặn promote.
-5. **RBAC & audit:** ai được sửa contract nào; mọi thay đổi có dấu vết Git + catalog.
+4. ✅ **Data quality gate:** `verifiers/quality.py` + `metadata/quality/*.yaml` — not_null/unique tự suy
+   từ contract + range/accepted_values tường minh, chạy SQL trên dữ liệu thật (Postgres/ClickHouse), fail
+   chặn promote ([ADR-0033](../decisions/0033-data-quality-gate.md)). Verify 66 check + negative test.
+5. ✅ **RBAC & audit:** `.github/CODEOWNERS` theo vùng metadata + branch protection + `owner` trong contract
+   + audit Git/lineage ([ADR-0035](../decisions/0035-rbac-codeowners.md)).
+
+**Đã thêm:** ✅ **Rollback** deployer từ git ref ([ADR-0034](../decisions/0034-rollback-via-git-ref.md));
+✅ **Migration Iceberg** = native evolution (không runner — [ADR-0036](../decisions/0036-iceberg-native-evolution.md)).
+**Còn:** ⬜ boot Airflow runtime thật; ⬜ backfill; ⬜ secret manager (Pha bảo mật).
 
 **Đầu ra:** thay đổi dữ liệu = PR có review, gate, rollback, lineage. **Ước lượng:** 2.5–3 tuần.
 
