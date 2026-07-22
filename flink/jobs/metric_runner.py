@@ -1,12 +1,12 @@
-"""Runner metric tổng quát — THỰC THI job plan sinh từ metadata.
+"""Runner metric tổng quát — thực THI job plan sinh từ metadata.
 
-Đây là "data plane" của Pha 3: nó KHÔNG chứa logic pipeline nào cả. Toàn bộ SQL
+Đây là "data plane" của Pha 3: nó không chứa logic pipeline nào cả. Toàn bộ SQL
 (source DDL, sink DDL, INSERT) được sinh trên host bởi
 `dataplatform/generators/flink_sql.py` từ pipeline spec + contract, rồi ghi ra một
 job plan JSON. Runner này chỉ đọc plan và submit.
 
 Tách bạch như vậy để: (1) container Flink không cần jsonschema/pyyaml/registry;
-(2) thêm/sửa metric = sửa YAML trên host, KHÔNG đụng file Python này. Nó thay
+(2) thêm/sửa metric = sửa YAML trên host, không đụng file Python này. Nó thay
 lane1_dashboard.py: 4 INSERT + source ROW + 4 sink DDL viết tay giờ đều sinh ra.
 """
 import json

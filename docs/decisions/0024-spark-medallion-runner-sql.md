@@ -11,7 +11,7 @@ Ba job Spark viết tay: `enrich_transactions.py` (Silver: dedup + join 3 chiề
 (cột join/output Silver ẩn trong code) và #11 (không ai biết Gold phụ thuộc cột nào). Thêm bảng lake =
 viết Python mới.
 
-## Quyết định — SQL trong spec (mô hình dbt), KHÔNG cấu-trúc-hoàn-toàn
+## Quyết định — SQL trong spec (mô hình dbt), không cấu-trúc-hoàn-toàn
 
 Với Flink metric (4 cái **cùng khuôn** windowed aggregation) đã chọn *cấu trúc khai báo hoàn toàn*
 ([ADR-0023](0023-flink-metric-runner-declarative.md)). Spark medallion **khác khuôn** (dedup + join +
@@ -32,13 +32,13 @@ hợp cho metric đồng khuôn, không hợp cho ETL. Chọn đúng công cụ 
 - **Batch spec** (`metadata/pipelines/batch/*.yaml`) tự chứa như một dbt model: `inputs` (parquet →
   view), `sql` (transform), `output` (path/format/partition + **columns** = hợp đồng schema, diệt #10/#11).
 - **Runner mỏng** (`spark/jobs/medallion_runner.py`): đọc input thành view → chạy SQL → ghi theo output.
-  KHÔNG chứa logic. Sinh trên host (job plan JSON), thực thi trong container — container không cần pyyaml.
+  Không chứa logic. Sinh trên host (job plan JSON), thực thi trong container — container không cần pyyaml.
 - **Deployer** (`deployers/spark_batch.py`, `plan`/`apply`): sinh job plan + `spark-submit` **theo thứ tự
   layer** (silver trước gold vì gold đọc silver).
 
 ## Kiểm chứng — parity với job cũ (Silver)
 
-Chạy job CŨ `enrich_transactions.py` làm **baseline**, rồi runner MỚI, so:
+Chạy job cũ `enrich_transactions.py` làm **baseline**, rồi runner mới, so:
 
 ```
 enrich_transactions.py (cũ):        Enriched transactions: 72
@@ -84,9 +84,9 @@ client HadoopFileIO chỉ có `s3a` → `No FileSystem for scheme "s3"`. Fix: `f
 
 ## Việc còn lại
 
-- ✅ Silver + Gold + Iceberg cắt chuyển (3 job cũ xoá). **Pha 5 xong.**
-- ⬜ Verifier schema Silver/Gold vs `output.columns` (như verifier ClickHouse, ADR-0022) — Pha 6/7.
-- ⬜ Demo Iceberg (time-travel/schema-evolution) chưa chuyển thành tài liệu dạy học riêng — nội dung cũ
+- [x] Silver + Gold + Iceberg cắt chuyển (3 job cũ xoá). **Pha 5 xong.**
+- [ ] Verifier schema Silver/Gold vs `output.columns` (như verifier ClickHouse, ADR-0022) — Pha 6/7.
+- [ ] Demo Iceberg (time-travel/schema-evolution) chưa chuyển thành tài liệu dạy học riêng — nội dung cũ
   còn trong git history nếu cần.
 
 ## Phương án đã cân nhắc

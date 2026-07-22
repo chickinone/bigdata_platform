@@ -5,7 +5,7 @@
     python -m dataplatform.cli show     # in ra để xem, không đụng đĩa
 
 `check` là bước quan trọng nhất của chiến lược strangler-fig: chừng nào bản sinh
-còn khác bản viết tay, ta CHƯA được phép cắt chuyển. Nó cũng là lưới an toàn cho
+còn khác bản viết tay, ta chưa được phép cắt chuyển. Nó cũng là lưới an toàn cho
 CI về sau — contract sửa mà quên chạy generator thì CI đỏ.
 """
 from __future__ import annotations
@@ -38,7 +38,7 @@ from .registry import (
     load_datasets,
 )
 
-# Ghi JSON với indent 2 + newline cuối file. Đây là QUY ƯỚC, không phải yêu cầu
+# Ghi JSON với indent 2 + newline cuối file. Đây là QUY ước, không phải yêu cầu
 # của Kafka Connect - chọn một kiểu rồi giữ nguyên để diff giữa các lần chạy chỉ
 # phản ánh thay đổi thật.
 JSON_INDENT = 2
@@ -74,14 +74,14 @@ def _collect() -> dict:
     return targets
 
 
-# Các khoá mà giá trị là DANH SÁCH ngăn bằng dấu phẩy, và thứ tự KHÔNG mang ý
+# Các khoá mà giá trị là DANH sách ngăn bằng dấu phẩy, và thứ tự không mang ý
 # nghĩa. Kafka Connect coi chúng như một tập hợp — so sánh như chuỗi sẽ báo lệch
 # giả chỉ vì generator sắp thứ tự khác người viết tay.
 SET_VALUED_KEYS = {"topics", "table.include.list"}
 
 
 def _normalize(payload: dict) -> dict:
-    """Đưa config về dạng so sánh được theo NGỮ NGHĨA.
+    """Đưa config về dạng so sánh được theo ngữ nghĩa.
 
     Đây là điểm tinh tế của `check`: "so sánh ngữ nghĩa" không chỉ là parse JSON,
     mà còn là biết khoá nào bất biến theo thứ tự.
@@ -97,12 +97,12 @@ def _normalize(payload: dict) -> dict:
 def _compare(rel_path: str, generated) -> tuple[str, list[str]]:
     """So bản sinh với file trên đĩa. Trả về (trạng_thái, danh_sách_khác_biệt).
 
-    Rẽ theo LOẠI artifact:
-      - dict (JSON): so NGỮ NGHĨA (parse rồi so dict). File viết tay có dòng trống
+    Rẽ theo loại artifact:
+      - dict (JSON): so ngữ nghĩa (parse rồi so dict). File viết tay có dòng trống
         + thứ tự khoá tuỳ người; ép tái tạo từng byte là giòn. Kafka Connect đọc
         JSON, không quan tâm dòng trống.
-      - str (SQL/text): so NGUYÊN VĂN. Lý do khác JSON: file này DO CONTROL PLANE
-        SỞ HỮU, không công cụ ngoài nào format lại, nên byte-match là hợp lý và
+      - str (SQL/text): so nguyên văn. Lý do khác JSON: file này do control plane
+        sở hữu, không công cụ ngoài nào format lại, nên byte-match là hợp lý và
         chặt hơn.
     """
     path = REPO_ROOT / rel_path
@@ -194,7 +194,7 @@ def cmd_write() -> int:
     for rel_path, payload in sorted(targets.items()):
         path = REPO_ROOT / rel_path
         path.parent.mkdir(parents=True, exist_ok=True)
-        # newline="\n": ÉP LF kể cả trên Windows. write_text mặc định (newline=None)
+        # newline="\n": ép LF kể cả trên Windows. write_text mặc định (newline=None)
         # dịch \n -> \r\n trên Windows, làm hỏng script .sh chạy trong container Linux
         # (set -euo pipefail\r -> option lỗi). Mọi artifact đều cho engine Linux nên
         # đều phải LF. `check` không thấy khác biệt này vì read_text dịch ngược lúc đọc.
@@ -218,7 +218,7 @@ def _default_base() -> str:
 
 
 def _compare_against(base_text: str, generated) -> tuple[str, list[str]]:
-    """Như _compare nhưng so với NỘI DUNG ở ref nền (không phải file trên đĩa).
+    """Như _compare nhưng so với nội DUNG ở ref nền (không phải file trên đĩa).
     Hướng diff: nền -> bản sinh từ metadata hiện tại."""
     if isinstance(generated, str):
         if base_text == generated:
@@ -231,10 +231,10 @@ def _compare_against(base_text: str, generated) -> tuple[str, list[str]]:
 
 
 def cmd_plan(base: str) -> int:
-    """'terraform plan' cho metadata: artifact NÀO sẽ đổi khi merge PR vào `base`.
+    """'terraform plan' cho metadata: artifact nào sẽ đổi khi merge PR vào `base`.
 
-    So bản sinh từ metadata HIỆN TẠI với artifact đã commit ở `base` — reviewer thấy
-    HỆ QUẢ vận hành của một thay đổi contract, không chỉ diff YAML. Thuần tĩnh + git,
+    So bản sinh từ metadata hiện tại với artifact đã commit ở `base` — reviewer thấy
+    hệ quả vận hành của một thay đổi contract, không chỉ diff YAML. Thuần tĩnh + git,
     không cần engine. Informational (exit 0)."""
     targets = _collect()
     new: list[str] = []

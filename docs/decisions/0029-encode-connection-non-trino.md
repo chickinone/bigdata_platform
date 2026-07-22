@@ -25,12 +25,12 @@ generator**:
 **Registry là nguồn endpoint duy nhất, kể cả cho consumer ngoài Trino.**
 
 1. Thêm khối tự do `endpoints` (map `key -> chuỗi`) vào `connection.schema.json` — cho placeholder mà
-   consumer NGOÀI Trino cần. Không mô hình hoá sâu (giữ đúng lý luận ADR-0024/0025: property đặc thù từng
+   consumer ngoài Trino cần. Không mô hình hoá sâu (giữ đúng lý luận ADR-0024/0025: property đặc thù từng
    consumer, carry map trực tiếp). Vẫn **không secret** — chỉ `${env:...}` / literal host:port.
 2. Thêm 4 connection: `kafka`, `schema_registry`, `elasticsearch_serving`, `s3_minio`; và bổ sung khối
    `endpoints` cho `postgres_main` (phần CDC). Nay **mọi hệ thống kết nối đều là contract hạng nhất** —
    đóng nốt nợ Pha 1.
-3. Sửa generator đọc endpoint **TỪ** connection thay vì hardcode: `es_sink`, `s3_sink`, `debezium`,
+3. Sửa generator đọc endpoint **từ** connection thay vì hardcode: `es_sink`, `s3_sink`, `debezium`,
    `topic_manifest`, và deployer `flink_metrics`. Helper `registry.endpoint(conns, name, key)` tra cứu,
    **thiếu thì ném `ContractError`** — thà đứt lúc sinh còn hơn sinh config trỏ sai âm thầm.
 
@@ -64,7 +64,7 @@ Nợ Pha 1 (mã hoá connection) **đóng hoàn toàn**.
 
 ## Phương án đã cân nhắc
 
-- **Chỉ thêm entry registry trơ, giữ generator hardcode.** Loại: đó là 🟡 nửa vời — endpoint vẫn định nghĩa
+- **Chỉ thêm entry registry trơ, giữ generator hardcode.** Loại: đó là [~] nửa vời — endpoint vẫn định nghĩa
   hai nơi, chưa đóng sprawl.
 - **Mô hình hoá sâu từng loại endpoint thành field.** Loại: cùng lý do ADR-0024/0025 — carry map trực tiếp.
 - **Nhét secret thật vào `endpoints`.** Loại dứt khoát: luôn `${env:...}`, resolve ở runtime.

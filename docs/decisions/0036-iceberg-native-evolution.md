@@ -9,9 +9,9 @@
 Pha 7 đặt "migration có version cho DDL (ClickHouse/Iceberg)". ClickHouse đã có runner + ledger
 ([ADR-0032](0032-versioned-migration-clickhouse.md)). Câu hỏi: Iceberg có cần runner tương tự?
 
-## Quyết định — KHÔNG dựng runner cho Iceberg
+## Quyết định — Không dựng runner cho Iceberg
 
-Iceberg (format) đã có tiến hoá schema **versioned SẴN TRONG FORMAT**, mạnh hơn ledger tự chế:
+Iceberg (format) đã có tiến hoá schema **versioned sẵn trong FORMAT**, mạnh hơn ledger tự chế:
 
 | Runner ClickHouse phải tự làm | Iceberg có native |
 |---|---|
@@ -26,7 +26,7 @@ Hướng dẫn dùng native (ALTER + `$history` + rollback_to_snapshot) ở
 [`migrations/iceberg/README.md`](../../migrations/iceberg/README.md).
 
 Nếu sau muốn ALTER Iceberg **có review/tự động hoá**, đặt SQL vào `migrations/iceberg/NNNN_*.sql` chạy qua
-Trino — nhưng ledger vẫn đọc từ `$history` native, KHÔNG tự chế bảng tracking (iceberg-rest lưu catalog
+Trino — nhưng ledger vẫn đọc từ `$history` native, không tự chế bảng tracking (iceberg-rest lưu catalog
 trong RAM, bảng tự chế mất khi restart; snapshot nằm trên S3, bền hơn — bài học ADR-0009/0025).
 
 ## Hệ quả
@@ -42,4 +42,4 @@ trong RAM, bảng tự chế mất khi restart; snapshot nằm trên S3, bền h
 
 - **Runner + ledger cho Iceberg (như ClickHouse).** Loại: trùng lặp yếu hơn native; ledger tự chế còn dễ
   mất (catalog RAM).
-- **Bỏ qua hoàn toàn.** Loại: vẫn cần TÀI LIỆU hoá cơ chế native để đội biết cách evolve + rollback.
+- **Bỏ qua hoàn toàn.** Loại: vẫn cần tài liệu hoá cơ chế native để đội biết cách evolve + rollback.

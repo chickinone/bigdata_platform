@@ -5,7 +5,7 @@ connection (sprawl #13). Nay sinh từ connection contract: mỗi connection có
 `trino` → một file catalog. Thêm nguồn cho Trino = thêm khối `trino` vào connection,
 không sửa file .properties tay.
 
-Secret KHÔNG nằm ở đây: mọi giá trị nhạy cảm là `${ENV:...}` để Trino tự resolve
+Secret không nằm ở đây: mọi giá trị nhạy cảm là `${ENV:...}` để Trino tự resolve
 (cùng nguyên tắc với connector/deployer).
 """
 from __future__ import annotations

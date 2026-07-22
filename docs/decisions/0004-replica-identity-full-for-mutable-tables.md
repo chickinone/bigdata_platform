@@ -29,7 +29,7 @@ cho hai bảng còn lại.
 ALTER TABLE accounts  REPLICA IDENTITY FULL;   -- balance cần audit
 ALTER TABLE transfers REPLICA IDENTITY FULL;   -- state machine cần trạng thái trước
 -- customers:    DEFAULT — dimension chậm đổi, before-image không đáng giá WAL
--- transactions: DEFAULT — append-only, KHÔNG BAO GIỜ update → before-image vô nghĩa
+-- transactions: DEFAULT — append-only, không bao giờ update → before-image vô nghĩa
 ```
 
 ## Hệ quả

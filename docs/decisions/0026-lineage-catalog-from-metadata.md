@@ -13,7 +13,7 @@ trong nhiều file — chính xác là thứ lineage cần gom.
 
 ## Quyết định
 
-Generator `lineage.py` ghép **graph lineage + data catalog THUẦN từ metadata** (không cần chạy engine),
+Generator `lineage.py` ghép **graph lineage + data catalog thuần từ metadata** (không cần chạy engine),
 sinh 2 artifact:
 - `lineage/graph.json` — máy đọc (feed DataHub/OpenMetadata sau).
 - `lineage/LINEAGE.md` — người đọc: sơ đồ mermaid + catalog + "PII chảy tới đâu" + lineage cột.
@@ -56,9 +56,9 @@ nền để nạp vào DataHub/OpenMetadata (increment sau).
 
 ## Việc còn lại Pha 6
 
-- ⬜ Lineage cột cho Spark (parse SQL) — chính xác hoá "PII chảy tới đâu" tới mức cột.
-- ⬜ Nạp `graph.json` vào **OpenMetadata/DataHub** để có UI + search (cần hạ tầng mới).
-- ⬜ Verify Trino federation runtime (ADR-0025).
+- [ ] Lineage cột cho Spark (parse SQL) — chính xác hoá "PII chảy tới đâu" tới mức cột.
+- [ ] Nạp `graph.json` vào **OpenMetadata/DataHub** để có UI + search (cần hạ tầng mới).
+- [ ] Verify Trino federation runtime (ADR-0025).
 
 ## Phương án đã cân nhắc
 

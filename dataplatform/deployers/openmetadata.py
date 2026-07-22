@@ -5,7 +5,7 @@
 Đọc `lineage/graph.json` (sinh từ metadata, ADR-0026) và PUSH vào OpenMetadata qua
 REST: service -> database -> schema (theo layer) -> table (mỗi dataset/lake node) +
 cột + tag PII + lineage. Giữ đúng triết lý "Git là nguồn sự thật, catalog là nơi tra
-cứu" — nạp TỪ metadata, không gõ tay trên UI.
+cứu" — nạp từ metadata, không gõ tay trên UI.
 
 Chỉ chạy khi OpenMetadata bật (profile catalog). Xem openmetadata/README.
 """

@@ -95,7 +95,7 @@ def create_transaction(conn, accounts):
                  merchant_name, merchant_cat, failure_desc),
             )
             conn.commit()
-            # KHÔNG update acc["balance"] vì transaction không thực sự diễn ra
+            # Không update acc["balance"] vì transaction không thực sự diễn ra
             return True
 
         # SUCCESS case (logic cũ giữ nguyên)
@@ -131,7 +131,7 @@ def create_transaction(conn, accounts):
 # ============================================================
 def initiate_transfer(conn, accounts):
     """
-    Tạo transfer với status='pending'. CHƯA update balance.
+    Tạo transfer với status='pending'. Chưa update balance.
     Trả về dict để main loop track và finalize sau.
     """
     from_acc = random.choice(accounts)

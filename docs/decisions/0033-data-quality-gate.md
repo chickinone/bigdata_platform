@@ -6,7 +6,7 @@
 
 ## Bối cảnh
 
-Contract mô tả schema, nhưng "dữ liệu có ĐÚNG không" thì chưa gate: `risk_score` phải 0–100, `kyc_status`
+Contract mô tả schema, nhưng "dữ liệu có đúng không" thì chưa gate: `risk_score` phải 0–100, `kyc_status`
 chỉ vài giá trị, cột `nullable:false` không được null, PK phải unique. Trước nay các ràng buộc này chỉ là
 **comment** trong contract — không ai thực thi. Cần một gate chạy trên dữ liệu thật, fail thì chặn promote.
 
@@ -14,10 +14,10 @@ chỉ vài giá trị, cột `nullable:false` không được null, PK phải un
 
 `verifiers/quality.py` + `metadata/quality/*.yaml`. Hai nguồn luật:
 
-- **TỰ SUY từ contract** (không khai lại): `not_null` cho mọi cột `nullable:false`, `unique` cho
+- **tự suy từ contract** (không khai lại): `not_null` cho mọi cột `nullable:false`, `unique` cho
   `primary_key`. Contract đã nói, quality thực thi.
-- **TƯỜNG MINH** (`metadata/quality/<dataset>.yaml`, validate JSON Schema): `range`, `accepted_values` —
-  thứ contract chỉ mô tả bằng chữ, nay thành luật CHẠY ĐƯỢC.
+- **tường minh** (`metadata/quality/<dataset>.yaml`, validate JSON Schema): `range`, `accepted_values` —
+  thứ contract chỉ mô tả bằng chữ, nay thành luật chạy được.
 
 Runner route theo layer: `oltp` → Postgres (`schema.table`), `metric` → ClickHouse (`db.table`). Mỗi check
 là một câu SQL **đếm vi phạm**; > 0 là fail. Nguồn không chạy → SKIP (không thể kiểm, không giả vờ pass).
@@ -25,7 +25,7 @@ Exit 1 nếu có vi phạm → chặn promote.
 
 ### Vì sao gate ở lớp verifier (runtime), không phải CI tĩnh
 
-Kiểm chất lượng cần DỮ LIỆU THẬT, không suy được từ metadata tĩnh (khác `check`/`compat`). Nên nó là gate
+Kiểm chất lượng cần dữ liệu thật, không suy được từ metadata tĩnh (khác `check`/`compat`). Nên nó là gate
 lúc **promote/deploy** (nguồn phải sống), cùng họ với các verifier khác (`clickhouse_schema`, `avro_schema`).
 
 ## Kiểm chứng (đo thật)
@@ -40,7 +40,7 @@ lúc **promote/deploy** (nguồn phải sống), cùng họ với các verifier 
 theo contract — thêm cột `nullable:false` = tự có luật.
 
 **Khó hơn / phải chấp nhận:**
-- Gate cần nguồn SỐNG (promote-time), không chạy trên runner CI tĩnh. Nguồn down → SKIP (không chặn).
+- Gate cần nguồn sống (promote-time), không chạy trên runner CI tĩnh. Nguồn down → SKIP (không chặn).
 - v1 có 4 loại luật (not_null/unique/accepted_values/range). `freshness` (dữ liệu có mới không) + custom SQL
   để tăng sau.
 - Chỉ dataset có đích query được (oltp→PG, metric→CH). Stream/alert (ES) chưa gate — cần cơ chế khác.

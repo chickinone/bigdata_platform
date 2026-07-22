@@ -13,11 +13,11 @@ quản trị. Hạ nguồn phụ thuộc contract; sửa bừa một dataset OLT
 
 Không dựng hệ RBAC riêng — **tận dụng GitHub + metadata sẵn có**:
 
-1. **`.github/CODEOWNERS`** chia quyền review theo VÙNG metadata: `metadata/datasets/`, `connections/`,
+1. **`.github/CODEOWNERS`** chia quyền review theo vùng metadata: `metadata/datasets/`, `connections/`,
    `pipelines/`, `quality/`, `dataplatform/`, `migrations/`, `docs/decisions/`. Kết hợp branch protection
-   "Require review from Code Owners" trên `main` → đổi một vùng BẮT BUỘC có review của owner vùng đó. Đây là
+   "Require review from Code Owners" trên `main` → đổi một vùng bắt buộc có review của owner vùng đó. Đây là
    "ai được sửa contract nào", thực thi bằng GitHub.
-2. **`owner:` trong mỗi dataset contract** (đã có) = ai SỞ HỮU dữ liệu (nghiệp vụ). OpenMetadata + lineage
+2. **`owner:` trong mỗi dataset contract** (đã có) = ai sở hữu dữ liệu (nghiệp vụ). OpenMetadata + lineage
    phơi bày owner → tra cứu được.
 3. **Audit trail** = Git history (ai đổi gì, khi nào, review bởi ai) + ADR (vì sao) + lineage (ảnh hưởng
    tới đâu). Không cần audit log riêng.

@@ -1,38 +1,38 @@
-"""Sinh bản kê (manifest) topic Kafka từ registry — diệt khoảng trống production #8.
+"""Sinh bản kê (manifest) topic Kafka từ registry — đóng khoảng trống production #8.
 
-VẤN ĐỀ. Hôm nay Kafka bật `auto.create.topics.enable=true`: hễ ai đó produce/consume
-một topic chưa tồn tại, broker LẲNG LẶNG tạo nó với partition/retention/RF mặc định.
+Vấn đề: hôm nay Kafka bật `auto.create.topics.enable=true`: hễ ai đó produce/consume
+một topic chưa tồn tại, broker lẳng lặng tạo nó với partition/retention/RF mặc định.
 Tiện lúc dựng lab, nhưng ở production đây là một lỗ hổng:
-  - gõ sai tên topic -> tạo ra topic RÁC thay vì báo lỗi;
+  - gõ sai tên topic -> tạo ra topic rác thay vì báo lỗi;
   - không ai kiểm soát được số partition (giới hạn song song) hay retention;
   - "có những topic nào" không có nguồn sự thật — phải đi hỏi broker đang chạy.
 
-MỤC TIÊU. Khai MỌI topic MỘT LẦN trong registry, sinh ra:
+Mục tiêu: khai mọi topic một lần trong registry, sinh ra:
   (a) kafka/topics.json      — manifest khai báo, máy đọc được, diff được;
   (b) kafka/create-topics.sh — script tạo topic idempotent (`--if-not-exists`).
-Có hai thứ này rồi thì mới TẮT được `auto.create.topics` một cách an toàn (bước cuối,
+Có hai thứ này rồi thì mới tắt được `auto.create.topics` một cách an toàn (bước cuối,
 sau khi đối chiếu với Kafka thật — xem ADR-0020).
 
-BA NGUỒN TOPIC, và đây là chỗ tinh tế nhất của file:
+Topic đến từ ba nguồn, và đây là chỗ tinh tế nhất của file:
 
-  1. DATASET  — mọi dataset có `source.topic`. Suy thẳng từ registry. Đây là phần
+  1. dataset  — mọi dataset có `source.topic`. Suy thẳng từ registry. Đây là phần
      "metadata-driven" thật: thêm một dataset = thêm một topic, không đụng file này.
 
-  2. DLQ      — mỗi sink connector có một topic `dlq.<connector>`. KHÔNG tự liệt kê
+  2. DLQ      — mỗi sink connector có một topic `dlq.<connector>`. Không tự liệt kê
      lại ở đây; tái dùng đúng danh sách mà generators/dlq.py đã tính, nếu không ta
-     lại đẻ ra chính thứ sprawl đang diệt (hai nơi cùng khai danh sách DLQ, lệch nhau).
+     lại đẻ ra chính thứ sprawl đang đóng (hai nơi cùng khai danh sách DLQ, lệch nhau).
 
-  3. HẠ TẦNG  — `dlq.events` (đầu ra của dlq-processor) và `_connect_{configs,offsets,
-     status}` (topic nội bộ của Kafka Connect). Chúng KHÔNG phải dataset, nên được
-     khai TƯỜNG MINH ở đây dưới dạng hằng số có giải thích. Ranh giới quan trọng:
+  3. hạ tầng  — `dlq.events` (đầu ra của dlq-processor) và `_connect_{configs,offsets,
+     status}` (topic nội bộ của Kafka Connect). Chúng không phải dataset, nên được
+     khai tường minh ở đây dưới dạng hằng số có giải thích. Ranh giới quan trọng:
      phần (1)(2) suy ra được, phần (3) phải khai tay — và ta nói rõ điều đó thay vì
      giấu, để người đọc biết chỗ nào là "sự thật suy diễn" chỗ nào là "sự thật khai báo".
 
-NGUYÊN TẮC "TÁI TẠO HIỆN TRẠNG TRƯỚC" (strangler-fig). Manifest đầu tiên phải mô tả
-đúng những gì auto-create ĐANG tạo ra, để khi tắt auto-create thì KHÔNG có gì đổi.
+Nguyên tắc "tái tạo hiện trạng trước" (strangler-fig): manifest đầu tiên phải mô tả
+đúng những gì auto-create đang tạo ra, để khi tắt auto-create thì không có gì đổi.
 Vì vậy: partition = mặc định hiện tại, RF = 1 (single node, ADR-0005). Việc tăng
 partition cho `transactions` (throughput cao) hay kéo dài retention cho DLQ là thay
-đổi CÓ CHỦ Ý về sau, KHÔNG lén nhét vào bước này — nếu nhét, manifest sẽ lệch với
+đổi có chủ ý về sau, không lén nhét vào bước này — nếu nhét, manifest sẽ lệch với
 topic thật và mất luôn khả năng đối chiếu.
 """
 from __future__ import annotations
@@ -42,11 +42,11 @@ import json
 from ..registry import Dataset, endpoint
 from . import debezium, dlq
 
-# RF=1 vì Kafka single-node (ADR-0005). Khoá ở MỘT chỗ; lên multi-broker thì đây là
+# RF=1 vì Kafka single-node (ADR-0005). Khoá ở một chỗ; lên multi-broker thì đây là
 # giá trị đổi theo env — cùng lý do và cùng kiểu với DLQ_REPLICATION_FACTOR bên dlq.py.
 REPLICATION_FACTOR = 1
 
-# Số partition mặc định cho topic dữ liệu. Bằng 1 để TÁI TẠO đúng thứ auto-create
+# Số partition mặc định cho topic dữ liệu. Bằng 1 để tái tạo đúng thứ auto-create
 # đang sinh ra (broker không set num.partitions -> mặc định Kafka = 1). Tăng nó là
 # quyết định hiệu năng riêng, có ràng buộc (đổi partition của topic nguồn ảnh hưởng
 # key_by của fraud detector) — làm sau, có đối chiếu.
@@ -62,13 +62,13 @@ def _topic(name: str, provenance: str, *, partitions: int = DEFAULT_PARTITIONS,
     """Một dòng manifest. `provenance` trả lời 'topic này từ đâu ra' — để người đọc
     (và catalog về sau) truy được nguồn, không phải đoán.
 
-    `compact`: cleanup.policy=compact giữ BẢN GHI MỚI NHẤT theo key thay vì xoá theo
+    `compact`: cleanup.policy=compact giữ bản GHI mới nhất theo key thay vì xoá theo
     thời gian. Bắt buộc cho topic nội bộ của Connect (chúng là store key-value:
     config/offset/status hiện tại của connector, không phải một dòng lịch sử).
     """
-    # Chỉ topic COMPACTED mới khai cleanup.policy. Topic `delete` để configs RỖNG,
-    # KHÔNG khai `cleanup.policy=delete` — vì đó đã là mặc định broker, và topic thật
-    # do auto-create sinh ra KHÔNG có override này (cột Configs trống khi describe).
+    # Chỉ topic COMPACTED mới khai cleanup.policy. Topic `delete` để configs rỗng,
+    # không khai `cleanup.policy=delete` — vì đó đã là mặc định broker, và topic thật
+    # do auto-create sinh ra không có override này (cột Configs trống khi describe).
     # Khai thừa sẽ làm manifest lệch với hiện trạng và mất khả năng đối chiếu sạch.
     # Cùng lý do retention để mặc định broker (tinh chỉnh sau, có chủ ý).
     configs = {"cleanup.policy": "compact"} if compact else {}
@@ -89,13 +89,13 @@ def _entries(datasets: list[Dataset]) -> list[dict]:
     for ds in datasets:
         entries.append(_topic(ds.topic, f"dataset:{ds.urn}"))
 
-    # (2) DLQ — tái dùng danh sách của dlq.py, KHÔNG tự liệt kê lại.
+    # (2) DLQ — tái dùng danh sách của dlq.py, không tự liệt kê lại.
     for conn in dlq.connectors(datasets):
         entries.append(_topic(conn["dlq_topic"], f"dlq:{conn['connector']}"))
 
-    # (3) HẠ TẦNG — khai tay, có giải thích. Đây là các topic KHÔNG gắn dataset nào
+    # (3) hạ tầng — khai tay, có giải thích. Đây là các topic không gắn dataset nào
     # nhưng vẫn phải tồn tại trước khi dám tắt auto.create.topics. Danh sách này được
-    # chốt bằng cách ĐỐI CHIẾU với Kafka thật (ADR-0020), không phải đoán — `_schemas`
+    # chốt bằng cách đối chiếu với Kafka thật (ADR-0020), không phải đoán — `_schemas`
     # lọt lưới ở bản đầu và chỉ lộ ra khi describe cluster đang chạy.
     entries.append(_topic(DLQ_EVENTS_TOPIC, "pipeline:dlq-processor"))
     # Topic nội bộ Connect: partition khớp mặc định Connect (offsets=25, status=5,
@@ -104,16 +104,16 @@ def _entries(datasets: list[Dataset]) -> list[dict]:
     entries.append(_topic("_connect_offsets", "infra:kafka-connect", partitions=25, compact=True))
     entries.append(_topic("_connect_status", "infra:kafka-connect", partitions=5, compact=True))
     # Store schema của Confluent Schema Registry: single-partition, compacted (SR bắt
-    # buộc như vậy). SR tự tạo, nhưng vẫn phải khai để manifest là bản kê ĐẦY ĐỦ.
+    # buộc như vậy). SR tự tạo, nhưng vẫn phải khai để manifest là bản kê đầy đủ.
     entries.append(_topic("_schemas", "infra:schema-registry", partitions=1, compact=True))
     # Heartbeat của Debezium: nếu có dataset CDC, Debezium tự tạo
     # __debezium-heartbeat.<prefix> (do heartbeat.interval.ms) để đẩy replication slot
     # tiến kể cả khi bảng không đổi. Tắt auto-create mà thiếu nó -> slot đứng -> WAL
-    # phình vô hạn. Suy DIỄN từ TOPIC_PREFIX, chỉ thêm khi thực sự có CDC — cũng là
+    # phình vô hạn. Suy diễn từ TOPIC_PREFIX, chỉ thêm khi thực sự có CDC — cũng là
     # một topic mà đối chiếu-với-Kafka-thật lôi ra, không phải suy luận thuần.
     if debezium.cdc_datasets(datasets):
         entries.append(_topic(f"__debezium-heartbeat.{debezium.TOPIC_PREFIX}", "infra:debezium-heartbeat"))
-    # LƯU Ý: __consumer_offsets KHÔNG nằm đây. Nó do chính broker Kafka quản, tạo bất
+    # Lưu ý: __consumer_offsets không nằm đây. Nó do chính broker Kafka quản, tạo bất
     # kể auto.create.topics, không phải thứ control plane khai hay xoá được.
 
     # Sắp theo tên để output ổn định giữa các lần chạy — điều kiện để `check` có nghĩa.
@@ -142,12 +142,12 @@ _JSON_COMMENT = (
 
 
 def render_manifest(datasets: list[Dataset]) -> str:
-    """Manifest JSON — trả về CHUỖI (không phải dict) để `check` so BYTE-EXACT.
+    """Manifest JSON — trả về chuỗi (không phải dict) để `check` so BYTE-EXACT.
 
     Vì sao byte-exact chứ không so ngữ nghĩa như connector JSON: file này DO CONTROL
-    PLANE SỞ HỮU HOÀN TOÀN, không công cụ ngoài nào format lại nó. Byte-match vừa
+    PLANE sở hữu hoàn toàn, không công cụ ngoài nào format lại nó. Byte-match vừa
     chặt hơn vừa tránh bẫy: bộ so ngữ nghĩa của cli.py được viết riêng cho hình dạng
-    {name, config} của connector, đưa manifest {topics:[...]} vào đó sẽ luôn báo KHỚP
+    {name, config} của connector, đưa manifest {topics:[...]} vào đó sẽ luôn báo khớp
     một cách sai. Trả chuỗi là đi thẳng nhánh so nguyên văn (giống DDL SQL).
     """
     payload = {"_comment": _JSON_COMMENT, "topics": _entries(datasets)}
@@ -158,14 +158,14 @@ def render_script(datasets: list[Dataset], bootstrap: str) -> str:
     """Script tạo topic idempotent, chạy được trong image confluent cp-kafka.
 
     `--if-not-exists`: topic đã có thì bỏ qua, không lỗi -> chạy lại bao nhiêu lần
-    cũng an toàn. Đây là dạng THỰC THI của manifest; cả hai sinh từ cùng _entries()
+    cũng an toàn. Đây là dạng thực THI của manifest; cả hai sinh từ cùng _entries()
     nên không thể lệch nhau. `bootstrap` (địa chỉ broker) đọc từ connection kafka.
     """
     lines = [
         "#!/usr/bin/env bash",
         "# " + _JSON_COMMENT,
         "#",
-        "# Tạo mọi topic mà hệ thống cần, idempotent. Chạy TRƯỚC khi tắt",
+        "# Tạo mọi topic mà hệ thống cần, idempotent. Chạy trước khi tắt",
         "# auto.create.topics (xem ADR-0020). Vd:",
         "#   docker exec bigdata-kafka bash /opt/bitnami/kafka/create-topics.sh",
         "set -euo pipefail",

@@ -3,9 +3,9 @@
 --   Nguồn:    metadata/datasets/metrics/*.yaml
 --   Sinh lại: python -m dataplatform.cli write
 --
--- Bảng ĐỆM (Kafka engine) + MATERIALIZED VIEW cho mỗi metric.
+-- Bảng đệm (Kafka engine) + MATERIALIZED VIEW cho mỗi metric.
 --   topic Kafka -> <m>_kafka -> <m>_mv -> <m>
--- Bảng Kafka ĐỌC MỘT LẦN LÀ MẤT: đừng SELECT thẳng vào nó khi MV đang
+-- Bảng Kafka đọc một lần là mất: đừng SELECT thẳng vào nó khi MV đang
 -- chạy, sẽ cướp dữ liệu của MV.
 -- =====================================================================
 

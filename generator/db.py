@@ -20,7 +20,7 @@ def load_accounts(conn):
     Load tất cả active accounts vào memory.
     Trả về list of dict để pick random nhanh.
 
-    KHÔNG load frozen/closed accounts — app thật không tạo giao dịch
+    không load frozen/closed accounts — app thật không tạo giao dịch
     trên account inactive.
     """
     cur = conn.cursor()

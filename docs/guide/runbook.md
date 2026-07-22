@@ -41,12 +41,12 @@ contract rồi `write`.
 2. `cli write` → tự sinh: Debezium `table.include.list`, publication, ES/S3 sink, topic, DDL ClickHouse,
    lineage, DAG. `cli check`.
 3. Áp: `connectors apply` (Kafka Connect), `clickhouse_migrate apply` nếu có sink CH.
-4. Bảng metric MỚI = init sinh tự có (idempotent), không cần migration.
+4. Bảng metric mới = init sinh tự có (idempotent), không cần migration.
 
 ### Thêm một metric (Flink → ClickHouse)
 
 1. `metadata/pipelines/stream/<metric>.yaml` (spec Flink) + `metadata/datasets/metrics/<metric>.yaml`
-   (sink ClickHouse). Cột metric khai MỘT chỗ → sinh ROW Flink + bảng đích + Kafka + MV khớp nhau ([ADR-0023](../decisions/0023-flink-metric-runner-declarative.md)/[0019](../decisions/0019-generate-clickhouse-metric-ddl.md)).
+   (sink ClickHouse). Cột metric khai một chỗ → sinh ROW Flink + bảng đích + Kafka + MV khớp nhau ([ADR-0023](../decisions/0023-flink-metric-runner-declarative.md)/[0019](../decisions/0019-generate-clickhouse-metric-ddl.md)).
 2. `cli write && cli check`.
 3. Áp: `flink_metrics apply` (resubmit runner) + `clickhouse_migrate apply`.
 
@@ -58,7 +58,7 @@ contract rồi `write`.
 
 ### Xử lý breaking change (compat gate chặn)
 
-Nếu PR đổi type không promote được / thêm cột `nullable:false` / biến optional→required → CI `compat` ĐỎ
+Nếu PR đổi type không promote được / thêm cột `nullable:false` / biến optional→required → CI `compat` đỏ
 ([ADR-0030](../decisions/0030-ci-plan-compat-gate.md)). Cách xử:
 - **Ưu tiên:** đổi thành additive (cột mới nullable, giữ cột cũ) — tương thích ngược.
 - Nếu buộc phá: bump version dataset/topic (contract mới song song), migrate consumer, rồi bỏ cũ. Không
@@ -82,8 +82,8 @@ Iceberg: dùng `ALTER TABLE` native + snapshot, không runner ([ADR-0036](../dec
 python -m dataplatform.deployers.connectors plan  --ref <commit-tốt>   # xem rollback đổi gì
 python -m dataplatform.deployers.connectors apply --ref <commit-tốt>   # áp lại config connector ở ref đó
 ```
-Áp lại desired state đã commit ở ref cũ ([ADR-0034](../decisions/0034-rollback-via-git-ref.md)). Rollback DỮ
-LIỆU Iceberg: `CALL iceberg.system.rollback_to_snapshot(...)`.
+Áp lại desired state đã commit ở ref cũ ([ADR-0034](../decisions/0034-rollback-via-git-ref.md)). Rollback dữ
+liệu Iceberg: `CALL iceberg.system.rollback_to_snapshot(...)`.
 
 ### Data quality (kiểm dữ liệu thật)
 
@@ -99,7 +99,7 @@ LIỆU Iceberg: `CALL iceberg.system.rollback_to_snapshot(...)`.
 
 ---
 
-## Runtime phiên-RIÊNG (máy 15GB, không chạy tất cả cùng lúc)
+## Runtime phiên-riêng (máy 15GB, không chạy tất cả cùng lúc)
 
 | Việc | Bật gì | Cổng |
 |---|---|---|
@@ -121,7 +121,7 @@ Dừng bớt để nhường RAM: `docker compose stop` (stack chính) / `... -f
 | `docker exec /opt/...` → `C:/Program Files/Git/opt/...` | Git Bash mangle path Unix | Prefix `MSYS_NO_PATHCONV=1` |
 | Migration runner treo | Bảng `ENGINE=Kafka` cần broker; Kafka down | Runner chỉ áp `migrations/`, không áp baseline init (cần Kafka) |
 | Airflow DAG không load, dags rỗng | Volume `./airflow/dags` sai (project-dir là `airflow/`) | Dùng `./dags` trong compose airflow |
-| CDC không produce, log `UNKNOWN_TOPIC_OR_PARTITION` | `auto.create.topics=false` (ADR-0020) + chưa tạo topic | `docker compose up -d kafka-init` (chạy create-topics.sh) TRƯỚC khi CDC produce |
+| CDC không produce, log `UNKNOWN_TOPIC_OR_PARTITION` | `auto.create.topics=false` (ADR-0020) + chưa tạo topic | `docker compose up -d kafka-init` (chạy create-topics.sh) trước khi CDC produce |
 | Sau restart chỉ vài bảng có Avro schema | Slot Debezium bền (PG volume) nhưng Schema Registry reset → resume từ offset cũ, không re-snapshot | Xoá connector → đợi slot `active=f` → `pg_drop_replication_slot` → re-apply (fresh snapshot). Bảng rỗng thì không có schema — đúng, không phải lỗi |
 | OM search trả 0 table (entity vẫn còn) | ES của OM chết → search rỗng dù postgres còn entity | Bật lại ES; hoặc nạp lại `openmetadata apply` (catalog tái tạo từ `graph.json`) |
 | File cứ hiện "modified" (LF↔CRLF) | Generator ghi LF, Git chuẩn hoá CRLF | Nhiễu vô hại; `git checkout -- <file>` nếu không có diff thật |

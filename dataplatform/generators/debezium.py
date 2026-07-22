@@ -1,11 +1,11 @@
 """Sinh config Debezium source connector từ dataset contract.
 
-Đây là generator fan-in QUAN TRỌNG NHẤT: nó sinh `table.include.list` bằng cách
+Generator fan-in: sinh `table.include.list` bằng cách
 gộp mọi dataset CDC. Cùng với generator publication (postgres_publication.py),
-nó diệt sprawl #2/#3 — trước đây danh sách bảng CDC bị khai TAY ở HAI nơi
-(publication SQL + connector JSON), lệch một bảng là MẤT CDC ÂM THẦM.
+nó đóng sprawl #2/#3 — trước đây danh sách bảng CDC bị khai tay ở hai nơi
+(publication SQL + connector JSON), lệch một bảng là mất CDC âm thầm.
 
-Sau khi cả hai cùng sinh từ registry, chúng KHÔNG THỂ lệch nhau nữa, vì cùng đọc
+Sau khi cả hai cùng sinh từ registry, chúng không thể lệch nhau nữa, vì cùng đọc
 một nguồn (danh sách dataset CDC).
 """
 from __future__ import annotations
@@ -15,7 +15,7 @@ from ..registry import Dataset, endpoint
 CONNECTOR_NAME = "postgres-source-connector"
 CONNECTOR_CLASS = "io.debezium.connector.postgresql.PostgresConnector"
 
-# Prefix topic + tên slot/publication. Đây là các quy ước khoá ở MỘT chỗ.
+# Prefix topic + tên slot/publication. Đây là các quy ước khoá ở một chỗ.
 # Đổi prefix = mọi consumer hạ nguồn phải đổi, nên nó sống ở đây, không rải rác.
 TOPIC_PREFIX = "bankdb"
 SLOT_NAME = "debezium_slot"
@@ -31,7 +31,7 @@ def cdc_datasets(datasets: list[Dataset]) -> list[Dataset]:
 def table_include_list(datasets: list[Dataset]) -> str:
     """Chuỗi `schema.table,schema.table,...` cho Debezium.
 
-    ĐÂY là mẩu sự thật bị chép tay ở 2 nơi. Giờ nó suy từ registry.
+    Đây là mẩu sự thật bị chép tay ở 2 nơi. Giờ nó suy từ registry.
     """
     members = cdc_datasets(datasets)
     return ",".join(
@@ -46,7 +46,7 @@ def render(datasets: list[Dataset], conns: dict[str, dict]) -> dict:
         "connector.class": CONNECTOR_CLASS,
         "tasks.max": "1",
 
-        # Postgres nguồn + role replication đọc TỪ connection postgres_main.endpoints.
+        # Postgres nguồn + role replication đọc từ connection postgres_main.endpoints.
         "database.hostname": endpoint(conns, "postgres_main", "connect_hostname"),
         "database.port": endpoint(conns, "postgres_main", "connect_port"),
         "database.user": endpoint(conns, "postgres_main", "connect_user"),
@@ -56,7 +56,7 @@ def render(datasets: list[Dataset], conns: dict[str, dict]) -> dict:
         "plugin.name": "pgoutput",
         "slot.name": SLOT_NAME,
         "publication.name": PUBLICATION_NAME,
-        # disabled: Debezium KHÔNG tự tạo publication. Ta quản publication bằng
+        # disabled: Debezium không tự tạo publication. Ta quản publication bằng
         # SQL sinh riêng (postgres_publication.py). Nếu để 'filtered', Debezium
         # tự sửa publication -> có 2 thứ cùng quản 1 publication -> drift.
         "publication.autocreate.mode": "disabled",

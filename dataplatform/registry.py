@@ -1,7 +1,7 @@
 """Đọc và validate các dataset contract trong metadata/.
 
 Đây là tầng thấp nhất của control plane. Mọi generator đều đi qua đây, nên
-contract sai sẽ bị chặn ở MỘT chỗ thay vì làm hỏng từng generator một cách
+contract sai sẽ bị chặn ở một chỗ thay vì làm hỏng từng generator một cách
 khác nhau.
 """
 from __future__ import annotations

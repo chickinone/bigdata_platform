@@ -1,14 +1,14 @@
 """Compatibility gate — chặn thay đổi contract phá vỡ BACKWARD (Avro/Schema-Registry).
 
-**BACKWARD** = schema MỚI đọc được dữ liệu ghi bằng schema CŨ (consumer nâng cấp
+**BACKWARD** = schema mới đọc được dữ liệu ghi bằng schema cũ (consumer nâng cấp
 trước producer). Đây là chế độ Schema Registry chặn ở Pha 2 — nay đưa lên PR/CI để
-breaking change ĐỎ trước khi merge, thay vì nổ lúc runtime.
+breaking change đỏ trước khi merge, thay vì nổ lúc runtime.
 
 Dịch luật Avro BACKWARD sang contract cột (so base ref vs working tree):
 
-  VỠ (chặn merge):
+  Vỡ (chặn merge):
     - Thêm cột `nullable:false` (không default) — reader mới đọc data cũ thiếu cột.
-    - Đổi type sang kiểu KHÔNG promote được (vd long->int, string->long).
+    - Đổi type sang kiểu không promote được (vd long->int, string->long).
     - Đổi `nullable: true -> false` (biến optional thành required).
   OK (cho qua):
     - Xoá cột — reader mới bỏ qua field thừa của data cũ (chỉ ghi chú, không chặn).
@@ -24,8 +24,8 @@ import subprocess
 
 import yaml
 
-# Promote AN TOÀN cho BACKWARD: reader (schema mới) đọc được writer (kiểu cũ) nếu kiểu
-# mới RỘNG hơn. base_type -> tập current_type hợp lệ. Kiểu ngoài bảng phải khớp hệt.
+# Promote AN toàn cho BACKWARD: reader (schema mới) đọc được writer (kiểu cũ) nếu kiểu
+# mới rộng hơn. base_type -> tập current_type hợp lệ. Kiểu ngoài bảng phải khớp hệt.
 _PROMOTIONS = {
     "int": {"int", "long", "float", "double"},
     "long": {"long", "float", "double"},
@@ -56,14 +56,14 @@ def _type_ok(base_t: str, cur_t: str) -> bool:
 
 
 def compare_columns(base_cols: list[dict], cur_cols: list[dict]) -> list[str]:
-    """Trả danh sách thông điệp VỠ BACKWARD giữa hai bộ cột của cùng một dataset."""
+    """Trả danh sách thông điệp vỡ BACKWARD giữa hai bộ cột của cùng một dataset."""
     base = {c["name"]: c for c in base_cols}
     cur = {c["name"]: c for c in cur_cols}
     breaks: list[str] = []
 
     for name, cc in cur.items():
         bc = base.get(name)
-        if bc is None:  # cột MỚI
+        if bc is None:  # cột mới
             if not _nullable(cc):
                 breaks.append(f"thêm cột `{name}` nullable=false (không default) — data cũ thiếu cột này")
             continue
@@ -99,7 +99,7 @@ def git_ls(ref: str, path_prefix: str) -> list[str]:
 
 
 def datasets_at_ref(ref: str) -> dict[str, dict]:
-    """{urn -> raw contract} đọc từ metadata/datasets tại một git ref (KHÔNG validate
+    """{urn -> raw contract} đọc từ metadata/datasets tại một git ref (không validate
     schema — chỉ cần urn + columns để so compat)."""
     out: dict[str, dict] = {}
     for path in git_ls(ref, "metadata/datasets"):

@@ -2,10 +2,10 @@
 
 Khác ES sink ở một điểm quan trọng về mô hình:
 
-    ES sink   : MỘT dataset  -> MỘT connector   (quan hệ 1-1)
-    S3 sink   : NHIỀU dataset -> MỘT connector   (quan hệ N-1, gộp `topics`)
+    ES sink   : một dataset  -> một connector   (quan hệ 1-1)
+    S3 sink   : nhiều dataset -> một connector   (quan hệ N-1, gộp `topics`)
 
-Đây là generator "tổng hợp" đầu tiên — nó phải nhìn TOÀN BỘ registry chứ không
+Đây là generator "tổng hợp" đầu tiên — nó phải nhìn toàn bộ registry chứ không
 chỉ một contract. Cũng chính là hình dạng mà Debezium `table.include.list` sẽ cần.
 """
 from __future__ import annotations
@@ -19,7 +19,7 @@ CONNECTOR_CLASS = "io.confluent.connect.s3.S3SinkConnector"
 def _members(datasets: list[Dataset]) -> list[Dataset]:
     """Dataset nào đi vào Bronze.
 
-    Chỉ CDC mới vào Bronze: Bronze là bản sao trung thực của DỮ LIỆU NGUỒN.
+    Chỉ CDC mới vào Bronze: Bronze là bản sao trung thực của dữ liệu nguồn.
     fraud-alerts là dữ liệu phái sinh do Flink đẻ ra — tính lại được từ nguồn,
     nên không cần lưu trữ lâu dài ở lake.
     """
@@ -37,7 +37,7 @@ def render(datasets: list[Dataset], conns: dict[str, dict]) -> dict:
         # (metadata sprawl #4).
         "topics": ",".join(d.topic for d in members),
 
-        # Endpoint object store đọc TỪ connection s3_minio, không hardcode.
+        # Endpoint object store đọc từ connection s3_minio, không hardcode.
         "s3.bucket.name": endpoint(conns, "s3_minio", "bucket_bronze"),
         "s3.region": endpoint(conns, "s3_minio", "region"),
         "store.url": endpoint(conns, "s3_minio", "store_url"),
@@ -54,7 +54,7 @@ def render(datasets: list[Dataset], conns: dict[str, dict]) -> dict:
         "value.converter": "io.confluent.connect.avro.AvroConverter",
         "value.converter.schema.registry.url": sr,
 
-        # Ghi file khi đủ 1000 record HOẶC sau 5 phút - cái nào tới trước.
+        # Ghi file khi đủ 1000 record hoặc sau 5 phút - cái nào tới trước.
         "flush.size": "1000",
         "rotate.interval.ms": "300000",
         "rotate.schedule.interval.ms": "600000",

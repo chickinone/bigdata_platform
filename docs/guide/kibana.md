@@ -25,7 +25,7 @@ curl.exe http://localhost:9200/_cat/indices?v
 
 ---
 
-## 2. ⚠️ Hai giới hạn về mapping cần biết trước
+## 2. Hai giới hạn về mapping cần biết trước
 
 Cả hai bắt nguồn từ `schema.ignore=true` ở ES sink — ES **tự đoán** mapping thay vì lấy từ Avro schema.
 
@@ -33,7 +33,7 @@ Cả hai bắt nguồn từ `schema.ignore=true` ở ES sink — ES **tự đoá
 đến ES dưới dạng chuỗi. ES map chúng thành `text`/`keyword`, nên **filter dạng số không hoạt động**:
 
 ```text
-balance > 10000        ← KHÔNG chạy như mong đợi
+balance > 10000        ← không chạy như mong đợi
 status: "frozen"       ← chạy tốt, dùng cái này
 ```
 

@@ -22,7 +22,7 @@ Hai quyết định thiết kế đáng chú ý (chi tiết ở docs/decisions/0
    nhất đúng lúc hệ thống đang hỏng. Nếu ClickHouse cũng đang sập mà ta INSERT
    thẳng, ta mất bản ghi lỗi ngay tại thời điểm cần nó nhất.
 
-2. **KHÔNG tự động replay.** Bản trước đây gửi message lỗi ngược về *topic gốc*.
+2. **không tự động replay.** Bản trước đây gửi message lỗi ngược về *topic gốc*.
    Với `bankdb.public.transactions`, topic đó cũng là nguồn của Flink — nên một
    lỗi ES tạm thời sẽ khiến giao dịch **bị đếm lại** và làm sai dashboard. Ta ghi
    nhận và PARK; việc phát lại là quyết định của con người, có công cụ riêng.
@@ -116,11 +116,11 @@ def parse_headers(headers):
 def decide_action(category):
     """Quyết định làm gì với bản ghi lỗi.
 
-    Hiện MỌI nhóm đều PARKED — ghi nhận rồi dừng, chờ người xử lý.
+    Hiện mọi nhóm đều PARKED — ghi nhận rồi dừng, chờ người xử lý.
 
     Vì sao TRANSIENT cũng không tự replay: đích replay đúng phải là một topic
-    CHỈ connector đó đọc. Topic gốc không thoả (Flink cũng đọc). Xây topic retry
-    riêng thì vướng: ES sink lấy tên index TỪ tên topic, còn S3 sink lấy đường
+    chỉ connector đó đọc. Topic gốc không thoả (Flink cũng đọc). Xây topic retry
+    riêng thì vướng: ES sink lấy tên index từ tên topic, còn S3 sink lấy đường
     dẫn partition từ tên topic — nên phải thêm RegexRouter cho từng connector.
     Đó là việc riêng, làm nửa vời còn tệ hơn không làm.
 
@@ -133,8 +133,8 @@ def decide_action(category):
 def build_event(msg, meta, category, action):
     """Dựng bản ghi enrich để đẩy sang ClickHouse.
 
-    Khoá phải KHỚP TUYỆT ĐỐI cột của metrics.dlq_events_kafka. Lệch một khoá là
-    Materialized View bỏ dòng đó mà KHÔNG báo lỗi — chế độ hỏng tệ nhất của
+    Khoá phải khớp tuyệt đối cột của metrics.dlq_events_kafka. Lệch một khoá là
+    Materialized View bỏ dòng đó mà không báo lỗi — chế độ hỏng tệ nhất của
     ClickHouse (xem ADR-0007).
     """
     now = datetime.datetime.now(datetime.timezone.utc)
@@ -149,14 +149,14 @@ def build_event(msg, meta, category, action):
         "error_stage": meta.get("stage", "unknown"),
         # Cắt ngắn: stack trace có thể dài hàng KB, và ta lưu 30 ngày.
         "error_message": (meta.get("exception.message", "") or "")[:2000],
-        # Chỉ lưu KHOÁ, không lưu nội dung message: customers chứa PII
+        # Chỉ lưu khoá, không lưu nội dung message: customers chứa PII
         # (full_name/email/phone). Nội dung gốc vẫn nằm trong topic DLQ nếu cần
         # điều tra — không cần nhân bản nó sang ClickHouse.
         "message_key": (msg.key.decode("utf-8", errors="replace") if msg.key else ""),
         # Vị trí trong TOPIC DLQ — khoá chống trùng của ReplacingMergeTree.
         "dlq_partition": msg.partition,
         "dlq_offset": msg.offset,
-        # Vị trí trong TOPIC GỐC — thứ người vận hành cần để TÌM LẠI bản ghi lỗi
+        # Vị trí trong TOPIC gốc — thứ người vận hành cần để tìm lại bản ghi lỗi
         # mà phát lại. Hai cái này khác nhau; trộn chúng làm một là mất đường về.
         # -1 = header không có (connector chưa bật context.headers.enable).
         "original_partition": _to_int(meta.get("partition"), -1),
@@ -233,11 +233,11 @@ def main():
         )
 
         if category == "PERMANENT":
-            log.warning("  → lỗi VĨNH VIỄN: dữ liệu/schema hỏng, thử lại vô ích. Cần người xem.")
+            log.warning("  → lỗi vĩnh viễn: dữ liệu/schema hỏng, thử lại vô ích. Cần người xem.")
         elif category == "TRANSIENT":
-            log.warning("  → lỗi TẠM THỜI: đã park. Sửa hạ tầng rồi phát lại thủ công.")
+            log.warning("  → lỗi tạm thời: đã park. Sửa hạ tầng rồi phát lại thủ công.")
         else:
-            log.warning(f"  → CHƯA PHÂN LOẠI: {event['error_class']} — cân nhắc bổ sung vào TRANSIENT/PERMANENT.")
+            log.warning(f"  → chưa phân loại: {event['error_class']} — cân nhắc bổ sung vào TRANSIENT/PERMANENT.")
 
         if time.time() - last_stats > 30:
             log.info("=== Thống kê ===")

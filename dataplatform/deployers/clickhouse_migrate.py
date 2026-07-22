@@ -1,22 +1,22 @@
-"""Deployer migration ClickHouse — versioned, KHÔNG init-once (Pha 7).
+"""Deployer migration ClickHouse — versioned, không init-once (Pha 7).
 
     python -m dataplatform.deployers.clickhouse_migrate plan    # xem migration chờ
     python -m dataplatform.deployers.clickhouse_migrate apply   # áp migration chờ
 
-VẤN ĐỀ init-once: `clickhouse/init/*.sql` (schema metric SINH TỪ CONTRACT) chỉ chạy
-lúc DB MỚI. DB đang sống mà đổi contract — thêm cột vào metric cũ, thêm bảng infra —
-thì `CREATE ... IF NOT EXISTS` KHÔNG đụng bảng đã tồn tại, nên thay đổi không tới nơi.
+Vấn đề với init-once: `clickhouse/init/*.sql` (schema metric sinh từ contract) chỉ chạy
+lúc DB mới. DB đang sống mà đổi contract — thêm cột vào metric cũ, thêm bảng infra —
+thì `CREATE ... IF NOT EXISTS` không đụng bảng đã tồn tại, nên thay đổi không tới nơi.
 
-HAI LỚP tách bạch, mỗi lớp làm đúng việc:
+Hai lớp tách bạch, mỗi lớp làm đúng việc:
 
-  BASELINE (khai báo) — `clickhouse/init/*.sql`, sinh từ contract, idempotent. Là mầm
-    CÀI MỚI: bảng metric mới = tự có. KHÔNG do runner này áp (nó có bảng Kafka-engine
+  Baseline (khai báo) — `clickhouse/init/*.sql`, sinh từ contract, idempotent. Là mầm
+    cài mới: bảng metric mới = tự có. Không do runner này áp (nó có bảng Kafka-engine
     cần broker sống; cài mới chạy lúc dựng stack).
 
-  MIGRATION (mệnh lệnh, versioned) — `migrations/clickhouse/NNNN_*.sql`. Thay đổi
-    INCREMENTAL mà IF NOT EXISTS không làm được: `ALTER TABLE ADD COLUMN`, bảng infra
-    mới, backfill. Runner này lo lớp đó: áp MỘT LẦN theo thứ tự, ghi
-    `metrics.schema_migrations`, BẤT BIẾN (sửa file đã áp = lỗi). Áp được lên DB SỐNG.
+  Migration (mệnh lệnh, versioned) — `migrations/clickhouse/NNNN_*.sql`. Thay đổi
+    incremental mà IF NOT EXISTS không làm được: `ALTER TABLE ADD COLUMN`, bảng infra
+    mới, backfill. Runner này lo lớp đó: áp một lần theo thứ tự, ghi
+    `metrics.schema_migrations`, bất biến (sửa file đã áp = lỗi). Áp được lên DB sống.
 
 Idempotent: chạy lại chỉ áp phần chưa áp. Kiểm chứng cuối vẫn là verifier
 `clickhouse_schema` (live vs contract).

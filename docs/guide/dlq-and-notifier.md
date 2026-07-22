@@ -46,7 +46,7 @@ ngay tại thời điểm cần nó nhất**. Qua Kafka thì chúng nằm chờ.
 | `context.headers.enable: true` | **Bắt buộc.** Thiếu nó → không có header `__connect.errors.*` → mọi lỗi thành `UNKNOWN` → phân loại vô nghĩa. |
 | `errors.log.include.messages: false` | **Cố ý.** Nó in nội dung bản ghi ra log, mà `customers` chứa `full_name`/`email`/`phone`. Log không phải chỗ cho PII. |
 
-> ⚠️ **`errors.tolerance: all` chỉ an toàn khi có người nhìn.** Nó biến "task chết ồn ào" thành "bản
+> **`errors.tolerance: all` chỉ an toàn khi có người nhìn.** Nó biến "task chết ồn ào" thành "bản
 > ghi lặng lẽ sang DLQ". Không ai xem `metrics.dlq_events` thì đây là **bước lùi** so với fail-fast.
 > Việc còn nợ: dashboard Grafana + cảnh báo khi DLQ tăng đột biến.
 
@@ -63,7 +63,7 @@ Danh sách 6 topic DLQ nằm ở [`dlq-processor/dlq_topics.json`](../../dlq-pro
 | `PERMANENT` | `DataException`, `SerializationException`, `SchemaException` | Dữ liệu/schema hỏng — thử lại bao nhiêu lần cũng hỏng y hệt | `PARKED` |
 | `UNKNOWN` | mọi thứ khác | Chưa phân loại được | `PARKED` |
 
-## 4. ⚠️ Vì sao KHÔNG tự động phát lại
+## 4. Vì sao không tự động phát lại
 
 Bản trước của `dlq_processor.py` tự động replay lỗi TRANSIENT về **topic gốc**. Đó là **ba lỗi chồng
 nhau**, và bật nó lên sẽ **chủ động làm hỏng dữ liệu**:
@@ -123,7 +123,7 @@ docker exec -it bigdata-kafka kafka-console-consumer --bootstrap-server kafka:90
 ## 6. Khởi tạo & vận hành
 
 ```bash
-# 1. Tạo bảng (clickhouse/init KHÔNG tự chạy — xem clickhouse-grafana.md)
+# 1. Tạo bảng (clickhouse/init không tự chạy — xem clickhouse-grafana.md)
 docker exec -i bigdata-clickhouse clickhouse-client --user admin \
   --password "$CLICKHOUSE_PASSWORD" --multiquery < clickhouse/init/03_dlq.sql
 

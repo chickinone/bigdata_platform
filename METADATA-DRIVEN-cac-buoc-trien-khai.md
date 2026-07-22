@@ -1,26 +1,26 @@
-# Metadata-driven — TRÌNH TỰ TRIỂN KHAI (từ đâu tới đâu)
+# Metadata-driven — Trình tự triển khai (từ đâu tới đâu)
 
 > File này giải thích **đã làm theo thứ tự nào**, mỗi phần chia ra các bước gì. Không đi sâu code —
 > chi tiết nằm trong `docs/decisions/` (ADR) và code trong `dataplatform/`. Đọc kèm:
-> `docs/roadmap/BDP-metadata-driven-roadmap.md` (cái ĐÍCH) + `docs/architecture/BDP-current-state.md` (điểm xuất phát).
+> `docs/roadmap/BDP-metadata-driven-roadmap.md` (cái đích) + `docs/architecture/BDP-current-state.md` (điểm xuất phát).
 
 ---
 
-## PHẦN A — Tư duy chủ đạo (áp cho MỌI pha)
+## Phần A — Tư duy chủ đạo (áp cho mọi pha)
 
-Toàn bộ dự án chỉ lặp lại MỘT khuôn 6 bước ("strangler fig" — bóp nghẹt dần cái cũ):
+Toàn bộ dự án chỉ lặp lại một khuôn 6 bước ("strangler fig" — bóp nghẹt dần cái cũ):
 
 ```
-1. VIẾT CONTRACT   — khai "sự thật về dữ liệu" MỘT lần vào metadata/*.yaml
-2. VIẾT GENERATOR  — code sinh ra artifact (JSON/SQL/DAG...) TỪ contract
-3. CHECK BYTE-EXACT — so bản sinh với bản VIẾT TAY đang có; phải KHỚP TỪNG BYTE
-4. CẮT CHUYỂN      — khi đã khớp: cho hệ thống dùng bản sinh (deployer apply)
-5. XÓA BẢN CŨ       — xóa file viết tay tương ứng (không để song song)
-6. VERIFY + ADR    — kiểm chứng runtime + ghi một ADR (vì sao làm vậy)
+1. Viết contract    — khai "sự thật về dữ liệu" một lần vào metadata/*.yaml
+2. Viết generator   — code sinh ra artifact (JSON/SQL/DAG...) từ contract
+3. Check byte-exact — so bản sinh với bản viết tay đang có; phải khớp từng byte
+4. Cắt chuyển       — khi đã khớp: cho hệ thống dùng bản sinh (deployer apply)
+5. Xóa bản cũ       — xóa file viết tay tương ứng (không để song song)
+6. Verify + ADR     — kiểm chứng runtime + ghi một ADR (vì sao làm vậy)
 ```
 
 **Vì sao khuôn này an toàn:** bước 3 chứng minh bản sinh == bản cũ *trước khi* dám thay. Không "viết lại
-từ đầu rồi cầu mong nó chạy". `cli check` chính là cái cổng đó — chừng nào chưa khớp thì CHƯA cắt chuyển.
+từ đầu rồi cầu mong nó chạy". `cli check` chính là cái cổng đó — chừng nào chưa khớp thì chưa cắt chuyển.
 
 Ba lệnh xương sống dùng suốt:
 - `python -m dataplatform.cli write` — sinh mọi artifact từ metadata.
@@ -29,18 +29,18 @@ Ba lệnh xương sống dùng suốt:
 
 ---
 
-## PHẦN B — Điểm xuất phát (Pha 0)
+## Phần B — Điểm xuất phát (Pha 0)
 
-Hệ thống ĐÃ chạy được (CDC → Kafka → Flink → ClickHouse/ES/lake → Trino), nhưng "sự thật về một bảng"
+Hệ thống đã chạy được (CDC → Kafka → Flink → ClickHouse/ES/lake → Trino), nhưng "sự thật về một bảng"
 (cột gì, khóa gì, vào topic nào) bị **chép tay ở ~10 nơi**. Đổi một cột = sửa nhiều file, dễ sót → gọi là
-"metadata sprawl". Mục tiêu cả dự án: gom về MỘT nơi (`metadata/`), sinh mọi thứ từ đó.
+"metadata sprawl". Mục tiêu cả dự án: gom về một nơi (`metadata/`), sinh mọi thứ từ đó.
 
 **Bước làm:** dựng khung `dataplatform/` (control plane) + `metadata/` (nơi khai contract) +
 `dataplatform/schemas/*.json` (JSON Schema validate contract). Chốt "registry là YAML trong Git" (ADR-0015).
 
 ---
 
-## PHẦN C — Các pha, theo đúng thứ tự đã làm
+## Phần C — Các pha, theo đúng thứ tự đã làm
 
 ### Pha 1 — Mô hình hóa & mã hóa contract
 1. Định nghĩa **dataset contract** (`metadata/datasets/*.yaml`): urn, layer, owner, source, columns (name/type/
@@ -49,12 +49,12 @@ Hệ thống ĐÃ chạy được (CDC → Kafka → Flink → ClickHouse/ES/lak
 3. Lát cắt dọc đầu tiên để chứng minh khuôn chạy: sinh **5 config ES sink** từ contract (loạt ADR 0011/0018).
 
 ### Pha 2 — Ingestion sinh từ contract
-1. Sinh **Debezium connector + publication SQL** từ CÙNG một danh sách dataset CDC (diệt sprawl #2/#3, ADR-0018).
+1. Sinh **Debezium connector + publication SQL** từ cùng một danh sách dataset CDC (diệt sprawl #2/#3, ADR-0018).
 2. Sinh **DDL ClickHouse** cho metric (bảng đích + Kafka engine + Materialized View — 3 thứ từ 1 `columns`, ADR-0019).
-3. Sinh **bản kê topic Kafka** (`kafka/topics.json` + `create-topics.sh`) để TẮT được `auto.create.topics` an toàn (ADR-0020).
+3. Sinh **bản kê topic Kafka** (`kafka/topics.json` + `create-topics.sh`) để tắt được `auto.create.topics` an toàn (ADR-0020).
 4. Viết **deployer connector idempotent** (`connectors.py`) — biến metadata thành "load-bearing": áp thật lên Kafka Connect (ADR-0021).
 5. **Cắt chuyển**: tắt `auto.create.topics`, chạy bằng bản sinh. Cắm `cli check` vào **CI** (mọi PR gác drift).
-6. Viết **verifier ngược**: so contract vs schema THẬT ở Postgres/ClickHouse (ADR-0022) + so **Avro trên dây** (Schema Registry).
+6. Viết **verifier ngược**: so contract vs schema thật ở Postgres/ClickHouse (ADR-0022) + so **Avro trên dây** (Schema Registry).
 
 ### Pha 3 — Flink (streaming) sinh từ metadata
 1. Khai **pipeline spec** cho metric (dimensions/aggregations bằng biểu thức).
@@ -74,9 +74,9 @@ Hệ thống ĐÃ chạy được (CDC → Kafka → Flink → ClickHouse/ES/lak
 ### Pha 6 — Federation + Catalog/Lineage
 1. Thêm **connection registry** (`metadata/connections/*.yaml`); sinh **Trino catalog** từ đó (ADR-0025).
 2. Verify **federation runtime**: query chéo Postgres × ClickHouse × Iceberg trong 1 câu Trino.
-3. Sinh **lineage graph + data catalog** THUẦN từ metadata (`lineage/graph.json` + `LINEAGE.md`, ADR-0026).
+3. Sinh **lineage graph + data catalog** thuần từ metadata (`lineage/graph.json` + `LINEAGE.md`, ADR-0026).
 4. Dựng **OpenMetadata**; viết `deployers/openmetadata.py` nạp catalog từ `graph.json` (table + PII tag + lineage, ADR-0027).
-5. Tăng dần: tạo table cho **đích sink ngoài** (ES/CH/S3) → lineage đủ 25 cạnh; **lineage cấp CỘT cho Spark**
+5. Tăng dần: tạo table cho **đích sink ngoài** (ES/CH/S3) → lineage đủ 25 cạnh; **lineage cấp cột cho Spark**
    (parse SQL bằng sqlglot, ADR-0028) → đẩy vào OM; **encode connection non-Trino** (kafka/es/s3/schema-registry
    vào registry, generator đọc endpoint từ đó thay vì hardcode, ADR-0029).
 
@@ -100,7 +100,7 @@ Hệ thống ĐÃ chạy được (CDC → Kafka → Flink → ClickHouse/ES/lak
 
 ---
 
-## PHẦN D — Kết quả & cách kiểm lại
+## Phần D — Kết quả & cách kiểm lại
 
 - `metadata/` là nguồn sự thật duy nhất → **19 artifact** sinh tự động, `cli check` **19/19 byte-exact**.
 - Thêm 1 cột = sửa **1 contract** (trước: tối đa 6 file Flink + 3 ClickHouse + Spark + ES).
@@ -110,7 +110,7 @@ Hệ thống ĐÃ chạy được (CDC → Kafka → Flink → ClickHouse/ES/lak
 **Ngoài phạm vi metadata-driven** (trục khác, chưa làm): bảo mật (secret manager + auth service),
 HA/robustness, Silver incremental.
 
-## PHẦN E — Đọc tiếp ở đâu
+## Phần E — Đọc tiếp ở đâu
 
 | Muốn hiểu | Đọc |
 |---|---|

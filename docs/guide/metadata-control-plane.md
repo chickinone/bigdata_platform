@@ -45,9 +45,9 @@ Chạy mọi lệnh ở **thư mục gốc repo** (nơi có `metadata/` và `dat
 ## 3. Ba lệnh
 
 ```bash
-python -m dataplatform.cli check    # so bản sinh với file trên đĩa — KHÔNG ghi gì
-python -m dataplatform.cli show     # in bản sinh ra màn hình — KHÔNG ghi gì
-python -m dataplatform.cli write    # ghi bản sinh ĐÈ lên đĩa
+python -m dataplatform.cli check    # so bản sinh với file trên đĩa — không ghi gì
+python -m dataplatform.cli show     # in bản sinh ra màn hình — không ghi gì
+python -m dataplatform.cli write    # ghi bản sinh đè lên đĩa
 ```
 
 | Lệnh | Đụng đĩa? | Dùng khi |
@@ -138,7 +138,7 @@ stdlib. Xem [ADR-0016](../decisions/0016-rename-platform-to-dataplatform.md).
 ## 5. Thêm một dataset mới
 
 1. Tạo `metadata/datasets/<layer>/<tên>.yaml`. Chép một file có sẵn làm khuôn.
-2. `python -m dataplatform.cli check` → sẽ báo `[MỚI]` vì chưa có file trên đĩa.
+2. `python -m dataplatform.cli check` → sẽ báo `[mới]` vì chưa có file trên đĩa.
 3. `python -m dataplatform.cli show` → đọc kỹ bản sinh.
 4. `python -m dataplatform.cli write` → ghi ra.
 5. Đăng ký connector: xem [`cdc-and-connectors.md`](cdc-and-connectors.md).

@@ -1,4 +1,4 @@
-# Triển khai Metadata-Driven cho dự án MỚI — yêu cầu & việc cần làm
+# Triển khai Metadata-Driven cho dự án mới — yêu cầu & việc cần làm
 
 > Sổ tay (playbook) cho một platform xây từ số 0 muốn metadata-driven ngay từ đầu. Đây là tài liệu
 > **tham khảo tổng quát**, không gắn với hiện trạng `bigdata-platform` (dự án này là brownfield —
@@ -7,7 +7,7 @@
 
 ---
 
-## 0. Câu hỏi phải trả lời TRƯỚC TIÊN: dự án của bạn có nên metadata-driven không?
+## 0. Câu hỏi phải trả lời trước tiên: dự án của bạn có nên metadata-driven không?
 
 Đây là phần quan trọng nhất, và là chỗ nhiều team bỏ qua rồi trả giá.
 
@@ -28,7 +28,7 @@ Khi tích số này **nhỏ**, viết tay config **rẻ hơn** — và xây cont
 | 50+ thực thể, nhiều engine, nhiều team | Metadata-driven **gần như bắt buộc** — sprawl sẽ giết bạn nếu không. |
 | Team < 3 người, chưa có DE có kinh nghiệm | **Đừng.** Ưu tiên ship use case đầu tiên bằng công cụ managed. Xây platform sau. |
 
-**Dấu hiệu bạn THỰC SỰ cần nó** (không phải "nghe hay"):
+**Dấu hiệu bạn thực sự cần nó** (không phải "nghe hay"):
 - Cùng một schema đang bị chép tay ở ≥ 3 công cụ và bạn đã từng bị lệch schema âm thầm.
 - Thêm một cột/bảng buộc sửa nhiều file ở nhiều công cụ, và có người đã bỏ sót.
 - Không trả lời tự động được "cột này chảy tới đâu / PII nằm ở đâu / ai sở hữu".
@@ -190,7 +190,7 @@ Không big-bang. Mỗi pha neo vào một use case đã ship.
 - **Sinh artifact mà không có bước diff/plan.** Generator sai → hỏng hàng loạt. `check` (diff rỗng
   trước khi apply) là bắt buộc.
 - **Cho phép sửa tay artifact "cho nhanh".** Đây là drift — giết single source of truth. Nhãn "FILE
-  SINH TỰ ĐỘNG" + CI chặn là tối thiểu.
+  Sinh tự động" + CI chặn là tối thiểu.
 - **Dựng catalog/DB/mesh trước khi có basics** (registry + generator + check chạy được).
 - **Bỏ qua owner & retention** ở nhóm thông tin ① vì "lo kỹ thuật trước".
 

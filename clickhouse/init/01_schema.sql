@@ -3,7 +3,7 @@
 --   Nguồn:    metadata/datasets/metrics/*.yaml
 --   Sinh lại: python -m dataplatform.cli write
 --
--- Bảng ĐÍCH cho mỗi metric (nơi lưu thật, Grafana đọc).
+-- Bảng đích cho mỗi metric (nơi lưu thật, Grafana đọc).
 -- Cột sinh từ `columns` của contract, nên luôn khớp bảng Kafka + MV
 -- ở 02_kafka_consumers.sql (diệt sprawl #8/#9).
 -- =====================================================================

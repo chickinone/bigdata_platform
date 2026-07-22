@@ -1,19 +1,19 @@
 """Sinh DDL ClickHouse cho tầng serving metric.
 
-ĐÂY LÀ CHỖ DIỆT SPRAWL #8/#9 — sprawl gây ra chế độ hỏng TỆ NHẤT hệ thống.
+Đóng sprawl #8/#9 — chỗ gây ra chế độ hỏng khó chịu nhất hệ thống.
 
-Mỗi metric cần ĐÚNG BỘ 3 đối tượng, và schema của cả 3 phải khớp TUYỆT ĐỐI:
+Mỗi metric cần đúng bộ 3 đối tượng, và schema của cả 3 phải khớp tuyệt đối:
 
     metrics.<m>          bảng đích   (ReplacingMergeTree)  <- Grafana đọc
     metrics.<m>_kafka    bảng đệm    (Kafka engine)        <- kéo từ topic
     metrics.<m>_mv       MV          (INSERT ... SELECT)   <- nối 2 cái trên
 
-Viết tay = 4 metric × 3 = 12 khối schema phải khớp nhau bằng TAY, cộng 4 sink DDL
-bên Flink. Lệch một cột thì MV **bỏ dữ liệu mà KHÔNG báo lỗi** — dashboard vẫn
+Viết tay = 4 metric × 3 = 12 khối schema phải khớp nhau bằng tay, cộng 4 sink DDL
+bên Flink. Lệch một cột thì MV **bỏ dữ liệu mà không báo lỗi** — dashboard vẫn
 xanh, chỉ là rỗng. Sinh ra thì cả 3 cùng đọc `columns` của một contract, nên
 không thể lệch.
 
-Một điểm tinh tế: CÙNG một cột logic được render KHÁC NHAU tuỳ đối tượng —
+Một điểm tinh tế: cùng một cột logic được render khác nhau tuỳ đối tượng —
 `tx_type` là `LowCardinality(String)` ở bảng đích nhưng `String` ở bảng Kafka.
 Đó là lý do "một spec, nhiều cách render đúng" chứ không phải "copy 3 lần".
 """
@@ -21,8 +21,8 @@ from __future__ import annotations
 
 from ..registry import Dataset
 
-# Ánh xạ kiểu LOGIC -> kiểu ClickHouse.
-# Đây là toàn bộ tri thức về ClickHouse của control plane, khoá ở MỘT chỗ.
+# Ánh xạ kiểu logic -> kiểu ClickHouse.
+# Đây là toàn bộ tri thức về ClickHouse của control plane, khoá ở một chỗ.
 _BASE_TYPES = {
     "timestamp": "DateTime64(3)",
     "string": "String",
@@ -35,8 +35,8 @@ _BASE_TYPES = {
 def _ch_type(col: dict, *, low_cardinality_ok: bool, overrides: dict) -> str:
     """Dịch một cột logic sang kiểu ClickHouse.
 
-    `low_cardinality_ok` là mấu chốt: bảng ĐÍCH dùng LowCardinality(String) để
-    nén, nhưng bảng KAFKA phải dùng String thô (Kafka engine parse JSON, không
+    `low_cardinality_ok` là mấu chốt: bảng đích dùng LowCardinality(String) để
+    nén, nhưng bảng Kafka phải dùng String thô (Kafka engine parse JSON, không
     hưởng lợi từ LowCardinality). Cùng cột, hai cách render — đúng cả hai.
     """
     name = col["name"]
@@ -73,7 +73,7 @@ def _spec(ds: Dataset) -> dict:
 def _col_block(ds: Dataset, *, low_cardinality_ok: bool, indent: str = "    ") -> str:
     """Khối danh sách cột — dùng chung cho cả bảng đích lẫn bảng Kafka.
 
-    CHÍNH HÀM NÀY là thứ đảm bảo 2 bảng không lệch cột: chúng gọi cùng một hàm
+    Chính hàm này là thứ đảm bảo 2 bảng không lệch cột: chúng gọi cùng một hàm
     trên cùng một `columns`.
     """
     spec = _spec(ds)
@@ -95,7 +95,7 @@ def render_target_table(ds: Dataset) -> str:
 
     cols = _col_block(ds, low_cardinality_ok=True)
 
-    # version_column CHỈ có ở bảng đích, không có ở Kafka/MV — nó thuộc tầng
+    # version_column chỉ có ở bảng đích, không có ở Kafka/MV — nó thuộc tầng
     # serving (cột phiên bản của ReplacingMergeTree), không phải schema metric.
     version = spec.get("version_column")
     if version:
@@ -114,9 +114,9 @@ def render_target_table(ds: Dataset) -> str:
 
 
 def render_kafka_table(ds: Dataset) -> str:
-    """Bảng đệm Kafka engine — ĐỌC MỘT LẦN LÀ MẤT.
+    """Bảng đệm Kafka engine — đọc một lần là mất.
 
-    Lưu ý: KHÔNG có version_column, và String thay vì LowCardinality.
+    Lưu ý: không có version_column, và String thay vì LowCardinality.
     """
     spec = _spec(ds)
     db, table = spec["database"], spec["table"]
@@ -142,7 +142,7 @@ def render_kafka_table(ds: Dataset) -> str:
 def render_mv(ds: Dataset) -> str:
     """Materialized View — chỉ là trigger INSERT ... SELECT.
 
-    Danh sách cột SELECT phải khớp cột bảng đích, TRỪ version_column (nó có
+    Danh sách cột SELECT phải khớp cột bảng đích, trừ version_column (nó có
     DEFAULT now()). Đây chính là chỗ dễ lệch nhất khi viết tay.
     """
     spec = _spec(ds)
@@ -167,7 +167,7 @@ _HEADER = """\
 
 def render_schema_file(datasets: list[Dataset]) -> str:
     purpose = (
-        "-- Bảng ĐÍCH cho mỗi metric (nơi lưu thật, Grafana đọc).\n"
+        "-- Bảng đích cho mỗi metric (nơi lưu thật, Grafana đọc).\n"
         "-- Cột sinh từ `columns` của contract, nên luôn khớp bảng Kafka + MV\n"
         "-- ở 02_kafka_consumers.sql (diệt sprawl #8/#9)."
     )
@@ -179,9 +179,9 @@ def render_schema_file(datasets: list[Dataset]) -> str:
 
 def render_consumers_file(datasets: list[Dataset]) -> str:
     purpose = (
-        "-- Bảng ĐỆM (Kafka engine) + MATERIALIZED VIEW cho mỗi metric.\n"
+        "-- Bảng đệm (Kafka engine) + MATERIALIZED VIEW cho mỗi metric.\n"
         "--   topic Kafka -> <m>_kafka -> <m>_mv -> <m>\n"
-        "-- Bảng Kafka ĐỌC MỘT LẦN LÀ MẤT: đừng SELECT thẳng vào nó khi MV đang\n"
+        "-- Bảng Kafka đọc một lần là mất: đừng SELECT thẳng vào nó khi MV đang\n"
         "-- chạy, sẽ cướp dữ liệu của MV."
     )
     parts = [_HEADER.format(purpose=purpose)]

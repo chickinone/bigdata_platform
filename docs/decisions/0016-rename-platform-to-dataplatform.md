@@ -26,7 +26,7 @@ phiên bản OS/Python.
 
 Đã kiểm chứng trực tiếp, vì lời đồn "trùng tên stdlib là hỏng" chỉ đúng một nửa:
 
-**Thư mục `platform/` KHÔNG có `__init__.py`** → an toàn:
+**Thư mục `platform/` không có `__init__.py`** → an toàn:
 ```text
 import platform  ->  C:\Python314\Lib\platform.py
 ```
@@ -34,7 +34,7 @@ Lý do: thư mục không có `__init__.py` chỉ là *namespace portion*. Pytho
 tiếp** các path entry còn lại; tìm thấy module thật (`platform.py` trong stdlib) thì module thật
 thắng. Namespace package là phương án chót.
 
-**Thư mục `platform/` CÓ `__init__.py`** → hỏng ngay:
+**Thư mục `platform/` có `__init__.py`** → hỏng ngay:
 ```text
 import platform  ->  D:\bigdata-platform\platform\__init__.py
 AttributeError: module 'platform' has no attribute 'python_version'

@@ -1,6 +1,6 @@
-"""Runner medallion tổng quát — THỰC THI batch job plan sinh từ metadata.
+"""Runner medallion tổng quát — thực THI batch job plan sinh từ metadata.
 
-Data plane của Pha 5: KHÔNG chứa logic transform nào. Job plan (inputs + SQL +
+Data plane của Pha 5: không chứa logic transform nào. Job plan (inputs + SQL +
 output) sinh trên host từ batch pipeline spec (`metadata/pipelines/batch/*.yaml`,
 ADR-0024). Runner này chỉ: đọc input thành view -> chạy SQL -> ghi theo output.
 

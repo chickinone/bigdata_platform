@@ -3,8 +3,8 @@
     python -m dataplatform.deployers.connectors plan    # chỉ xem sẽ đổi gì (mặc định)
     python -m dataplatform.deployers.connectors apply   # PUT thật lên Connect
 
-ĐÂY LÀ CHỖ BIẾN CONTROL PLANE THÀNH "LOAD-BEARING". Trước đây connector đăng ký
-bằng `curl -X POST` thủ công — file JSON sinh ra chỉ là tài liệu, thứ THẬT SỰ cấu
+Trước deployer này, metadata chưa "gánh" gì cả: connector đăng ký
+bằng `curl -X POST` thủ công — file JSON sinh ra chỉ là tài liệu, thứ thật sự cấu
 hình Connect là bàn tay người. Sau deployer này, "đăng ký connector" = chạy một
 lệnh đọc thẳng metadata.
 
@@ -14,9 +14,9 @@ Vì sao `PUT /connectors/{name}/config` chứ không `POST /connectors`:
     cập nhật. Idempotent -> chạy lại bao nhiêu lần cũng an toàn, đúng tinh thần
     plan/apply như Terraform.
 
-Config đọc THẲNG từ generator (không đọc file trên đĩa) nên không thể áp bản cũ:
+Config đọc thẳng từ generator (không đọc file trên đĩa) nên không thể áp bản cũ:
 desired state luôn suy từ contract mới nhất. Các placeholder `${env:...}` giữ
-NGUYÊN — Connect tự resolve bằng EnvVarConfigProvider bên trong container, nên
+nguyên — Connect tự resolve bằng EnvVarConfigProvider bên trong container, nên
 deployer không bao giờ chạm secret.
 """
 from __future__ import annotations
@@ -44,8 +44,8 @@ _CONNECTOR_DIRS = ("debezium", "kafka-connect/es-sinks", "kafka-connect/s3-sinks
 def desired_connectors(ref: str | None = None) -> dict[str, dict]:
     """{tên connector -> config} là desired state.
 
-    ref=None: suy THẲNG từ generator (metadata working tree) — deploy bình thường.
-    ref='<git-ref>': đọc artifact connector ĐÃ COMMIT ở ref đó — ROLLBACK về trạng
+    ref=None: suy thẳng từ generator (metadata working tree) — deploy bình thường.
+    ref='<git-ref>': đọc artifact connector đã COMMIT ở ref đó — ROLLBACK về trạng
     thái lịch sử. Vì `check` bảo đảm artifact == metadata, áp lại artifact ở ref =
     áp lại desired state của ref (không cần chạy lại generator ở ref)."""
     if ref is not None:
@@ -76,7 +76,7 @@ def _connectors_at_ref(ref: str) -> dict[str, dict]:
 
 def _req(method: str, path: str, body: dict | None = None) -> tuple[int, dict | str]:
     """Gọi Connect REST. Trả (status_code, payload). Không ném lỗi HTTP — trả về
-    để nơi gọi tự quyết, vì 404 (chưa có connector) là trạng thái BÌNH THƯỜNG với
+    để nơi gọi tự quyết, vì 404 (chưa có connector) là trạng thái bình thường với
     một deployer, không phải sự cố.
     """
     url = f"{CONNECT_URL}{path}"
@@ -121,7 +121,7 @@ def _diff(desired: dict, current: dict | None) -> tuple[str, list[str]]:
 
 
 def _plan(ref: str | None = None) -> list[tuple[str, str, list[str]]]:
-    """Tính kế hoạch mà KHÔNG ghi gì. Đây là 'check' cho deployer."""
+    """Tính kế hoạch mà không ghi gì. Đây là 'check' cho deployer."""
     plan = []
     for name, cfg in desired_connectors(ref).items():
         action, diffs = _diff(cfg, _current_config(name))
@@ -143,7 +143,7 @@ def cmd_plan(ref: str | None = None) -> int:
 def _wait_running(names: list[str], attempts: int = 10, delay: float = 2.0) -> dict[str, str]:
     """Đợi connector chuyển RUNNING sau khi apply. Trả {tên -> trạng thái cuối}.
 
-    Có bước này vì PUT trả 200 NGAY khi Connect NHẬN config, chứ chưa chắc task đã
+    Có bước này vì PUT trả 200 NGAY khi Connect nhận config, chứ chưa chắc task đã
     chạy — snapshot Debezium mất vài giây. Không đợi thì báo 'xong' lúc nó còn có
     thể sắp FAILED.
     """

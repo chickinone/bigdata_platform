@@ -16,7 +16,7 @@ metrics.<m>_mv      MV         (INSERT ... SELECT)   <- nối 2 cái trên
 ```
 
 4 metric × 3 = **12 khối schema viết tay**, cộng 4 sink DDL bên Flink = 16 khối phải khớp nhau bằng
-tay. Lệch một cột thì **MV bỏ dữ liệu mà KHÔNG báo lỗi** — dashboard vẫn xanh, chỉ là rỗng. Mất dữ
+tay. Lệch một cột thì **MV bỏ dữ liệu mà không báo lỗi** — dashboard vẫn xanh, chỉ là rỗng. Mất dữ
 liệu im lặng là kiểu hỏng đắt nhất.
 
 Chặn trước đó: [ADR-0015](0015-metadata-registry-yaml-first.md) mã hóa 4 dataset OLTP, nhưng **4 metric
@@ -72,7 +72,7 @@ Không so text (comment khác nhau là vô nghĩa). Thay vào đó **hỏi chín
 
 ```
 === Neu BO QUA kafka_max_block_size (thu co y chuan hoa), con khac gi khong?
-  ✅ 12/12 doi tuong GIONG HET NHAU
+  12/12 doi tuong giong het nhau
   oracle: 12 | sinh: 12
 ```
 
@@ -85,7 +85,7 @@ Quá trình này lôi ra một lỗi **chưa ai biết**:
 
 | Bảng | `kafka_max_block_size` |
 |---|---|
-| `timeseries_kafka` | `1048576` ✅ |
+| `timeseries_kafka` | `1048576` |
 | `kpi_kafka` | **thiếu** |
 | `breakdown_kafka` | **thiếu** |
 | `topn_kafka` | **thiếu** |

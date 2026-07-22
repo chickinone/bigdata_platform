@@ -1,14 +1,14 @@
 """Sinh Airflow DAG orchestration batch medallion từ metadata — Pha 7.
 
-Thứ tự tác vụ KHÔNG khai tay: suy từ **phụ thuộc input/output** của batch spec —
+Thứ tự tác vụ không khai tay: suy từ **phụ thuộc input/output** của batch spec —
 job đọc `data-lake-silver` phụ thuộc job GHI ra nó (silver -> gold/iceberg). Cùng
 quan hệ mà `_batch_edges` (lineage) và `_stage` (spark_batch) đã dùng. Thêm/sửa job
 = sửa spec, DAG tự đổi; không đụng file DAG.
 
-Mỗi task chạy ĐÚNG lệnh `docker exec ... spark-submit` như deployer `spark_batch`
+Mỗi task chạy đúng lệnh `docker exec ... spark-submit` như deployer `spark_batch`
 (qua `submit_argv`) — nên DAG chạy y hệt chạy tay, không có "đường thứ hai" để lệch.
 
-Ingestion CDC (Debezium -> Bronze) là stream CHẠY LIÊN TỤC, không phải task batch —
+Ingestion CDC (Debezium -> Bronze) là stream chạy liên tục, không phải task batch —
 nên nó là thượng nguồn ngầm của silver (silver đọc Bronze), không nằm trong DAG này.
 """
 from __future__ import annotations

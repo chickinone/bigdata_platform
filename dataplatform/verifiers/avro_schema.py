@@ -1,9 +1,9 @@
-"""Đối chiếu contract CDC với schema Avro THẬT trong Schema Registry.
+"""Đối chiếu contract CDC với schema Avro thật trong Schema Registry.
 
     python -m dataplatform.verifiers.avro_schema
 
-Đây là nguồn sự thật ĐỘC LẬP thứ ba, và nó thấy thứ hai verifier kia KHÔNG thấy:
-**cách dữ liệu được mã hoá TRÊN DÂY** (trên Kafka), không phải trong DB nguồn hay
+Đây là nguồn sự thật độc lập thứ ba, và nó thấy thứ hai verifier kia không thấy:
+**cách dữ liệu được mã hoá trên dây** (trên Kafka), không phải trong DB nguồn hay
 bảng đích.
 
 Ví dụ quyết định: cột `balance` là `numeric(19,4)` trong Postgres, nhưng trên dây
@@ -14,12 +14,12 @@ thật mới bắt được sai lệch này; Postgres verifier chỉ thấy `num
 `string` trên dây.
 
 Cấu trúc message Debezium: envelope `{before, after, op, ts_ms, ...}`. `before` và
-`after` cùng dùng một record (tên `Value`); `after` thường chỉ THAM CHIẾU tên record
+`after` cùng dùng một record (tên `Value`); `after` thường chỉ THAM chiếu tên record
 đã định nghĩa đầy đủ ở `before`. Verifier lấy field từ record đó.
 
 Chỉ áp cho dataset CDC (Avro). Dataset app_json (metric/alert) là JSON trần, không
-có schema trong registry. Dataset có bảng RỖNG chưa produce message nào -> chưa có
-subject -> verifier BỎ QUA (không phải lỗi).
+có schema trong registry. Dataset có bảng rỗng chưa produce message nào -> chưa có
+subject -> verifier bỏ QUA (không phải lỗi).
 """
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ from ..registry import ContractError, Dataset, load_datasets
 
 SCHEMA_REGISTRY_URL = os.getenv("SCHEMA_REGISTRY_URL_HOST", "http://localhost:8081")
 
-# Kiểu LOGIC -> tập kiểu Avro CHẤP NHẬN (khi KHÔNG encoded_as: string).
+# Kiểu logic -> tập kiểu Avro chấp nhận (khi không encoded_as: string).
 # timestamp nhận cả string (ZonedTimestamp, cho timestamptz) lẫn long (Timestamp,
 # cho timestamp thường) — tuỳ kiểu cột Postgres, nên chấp nhận cả hai.
 _AVRO_OK = {
@@ -107,7 +107,7 @@ def _wire_columns(subject: str) -> dict[str, tuple[str, bool]] | None:
 
 
 def verify_dataset(ds: Dataset):
-    """Trả (errors, warnings) hoặc None nếu BỎ QUA (chưa có schema)."""
+    """Trả (errors, warnings) hoặc None nếu bỏ QUA (chưa có schema)."""
     subject = f"{ds.topic}-value"
     wire = _wire_columns(subject)
     if wire is None:
@@ -125,12 +125,12 @@ def verify_dataset(ds: Dataset):
         logical = c["type"]
 
         if c.get("encoded_as") == "string":
-            # Khẳng định quan trọng nhất: contract khai string -> dây PHẢI là string.
+            # Khẳng định quan trọng nhất: contract khai string -> dây phải là string.
             if avro_type != "string":
                 errors.append(f"cột '{name}': contract encoded_as=string nhưng dây là '{avro_type}'")
         elif logical.startswith("decimal("):
             if avro_type == "string":
-                # Dây là string mà contract QUÊN encoded_as -> generator sẽ thiếu CAST.
+                # Dây là string mà contract quên encoded_as -> generator sẽ thiếu CAST.
                 warnings.append(f"cột '{name}': dây là string nhưng contract THIẾU encoded_as=string")
             elif avro_type != "bytes":
                 errors.append(f"cột '{name}' decimal: dây là '{avro_type}' (kỳ vọng bytes/string)")

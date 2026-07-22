@@ -1,23 +1,23 @@
 """Sinh Flink SQL cho pipeline metric streaming — diệt sprawl #6/#8.
 
-ĐÂY LÀ RUNNER TỔNG QUÁT (phần sinh). Thay 4 câu INSERT + source ROW + 4 sink DDL
+Phần sinh của runner tổng quát. Thay 4 câu INSERT + source ROW + 4 sink DDL
 viết tay trong `flink/jobs/lane1_dashboard.py` bằng: 1 pipeline spec khai báo cho
 mỗi metric, sinh ra toàn bộ SQL.
 
 Ba mẩu sinh, mỗi mẩu bịt một chỗ:
-  - source DDL  : ROW<...> sinh từ cột contract THẬT SỰ được tham chiếu (diệt sprawl
-                  #6 - trước đây ROW lặp tay ở nhiều file). Kiểu theo MÃ HOÁ TRÊN DÂY
+  - source DDL  : ROW<...> sinh từ cột contract thật sự được tham chiếu (diệt sprawl
+                  #6 - trước đây ROW lặp tay ở nhiều file). Kiểu theo mã hoá trên dây
                   (amount encoded_as:string -> STRING), không phải kiểu logic.
   - sink DDL    : sinh từ cột contract metric (diệt nửa Flink của sprawl #8 - trước
                   đây sink DDL viết tay, có thể lệch ClickHouse). Cùng nguồn cột với
-                  DDL ClickHouse nên KHÔNG THỂ lệch.
+                  DDL ClickHouse nên không thể lệch.
   - INSERT SQL  : dựng từ window/filter/dimensions/aggregations/rank của spec.
 
 Kiểm chéo quan trọng: thứ tự cột SELECT = [window_start, window_end] + rank +
-dimensions + aggregations, và nó PHẢI KHỚP ĐÚNG cột của contract sink. Nếu spec mô
+dimensions + aggregations, và nó phải khớp đúng cột của contract sink. Nếu spec mô
 tả ra tập cột khác sink, generator dừng — spec và sink không thể lệch âm thầm.
 
-Kiến trúc: sinh SQL ở ĐÂY (host, có deps), runner mỏng trong container CHỈ thực thi.
+Kiến trúc: sinh SQL ở đây (host, có deps), runner mỏng trong container chỉ thực thi.
 """
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ from ..registry import REPO_ROOT, ContractError, Dataset, load_datasets
 PIPELINE_DIR = REPO_ROOT / "metadata" / "pipelines"
 
 # Kiểu logic + mã hoá -> kiểu Flink cho SOURCE (đọc Avro trên dây).
-# Khác sink: ở đây theo MÃ HOÁ THẬT trên Kafka, không phải kiểu logic.
+# Khác sink: ở đây theo mã hoá thật trên Kafka, không phải kiểu logic.
 def _source_type(col: dict) -> str:
     if col.get("encoded_as") == "string":
         return "STRING"                       # decimal.handling.mode=string (ADR-0003)
@@ -161,7 +161,7 @@ def _window_table(pipeline: dict, source_table: str) -> str:
 
 
 def _assert_columns_match(pipeline: dict, sink: Dataset) -> None:
-    """Cột spec sinh ra PHẢI khớp đúng cột contract sink (tên + thứ tự)."""
+    """Cột spec sinh ra phải khớp đúng cột contract sink (tên + thứ tự)."""
     produced = ["window_start", "window_end"]
     if pipeline.get("rank"):
         produced.append(pipeline["rank"]["as"])
@@ -222,7 +222,7 @@ def render_insert(pipeline: dict, source: Dataset, sink: Dataset) -> str:
 def build_job(*, bootstrap: str, schema_registry: str, group_id: str, startup: str) -> dict:
     """Job plan đầy đủ: source DDL + sink DDLs + inserts. Runner mỏng chỉ việc thực thi.
 
-    Gộp mọi pipeline chung một source vào MỘT source table + MỘT StatementSet, đúng như
+    Gộp mọi pipeline chung một source vào một source table + một StatementSet, đúng như
     lane1_dashboard làm thủ công — nay tự động.
     """
     datasets = _by_urn(load_datasets())
@@ -259,7 +259,7 @@ def build_job(*, bootstrap: str, schema_registry: str, group_id: str, startup: s
 def build_fraud_config(*, bootstrap: str, schema_registry: str, group_id: str) -> dict:
     """Config cho fraud runner (Lane 3, DataStream có state).
 
-    KHÁC build_job: fraud không sinh INSERT/sink DDL — logic detector là code Python.
+    Khác build_job: fraud không sinh INSERT/sink DDL — logic detector là code Python.
     Chỉ sinh **source DDL** (diệt nốt sprawl #6: ROW không còn viết tay ở đâu) và gom
     tham số detector từ spec. Runner giữ VelocityDetector/FailedStormDetector là code,
     nhưng nguồn/đích/ngưỡng/cửa sổ đều lái từ metadata.

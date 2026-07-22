@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # FILE SINH TỰ ĐỘNG - đừng sửa tay. Nguồn: metadata/datasets/*.yaml + generators/dlq.py + hằng số hạ tầng trong generators/topic_manifest.py. Sinh lại: python -m dataplatform.cli write
 #
-# Tạo mọi topic mà hệ thống cần, idempotent. Chạy TRƯỚC khi tắt
+# Tạo mọi topic mà hệ thống cần, idempotent. Chạy trước khi tắt
 # auto.create.topics (xem ADR-0020). Vd:
 #   docker exec bigdata-kafka bash /opt/bitnami/kafka/create-topics.sh
 set -euo pipefail

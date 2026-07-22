@@ -139,11 +139,11 @@ Ba quy ước ảnh hưởng tới mọi consumer hạ nguồn:
 2. Bảng đệm `metrics.<m>_kafka` — Kafka engine, `JSONEachRow` ([`02_kafka_consumers.sql`](../../clickhouse/init/02_kafka_consumers.sql))
 3. `SELECT` trong `metrics.<m>_mv` — Materialized View
 
-> ✅ **Cả 3 nay SINH từ một contract** ([ADR-0019](../decisions/0019-generate-clickhouse-metric-ddl.md)) —
+> [x] **Cả 3 nay sinh từ một contract** ([ADR-0019](../decisions/0019-generate-clickhouse-metric-ddl.md)) —
 > `metadata/datasets/metrics/*.yaml`. Chúng đọc chung một `columns` nên **không thể lệch**, hết cảnh MV
 > bỏ dữ liệu âm thầm. Hai file `01_schema.sql`/`02_kafka_consumers.sql` là **file sinh, đừng sửa tay**.
 >
-> ⚠️ **Vẫn còn hở:** sink DDL bên Flink (`lane1_dashboard.py`) **viết tay** → vẫn có thể lệch với
+> **Vẫn còn hở:** sink DDL bên Flink (`lane1_dashboard.py`) **viết tay** → vẫn có thể lệch với
 > ClickHouse. Hết khi Flink runner sinh cả hai đầu từ cùng spec (Pha 3).
 
 ### 3.1 `metrics.dlq_events` — lỗi cũng là dữ liệu
@@ -168,7 +168,7 @@ về để tìm bản ghi đã lỗi. Lỗi đó chỉ lộ ra khi chạy thử 
 Engine: `ReplacingMergeTree(inserted_at)` `ORDER BY (dlq_topic, dlq_partition, dlq_offset)`, TTL 30
 ngày. Processor là at-least-once nên restart có thể đọc lại — dedup làm việc đó vô hại.
 
-> **Nội dung message KHÔNG được lưu**, chỉ `message_key`. Nội dung gốc đã nằm nguyên trong topic DLQ;
+> **Nội dung message không được lưu**, chỉ `message_key`. Nội dung gốc đã nằm nguyên trong topic DLQ;
 > chép sang ClickHouse là nhân bản PII (`customers` có `full_name`/`email`/`phone`) ra thêm một chỗ,
 > giữ 30 ngày, không thêm giá trị điều tra.
 

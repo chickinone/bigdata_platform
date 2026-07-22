@@ -69,7 +69,7 @@ mở link nào, đăng ký connector, chạy Flink/Spark job, kiểm tra dữ li
 
 | Tài liệu | Nội dung |
 |---|---|
-| [`reference/metadata-driven-greenfield.md`](reference/metadata-driven-greenfield.md) | **Triển khai metadata-driven cho dự án MỚI** — khi nào NÊN/không nên, yêu cầu tiên quyết, kiến trúc, 4 quyết định đắt-nếu-sai, bậc thang trưởng thành, checklist ngày-0. |
+| [`reference/metadata-driven-greenfield.md`](reference/metadata-driven-greenfield.md) | **Triển khai metadata-driven cho dự án mới** — khi nào nên/không nên, yêu cầu tiên quyết, kiến trúc, 4 quyết định đắt-nếu-sai, bậc thang trưởng thành, checklist ngày-0. |
 
 ## `decisions/` — Architecture Decision Records (ADR)
 

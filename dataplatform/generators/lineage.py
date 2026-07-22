@@ -1,6 +1,6 @@
 """Sinh lineage graph + data catalog từ metadata — Pha 6 (discovery/lineage).
 
-Trả lời ba câu hỏi Pha 6, THUẦN từ metadata (không cần chạy engine):
+Trả lời ba câu hỏi Pha 6, thuần từ metadata (không cần chạy engine):
   - "cột `amount` chảy tới đâu?"        -> lineage cột (Flink) + graph dataset
   - "dataset nào chứa PII?"             -> catalog đánh dấu cột pii
   - "ai sở hữu dataset này?"            -> catalog owner

@@ -50,7 +50,7 @@ dict được. Đã mở rộng `check` để rẽ theo loại:
 Thêm vào cùng nhóm với `topics`: nó là danh sách ngăn phẩy mà thứ tự không mang nghĩa. Không thế thì
 generator sắp thứ tự khác người viết sẽ báo lệch giả.
 
-### Đây là cắt chuyển THẬT, không phải diff-rỗng
+### Đây là cắt chuyển thật, không phải diff-rỗng
 Với ES/S3 sink, bản sinh **byte-equivalent** bản viết tay → cắt chuyển an toàn tuyệt đối. Publication
 thì **khác**: bản sinh thêm header "sinh tự động", bỏ mấy câu `SELECT` verify (đã có trong
 [`../guide/cdc-and-connectors.md`](../guide/cdc-and-connectors.md) §5), chuẩn hoá GRANT. Nên `check`

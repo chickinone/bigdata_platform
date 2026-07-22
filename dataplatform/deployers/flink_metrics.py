@@ -3,7 +3,7 @@
     python -m dataplatform.deployers.flink_metrics plan     # sinh + xem, không submit
     python -m dataplatform.deployers.flink_metrics apply    # sinh + submit vào Flink
 
-Deploy CẢ HAI job sinh từ metadata: metric runner (SQL) và fraud runner (DataStream).
+Deploy cả HAI job sinh từ metadata: metric runner (SQL) và fraud runner (DataStream).
 Thay việc submit tay `flink run -py lane1_dashboard.py` / `lane3_fraud_detection.py`.
 Config sinh trên host từ pipeline spec + contract (ADR-0023), ghi ra file runtime rồi
 runner trong container thực thi.
@@ -11,7 +11,7 @@ runner trong container thực thi.
 Cùng triết lý với connector deployer (ADR-0021): control plane sinh, data plane thực
 thi; thêm/sửa metric hoặc chỉnh ngưỡng fraud = sửa YAML, không đụng Python.
 
-LƯU Ý: `apply` submit MỚI, không huỷ job cũ — nếu job đang chạy thì huỷ trước bằng
+Lưu ý: `apply` submit mới, không huỷ job cũ — nếu job đang chạy thì huỷ trước bằng
 `flink cancel` để tránh hai bản cùng ghi. (Chưa có reconcile — Pha 7.)
 """
 from __future__ import annotations
@@ -24,7 +24,7 @@ import sys
 from ..generators import flink_sql
 from ..registry import REPO_ROOT, ContractError, endpoint, connections_by_name
 
-# Endpoint nội bộ mạng compose (job chạy TRONG container Flink) — nay đọc TỪ connection
+# Endpoint nội bộ mạng compose (job chạy TRONG container Flink) — nay đọc từ connection
 # registry (kafka.bootstrap + schema_registry.url), không hardcode nữa. Flink nhúng
 # literal (không có lớp EnvVarConfigProvider như Kafka Connect) nên dùng dạng `url`.
 _CONNS = connections_by_name()
@@ -75,7 +75,7 @@ def cmd_plan() -> int:
 
 
 def _submit(runner_path: str, label: str) -> bool:
-    # subprocess (không qua shell) nên đường dẫn container KHÔNG bị MSYS mangle.
+    # subprocess (không qua shell) nên đường dẫn container không bị MSYS mangle.
     proc = subprocess.run(
         ["docker", "exec", FLINK_CONTAINER, "flink", "run", "-d", "-py", runner_path],
         capture_output=True, text=True,

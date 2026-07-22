@@ -72,9 +72,9 @@ Tên "lane" bám theo cách đặt tên trong code (`flink/jobs/lane1_*.py`, `la
 
 | Lane | Code | Nguồn | Đích | Làm gì |
 |---|---|---|---|---|
-| **Lane 1 — Dashboard metrics** | [`flink/jobs/metric_runner.py`](../../flink/jobs/metric_runner.py) — SINH từ [`metadata/pipelines/stream/`](../../metadata/pipelines/stream/) ([ADR-0023](../decisions/0023-flink-metric-runner-declarative.md)) | `bankdb.public.transactions` | `metrics.{timeseries,kpi,breakdown,topn}` → ClickHouse | 4 nhóm metric bằng TUMBLE 1 phút + CUMULATE 5 phút/ngày, gộp trong **một** `StatementSet`. |
+| **Lane 1 — Dashboard metrics** | [`flink/jobs/metric_runner.py`](../../flink/jobs/metric_runner.py) — Sinh từ [`metadata/pipelines/stream/`](../../metadata/pipelines/stream/) ([ADR-0023](../decisions/0023-flink-metric-runner-declarative.md)) | `bankdb.public.transactions` | `metrics.{timeseries,kpi,breakdown,topn}` → ClickHouse | 4 nhóm metric bằng TUMBLE 1 phút + CUMULATE 5 phút/ngày, gộp trong **một** `StatementSet`. |
 | **Lane 2 — Search/serving** | 5 file [`kafka-connect/es-sinks/*.json`](../../kafka-connect/es-sinks/) | `bankdb.public.*` + `fraud-alerts` | Elasticsearch → Kibana | Upsert theo PK, không transform ngoài `unwrap`. |
-| **Lane 3 — Fraud detection** | [`flink/jobs/fraud_runner.py`](../../flink/jobs/fraud_runner.py) — source DDL + tham số SINH từ [`metadata/pipelines/stream/fraud.yaml`](../../metadata/pipelines/stream/fraud.yaml) ([ADR-0023](../decisions/0023-flink-metric-runner-declarative.md)) | `bankdb.public.transactions` | `fraud-alerts` → ES + email | 2 detector CÓ STATE giữ là code (DataStream): Velocity + Failed Storm. |
+| **Lane 3 — Fraud detection** | [`flink/jobs/fraud_runner.py`](../../flink/jobs/fraud_runner.py) — source DDL + tham số sinh từ [`metadata/pipelines/stream/fraud.yaml`](../../metadata/pipelines/stream/fraud.yaml) ([ADR-0023](../decisions/0023-flink-metric-runner-declarative.md)) | `bankdb.public.transactions` | `fraud-alerts` → ES + email | 2 detector có state giữ là code (DataStream): Velocity + Failed Storm. |
 | **Lane 4 — Lakehouse batch** | [`kafka-connect/s3-sinks/s3-sink-cdc.json`](../../kafka-connect/s3-sinks/s3-sink-cdc.json) + [`spark/jobs/*.py`](../../spark/jobs/) | `bankdb.public.*` | MinIO Bronze → Silver → Gold → Iceberg | S3 sink ghi Parquet; Spark dedup + join + tổng hợp. |
 
 Lane 1 và Lane 3 đọc **cùng** topic `bankdb.public.transactions` nhưng bằng hai `group.id` khác nhau
@@ -152,7 +152,7 @@ Ghi ở đây để không ai phải phát hiện lại bằng cách debug. Chi 
 3. ~~Không connector nào bật DLQ~~ — **đã xử lý** ([ADR-0017](../decisions/0017-dlq-flow-observe-then-park.md)).
    Còn lại: `fraud-notifier` vẫn ghi vào `metrics.notification_events` — bảng này **chưa tồn tại**.
 4. ~~**4 file `lane1_{timeseries,kpi,breakdown,topn}.py` là di sản**~~ — đã xoá, và `lane1_dashboard.py`
-   nay cũng đã thay bằng `metric_runner.py` SINH từ pipeline spec ([ADR-0023](../decisions/0023-flink-metric-runner-declarative.md)).
+   nay cũng đã thay bằng `metric_runner.py` sinh từ pipeline spec ([ADR-0023](../decisions/0023-flink-metric-runner-declarative.md)).
    Vẫn giữ nguyên tắc [ADR-0006](../decisions/0006-one-flink-job-per-lane-statement-set.md): mọi metric gộp một `StatementSet`.
 5. **Mọi thứ đều single-node** (Kafka RF=1, ES single-node, 1 Spark worker). Đúng cho lab, không đủ
    cho production.

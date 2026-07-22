@@ -7,7 +7,7 @@
 
 ---
 
-## 1. ⚠️ Schema phải tạo tay
+## 1. Schema phải tạo tay
 
 `clickhouse/init/` **không** được mount vào `/docker-entrypoint-initdb.d` trong
 [`docker-compose.yml`](../../docker-compose.yml). ClickHouse khởi động **không có bảng nào**. Đây là
@@ -50,7 +50,7 @@ Phải chạy lại sau mỗi `docker compose down -v`.
 | `02_kafka_consumers.sql` | 4 bảng Kafka engine + 4 MV cho metric — **file sinh** |
 | `03_dlq.sql` | `dlq_events` + Kafka engine + MV — lỗi connector thành dữ liệu ([ADR-0017](../decisions/0017-dlq-flow-observe-then-park.md)) |
 
-> ⚠️ **`01_schema.sql` và `02_kafka_consumers.sql` là file SINH** từ
+> **`01_schema.sql` và `02_kafka_consumers.sql` là file sinh** từ
 > `metadata/datasets/metrics/*.yaml` — **đừng sửa tay**. Muốn đổi cột/TTL/engine của metric thì sửa
 > contract rồi `python -m dataplatform.cli write`. (`03_dlq.sql` vẫn viết tay.)
 
@@ -120,7 +120,7 @@ chưa được provision** — phải thêm tay:
 ```text
 Connections → Add new connection → ClickHouse
   Server address: clickhouse        (tên service trong network bigdata-net)
-  Server port:    9000              (native protocol, KHÔNG phải 8123 HTTP)
+  Server port:    9000              (native protocol, không phải 8123 HTTP)
   Username:       admin
   Password:       <CLICKHOUSE_PASSWORD>
 ```

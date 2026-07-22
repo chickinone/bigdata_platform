@@ -23,20 +23,20 @@ def dlq_topic(connector_name: str) -> str:
 def dlq_config(connector_name: str) -> dict:
     """Khối config bật DLQ, dùng chung cho mọi loại sink."""
     return {
-        # all: chuyển bản ghi lỗi sang DLQ thay vì để task CHẾT.
+        # all: chuyển bản ghi lỗi sang DLQ thay vì để task chết.
         # Mặc định là `none` -> một message hỏng làm đứng toàn bộ connector.
-        # Đánh đổi: `all` chỉ an toàn KHI có DLQ + có người nhìn. Cả hai điều
+        # Đánh đổi: `all` chỉ an toàn khi có DLQ + có người nhìn. Cả hai điều
         # kiện đó nay đã có, nên bật được.
         "errors.tolerance": "all",
         "errors.deadletterqueue.topic.name": dlq_topic(connector_name),
         "errors.deadletterqueue.topic.replication.factor": DLQ_REPLICATION_FACTOR,
-        # BẮT BUỘC. Thiếu dòng này thì header __connect.errors.* không được ghi,
-        # dlq-processor không đọc được nguyên nhân lỗi, và MỌI lỗi rơi vào nhóm
+        # Bắt buộc. Thiếu dòng này thì header __connect.errors.* không được ghi,
+        # dlq-processor không đọc được nguyên nhân lỗi, và mọi lỗi rơi vào nhóm
         # UNKNOWN -> phân loại thành vô dụng.
         "errors.deadletterqueue.context.headers.enable": "true",
         # Ghi lỗi ra log Connect để debug nhanh.
         "errors.log.enable": "true",
-        # CỐ Ý KHÔNG bật errors.log.include.messages: nó in NỘI DUNG bản ghi ra
+        # Cố ý không bật errors.log.include.messages: nó in nội dung bản ghi ra
         # log, mà customers chứa full_name/email/phone (PII). Log không phải chỗ
         # cho PII. Nội dung message vẫn còn nguyên trong topic DLQ nếu cần điều tra.
         "errors.log.include.messages": "false",

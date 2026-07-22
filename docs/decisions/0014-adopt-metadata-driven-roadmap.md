@@ -2,7 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-07-15
-- **Deciders:** Phan Trường (cùng Claude Code)
+- **Deciders:** Phan Trường
 
 ## Bối cảnh
 

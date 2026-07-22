@@ -1,15 +1,15 @@
-"""Data quality gate — chạy luật chất lượng trên DỮ LIỆU THẬT, fail thì chặn promote (Pha 7).
+"""Data quality gate — chạy luật chất lượng trên dữ liệu thật, fail thì chặn promote (Pha 7).
 
     python -m dataplatform.verifiers.quality        # chạy mọi luật, exit 1 nếu có vi phạm
 
 Hai nguồn luật:
-  - TỰ SUY từ contract: `not_null` cho mọi cột `nullable:false`, `unique` cho `primary_key`.
+  - tự SUY từ contract: `not_null` cho mọi cột `nullable:false`, `unique` cho `primary_key`.
     Không khai lại — contract đã nói, quality thực thi.
-  - TƯỜNG MINH trong `metadata/quality/*.yaml`: `range`, `accepted_values` — thứ contract
+  - tường MINH trong `metadata/quality/*.yaml`: `range`, `accepted_values` — thứ contract
     chỉ mô tả bằng comment, nay thành luật chạy được.
 
 Route theo layer: oltp -> Postgres (`schema.table`), metric -> ClickHouse (`db.table`).
-Mỗi check là một câu đếm VI PHẠM; > 0 là fail. Nguồn không chạy -> SKIP (không thể kiểm).
+Mỗi check là một câu đếm VI phạm; > 0 là fail. Nguồn không chạy -> SKIP (không thể kiểm).
 """
 from __future__ import annotations
 
@@ -53,7 +53,7 @@ def _ch_scalar(sql: str) -> int:
     return int(proc.stdout.strip() or "0")
 
 
-# ---------- dựng câu check (trả về (nhãn, sql) — sql đếm VI PHẠM) ----------
+# ---------- dựng câu check (trả về (nhãn, sql) — sql đếm VI phạm) ----------
 def _q(v: str) -> str:
     return "'" + v.replace("'", "''") + "'"
 
@@ -140,7 +140,7 @@ def cmd_verify() -> int:
 
     print(f"\nKẾT QUẢ: {passed} đạt, {fails} vi phạm, {skips} bỏ qua (nguồn không chạy).")
     if fails:
-        print("Có vi phạm chất lượng -> CHẶN promote.")
+        print("Có vi phạm chất lượng -> chặn promote.")
         return 1
     return 0
 

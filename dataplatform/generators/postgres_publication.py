@@ -1,11 +1,11 @@
 """Sinh publication SQL của Postgres từ dataset contract.
 
-Đây là NỬA CÒN LẠI của việc diệt sprawl #2/#3. Cùng với debezium.py, cả hai giờ
+Đây là nửa còn lại của việc diệt sprawl #2/#3. Cùng với debezium.py, cả hai giờ
 đọc CHUNG một nguồn (danh sách dataset CDC), nên `table.include.list` (connector)
-và `FOR TABLE ...` (publication) KHÔNG THỂ lệch nhau nữa.
+và `FOR TABLE ...` (publication) không thể lệch nhau nữa.
 
 Trước đây: hai file khai tay độc lập. Lệch một bảng = Debezium subscribe bảng
-không có trong publication → bảng đó IM LẶNG không có CDC, không lỗi.
+không có trong publication → bảng đó IM lặng không có CDC, không lỗi.
 
 Artifact này là TEXT (SQL), không phải JSON. Nó được control plane sở hữu hoàn
 toàn, nên `check` so nguyên văn (xem cli._compare).
@@ -24,10 +24,10 @@ _HEADER = """\
 --   Sinh lại: python -m dataplatform.cli write
 --
 -- Publication = declarative API của Postgres để publish bảng cho logical
--- replication; Debezium subscribe vào đây. Danh sách bảng dưới đây được GỘP từ
+-- replication; Debezium subscribe vào đây. Danh sách bảng dưới đây được gộp từ
 -- registry, nên luôn khớp table.include.list của connector (diệt sprawl #2/#3).
 --
--- KHÔNG dùng "FOR ALL TABLES" vì:
+-- Không dùng "FOR ALL TABLES" vì:
 --   1. Rủi ro bảo mật — bảng nhạy cảm mới tạo tự động bị publish.
 --   2. Khó audit "Debezium đang đọc bảng nào".
 --   3. Explicit is better than implicit.

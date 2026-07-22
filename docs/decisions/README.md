@@ -40,7 +40,7 @@
 | [0019](0019-generate-clickhouse-metric-ddl.md) | Sinh DDL ClickHouse — diệt sprawl #8/#9 |
 | [0020](0020-generate-kafka-topic-manifest.md) | Sinh bản kê topic Kafka; tắt auto-create |
 | [0021](0021-connector-deployer-idempotent.md) | Deployer idempotent — metadata thành load-bearing |
-| [0022](0022-reverse-verify-contract-vs-real-schema.md) | Kiểm chứng ngược contract vs schema THẬT |
+| [0022](0022-reverse-verify-contract-vs-real-schema.md) | Kiểm chứng ngược contract vs schema thật |
 | [0023](0023-flink-metric-runner-declarative.md) | Flink runner khai báo — diệt sprawl #6/#8 |
 | [0024](0024-spark-medallion-runner-sql.md) | Spark medallion runner — transform bằng SQL (dbt) |
 

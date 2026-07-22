@@ -18,13 +18,13 @@ nếu lên quy mô nhiều team.
 Dùng **compose chính thức** của OpenMetadata 1.12.6 (bản postgres), **không** tự chế 555 dòng env. Bỏ
 Airflow bằng cách chỉ start `openmetadata-server` (kéo postgres+es+migrate, không kéo ingestion).
 
-### Nạp catalog TỪ metadata, không gõ tay trên UI
+### Nạp catalog từ metadata, không gõ tay trên UI
 
 `deployers/openmetadata.py` đọc `lineage/graph.json` (ADR-0026) và PUSH qua REST: service → database →
 schema (theo layer) → table (mỗi dataset/lake node) + cột + **tag PII** + **lineage**. Giữ đúng "Git là
 nguồn sự thật, catalog là nơi tra cứu" — metadata đổi thì chạy lại deployer.
 
-## Máy có đủ không — ĐO THẬT
+## Máy có đủ không — đo thật
 
 | | |
 |---|---|
@@ -32,7 +32,7 @@ nguồn sự thật, catalog là nơi tra cứu" — metadata đổi thì chạy
 | WSL/Docker cấp | 12 GB; full stack (~19 container) dùng **~8 GB** |
 | OpenMetadata (server+ES+postgres, bỏ Airflow) | **~3 GB** |
 
-**Kết luận: KHÔNG đủ chạy cả hai cùng lúc.** Nhưng **đủ nếu tạm dừng stack chính** (giải phóng ~8GB) —
+**Kết luận: Không đủ chạy cả hai cùng lúc.** Nhưng **đủ nếu tạm dừng stack chính** (giải phóng ~8GB) —
 OM chạy ổn ở ~3GB. Vì deployer PUSH `graph.json` (không auto-ingest từ engine sống), stack chính không cần
 bật lúc nạp catalog. Nên catalog là một **phiên riêng**: `docker compose stop` → bật OM → nạp → đảo lại.
 

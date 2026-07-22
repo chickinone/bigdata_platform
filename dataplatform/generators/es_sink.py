@@ -4,7 +4,7 @@ Thay cho 5 file JSON viết tay trong kafka-connect/es-sinks/.
 
 Ý chính: mọi thứ trong config đều được SUY RA từ contract, không khai lại.
 Ví dụ rõ nhất là `key.ignore` và `write.method` — chúng không phải hai lựa chọn
-độc lập mà là hệ quả của MỘT sự thật: "dataset này có khoá chính hay không".
+độc lập mà là hệ quả của một sự thật: "dataset này có khoá chính hay không".
 
 Viết tay thì hai trường đó có thể lệch nhau (key.ignore=false nhưng không có
 extractKey → connector chết lúc chạy). Sinh ra thì chúng không thể lệch, vì cùng
@@ -27,7 +27,7 @@ def render(ds: Dataset, conns: dict[str, dict]) -> dict:
     Rẽ nhánh theo `source.type` chứ không theo tên dataset — nhờ vậy thêm một
     stream mới kiểu app_json sẽ tự đi đúng nhánh, không cần sửa generator.
 
-    Endpoint (ES url + schema registry) đọc TỪ connection registry, không hardcode.
+    Endpoint (ES url + schema registry) đọc từ connection registry, không hardcode.
     """
     config = {
         "connector.class": CONNECTOR_CLASS,
@@ -60,7 +60,7 @@ def render(ds: Dataset, conns: dict[str, dict]) -> dict:
     if ds.is_cdc:
         config.update(_cdc_transforms(ds))
 
-    # DLQ cho MỌI sink - chính sách nền tảng, xem generators/dlq.py.
+    # DLQ cho mọi sink - chính sách nền tảng, xem generators/dlq.py.
     # Import tại chỗ để tránh vòng lặp import (dlq.py cần connector_name từ đây).
     from .dlq import dlq_config
 

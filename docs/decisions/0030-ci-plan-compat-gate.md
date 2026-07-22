@@ -17,8 +17,8 @@ lỗ ở khâu **thay đổi**:
 
 ## Quyết định — hai lệnh CLI mới, cắm vào CI
 
-**`cli plan [--base ref]`** — "terraform plan" cho metadata. So bản sinh từ metadata HIỆN TẠI với artifact
-đã commit ở `base`, render artifact NÀO sẽ đổi khi merge (mới/sửa + diff mức khoá). Reviewer thấy hệ quả
+**`cli plan [--base ref]`** — "terraform plan" cho metadata. So bản sinh từ metadata hiện tại với artifact
+đã commit ở `base`, render artifact nào sẽ đổi khi merge (mới/sửa + diff mức khoá). Reviewer thấy hệ quả
 thật, không chỉ YAML. Informational (exit 0).
 
 **`cli compat [--base ref]`** — gate BACKWARD. Dịch luật Avro BACKWARD sang contract cột (`compat.py`), so
@@ -26,14 +26,14 @@ dataset `base` vs working tree:
 
 | Thay đổi | Phán |
 |---|---|
-| Thêm cột `nullable:false` (không default) | **VỠ** — reader mới đọc data cũ thiếu cột |
-| Đổi type không promote được (`long->int`, `int->string`) | **VỠ** |
-| Đổi `nullable: true -> false` (optional -> required) | **VỠ** |
+| Thêm cột `nullable:false` (không default) | **vỡ** — reader mới đọc data cũ thiếu cột |
+| Đổi type không promote được (`long->int`, `int->string`) | **vỡ** |
+| Đổi `nullable: true -> false` (optional -> required) | **vỡ** |
 | Thêm cột `nullable:true`; `false->true`; promote (`int->long`, `string->bytes`) | OK |
 | Xoá cột / xoá dataset | OK (Avro cho phép) — chỉ **ghi chú** để kiểm consumer |
 
 Type "hiệu dụng" theo lớp Avro trên dây: cột `encoded_as:string` (decimal->string, ADR-0003) coi là
-`string`. Exit 1 nếu có VỠ → PR ĐỎ.
+`string`. Exit 1 nếu có vỡ → PR đỏ.
 
 CI (`metadata-check.yml`): `check` (mọi push/PR) → `compat` (chặn, chỉ PR) → `plan` (vào job summary, chỉ
 PR). Cần `fetch-depth: 0` + nạp base ref. Vẫn **thuần tĩnh** (metadata + git), không engine — nhanh, rẻ.
@@ -48,9 +48,9 @@ Dự án không commit `.avsc` — Avro schema do Debezium suy từ Postgres lú
 ## Kiểm chứng (đo thật, local, `--base HEAD`)
 
 - **Breaking bị chặn:** đổi `risk_score int->string` + thêm `segment nullable:false` → compat in đúng 2 dòng
-  VỠ, **exit 1**. `plan` chỉ ra `lineage/graph.json` đổi (thêm `segment`). `check` bắt drift (chưa regenerate).
+  vỡ, **exit 1**. `plan` chỉ ra `lineage/graph.json` đổi (thêm `segment`). `check` bắt drift (chưa regenerate).
 - **Additive cho qua:** thêm cột `nullable:true` → compat **exit 0** (không over-block).
-- **Working tree sạch:** `plan` 0 artifact đổi, `compat` không VỠ.
+- **Working tree sạch:** `plan` 0 artifact đổi, `compat` không vỡ.
 
 ## Hệ quả
 
@@ -58,7 +58,7 @@ Dự án không commit `.avsc` — Avro schema do Debezium suy từ Postgres lú
 mảnh "plan → gate" của GitOps Pha 7; "apply" idempotent đã có ở các deployer (ADR-0021).
 
 **Khó hơn / phải chấp nhận:**
-- `plan` v1 báo **MỚI + SỬA**, chưa báo XOÁ artifact (dataset bị gỡ) — hiếm, và hiện trên diff metadata của
+- `plan` v1 báo **mới + sửa**, chưa báo xoá artifact (dataset bị gỡ) — hiếm, và hiện trên diff metadata của
   PR. Tăng sau nếu cần.
 - Compat chỉ soi **cột dataset** (schema trên dây). Đổi phá vỡ khác (bỏ topic, đổi PK) chưa gate — increment sau.
 - Luật promote encode tay (không gọi thư viện Avro) — đánh đổi lấy nhẹ; đã phủ các kiểu contract đang dùng.

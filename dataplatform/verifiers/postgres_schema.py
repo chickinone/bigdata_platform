@@ -1,8 +1,8 @@
-"""Đối chiếu contract OLTP với schema Postgres THẬT (information_schema).
+"""Đối chiếu contract OLTP với schema Postgres thật (information_schema).
 
     python -m dataplatform.verifiers.postgres_schema
 
-Postgres là NGUỒN SỰ THẬT ĐỘC LẬP: contract được reverse-engineer TỪ nó, không phải
+Postgres là nguồn sự thật độc lập: contract được reverse-engineer từ nó, không phải
 ngược lại. Nên đối chiếu contract ↔ Postgres bắt được lỗi mà đối chiếu contract ↔
 artifact (vốn cùng sinh từ contract) không thể thấy.
 
@@ -13,7 +13,7 @@ Kiểm 4 thứ cho mỗi dataset CDC:
   3. Nullable      — contract khai nullable có khớp NOT NULL của DB không.
   4. Primary key   — contract.primary_key có đúng PK thật của bảng không.
 
-KHÔNG cần credential: chạy psql BÊN TRONG container bằng chính env POSTGRES_USER/DB
+Không cần credential: chạy psql bên trong container bằng chính env POSTGRES_USER/DB
 của nó (`docker exec ... sh -c 'psql -U "$POSTGRES_USER" ...'`). Verifier không bao
 giờ cầm mật khẩu.
 """
@@ -28,9 +28,9 @@ from ..registry import ContractError, Dataset, load_datasets
 
 POSTGRES_CONTAINER = os.getenv("POSTGRES_CONTAINER", "bigdata-source-postgres")
 
-# Kiểu LOGIC -> tập kiểu Postgres CHẤP NHẬN ĐƯỢC. Một logic map tới nhiều kiểu pg vì
+# Kiểu logic -> tập kiểu Postgres chấp nhận được. Một logic map tới nhiều kiểu pg vì
 # nhiều kiểu pg cùng biểu diễn một khái niệm logic (vd varchar/char/text đều là chuỗi).
-# Đây là ánh xạ NGƯỢC với generator: generator đi logic->engine, verifier kiểm
+# Đây là ánh xạ ngược với generator: generator đi logic->engine, verifier kiểm
 # engine-thật thuộc tập logic cho phép.
 _PG_OK = {
     "long": {"bigint"},

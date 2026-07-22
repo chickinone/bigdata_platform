@@ -30,14 +30,14 @@ giữ DAG khớp metadata (byte-exact, 18→**19** artifact) — sửa tay DAG l
 
 ### Một nguồn sự thật cho "chạy job thế nào"
 
-Task DAG chạy ĐÚNG lệnh `docker exec bigdata-spark-master spark-submit ...` như deployer, qua hàm chung
+Task DAG chạy đúng lệnh `docker exec bigdata-spark-master spark-submit ...` như deployer, qua hàm chung
 `spark_batch.submit_argv(spec)` (tách ra lúc này, deployer + DAG cùng gọi). Không có "đường thứ hai" để
 lệch — DAG chạy y hệt chạy tay.
 
 ### Ingestion CDC không nằm trong DAG
 
 Debezium → Bronze là **stream chạy liên tục**, không phải task batch có điểm bắt đầu/kết thúc. Nên nó là
-thượng nguồn NGẦM của silver (silver đọc Bronze), không phải một node DAG. Đưa stream vào DAG batch là sai
+thượng nguồn ngầm của silver (silver đọc Bronze), không phải một node DAG. Đưa stream vào DAG batch là sai
 mô hình (sensor chờ Bronze là increment sau nếu cần).
 
 ## Kiểm chứng
@@ -48,7 +48,7 @@ mô hình (sensor chờ Bronze là increment sau nếu cần).
 - **Compose runtime hợp lệ** (`airflow/docker-compose-airflow.yml`, `docker compose config` pass).
 
 **Cập nhật 2026-07-20 — boot Airflow thật:** đã dựng `apache/airflow:2.10.4` standalone (compose
-`airflow/docker-compose-airflow.yml`) và load DAG qua **DagBag trong Airflow THẬT**: `import_errors: {}`,
+`airflow/docker-compose-airflow.yml`) và load DAG qua **DagBag trong Airflow thật**: `import_errors: {}`,
 DAG `medallion_batch` 5 task, phụ thuộc đúng (silver → 3 gold + iceberg). Xác nhận cú pháp DAG (`schedule=`,
 BashOperator...) hợp lệ với Airflow thật, không chỉ stub. (Cú vấp đã sửa: volume `./airflow/dags` sai vì
 project-dir là `airflow/` khi chạy `-f airflow/...yml` → đổi `./dags`.) Chạy một task spark-submit end-to-end

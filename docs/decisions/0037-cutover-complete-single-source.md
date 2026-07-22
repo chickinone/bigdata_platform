@@ -14,7 +14,7 @@ liệu" tập trung ở `metadata/`, sinh mọi artifact từ đó, xoá bản c
 
 **Audit (2026-07-20):** không còn file viết tay song song với bản sinh. Đã xoá dần: 4 job Flink print-sink,
 `lane1_dashboard.py`, `lane3_fraud_detection.py`, `enrich_transactions.py`, `build_gold_layer.py`, và cuối
-cùng `trino/iceberg.properties.bak` (di sản hadoop-catalog). Còn lại đúng những thứ NÊN viết tay: 3 runner
+cùng `trino/iceberg.properties.bak` (di sản hadoop-catalog). Còn lại đúng những thứ nên viết tay: 3 runner
 generic (`metric_runner`/`fraud_runner`/`medallion_runner` — engine tham số hoá, không phải artifact),
 `clickhouse/init/03_dlq.sql` (infra tĩnh), migration (bất biến theo bản chất).
 
@@ -23,7 +23,7 @@ breaking change, migration, rollback, backfill, quality) quy về "sửa metadat
 + gotchas đã trả bằng thời gian debug.
 
 **19 artifact** sinh từ `metadata/`, `check` 19/19 byte-exact, CI gác drift + BACKWARD ở mọi PR. Thêm cột =
-sửa MỘT contract (trước: tối đa 6 file Flink + 3 ClickHouse + Spark + ES). Sprawl #1–#13 đóng.
+sửa một contract (trước: tối đa 6 file Flink + 3 ClickHouse + Spark + ES). Sprawl #1–#13 đóng.
 
 ## Hệ quả
 
@@ -38,7 +38,7 @@ sửa MỘT contract (trước: tối đa 6 file Flink + 3 ClickHouse + Spark + 
   spark-submit xuyên suốt cần dựng stack Spark — làm khi cần.
 - Silver full-refresh (`overwrite`) thay vì incremental.
 
-Đây KHÔNG phải thiếu sót của cutover — là các trục khác (bảo mật/HA/runtime) mà metadata-driven không giải,
+Đây không phải thiếu sót của cutover — là các trục khác (bảo mật/HA/runtime) mà metadata-driven không giải,
 tách phase riêng để không trộn mối lo.
 
 ## Phương án đã cân nhắc

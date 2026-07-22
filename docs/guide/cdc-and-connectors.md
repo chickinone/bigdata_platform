@@ -107,7 +107,7 @@ SELECT slot_name, active, restart_lsn,
 FROM pg_replication_slots;
 ```
 
-> ⚠️ **Slot mồ côi làm đầy đĩa.** Xoá connector **không** xoá slot. Slot không có consumer sẽ giữ WAL
+> **Slot mồ côi làm đầy đĩa.** Xoá connector **không** xoá slot. Slot không có consumer sẽ giữ WAL
 > vô hạn cho tới khi hết đĩa. Nếu đã bỏ hẳn CDC:
 > ```sql
 > SELECT pg_drop_replication_slot('debezium_slot');
@@ -189,6 +189,6 @@ Hai điểm dễ vấp:
 - `errors.log.include.messages` **cố ý để `false`**: nó in nội dung bản ghi ra log Connect, mà
   `customers` chứa `full_name`/`email`/`phone`. Log không phải chỗ cho PII.
 
-> ⚠️ `errors.tolerance: all` đổi hành vi khi lỗi: task **không chết** nữa, bản ghi hỏng lặng lẽ sang
+> `errors.tolerance: all` đổi hành vi khi lỗi: task **không chết** nữa, bản ghi hỏng lặng lẽ sang
 > DLQ. Điều đó chỉ an toàn **khi có người nhìn** `metrics.dlq_events`. Không ai xem thì đây là bước
 > lùi so với fail-fast.

@@ -33,7 +33,7 @@ PLAN_DIR_CONTAINER = "/opt/spark-jobs/generated"
 
 
 def _stage(spec: dict) -> int:
-    """Thứ tự chạy theo PHỤ THUỘC INPUT, không theo layer: job đọc Bronze là nguồn
+    """Thứ tự chạy theo phụ thuộc INPUT, không theo layer: job đọc Bronze là nguồn
     (chạy trước), job đọc Silver là dẫn xuất (chạy sau — gold + iceberg đều đọc Silver).
     """
     paths = " ".join(i["path"] for i in spec["inputs"])
@@ -63,7 +63,7 @@ def container_plan_path(spec: dict) -> str:
 
 
 def submit_argv(spec: dict) -> list[str]:
-    """Lệnh `docker exec ... spark-submit` chạy MỘT batch job — MỘT nguồn sự thật cho
+    """Lệnh `docker exec ... spark-submit` chạy một batch job — một nguồn sự thật cho
     'chạy job thế nào'. Deployer dùng để submit; generator Airflow dùng để dựng
     bash_command của task (cùng một lệnh -> DAG chạy y hệt tay/deployer)."""
     return [

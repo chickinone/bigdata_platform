@@ -18,10 +18,10 @@ cảnh báo. Cả hai đều chạy trong compose và **trông như đang hoạt
 
 ```bash
 $ grep -rl "deadletterqueue" kafka-connect/ debezium/
-# không kết quả — KHÔNG connector nào bật DLQ
+# không kết quả — không connector nào bật DLQ
 
 $ grep -c "dlq_events\|notification_events" clickhouse/init/01_schema.sql
-0                                            # KHÔNG bảng đích nào tồn tại
+0                                            # không bảng đích nào tồn tại
 ```
 
 Ba sự thật cùng lúc:

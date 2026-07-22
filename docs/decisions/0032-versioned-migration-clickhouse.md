@@ -23,12 +23,12 @@ COLUMN`, bảng infra mới, backfill. Runner:
 - Ghi mỗi migration đã áp vào `metrics.schema_migrations` (version, name, checksum, applied_at;
   ReplacingMergeTree — một dòng/version).
 - Áp **một lần**, theo thứ tự số; chạy lại chỉ áp phần chưa áp (**idempotent**).
-- **BẤT BIẾN**: sửa file migration đã áp → checksum lệch → lỗi, buộc tạo migration mới (forward-only).
+- **Bất biến**: sửa file migration đã áp → checksum lệch → lỗi, buộc tạo migration mới (forward-only).
 
 Kiểm chứng cuối vẫn là verifier `clickhouse_schema` (live vs contract, 0 drift) — gate runtime bắt "đổi
 contract mà quên migration".
 
-### Vì sao KHÔNG để runner tự áp cả baseline
+### Vì sao không để runner tự áp cả baseline
 
 Thử cho runner áp lại init mỗi lần thì **treo**: `02_kafka_consumers.sql` có bảng `ENGINE = Kafka`, cần
 broker sống. Baseline là việc lúc-dựng-stack (Kafka đã lên); runner chỉ lo lớp evolution — áp được lên DB
@@ -55,7 +55,7 @@ migration mệnh lệnh — bản chất là quyết định người, viết ta
 `notification_events`.
 
 **Khó hơn / phải chấp nhận:**
-- Đổi CỘT của metric cũ cần **hai bước**: regenerate init (desired, `check`) + thêm migration `ALTER`
+- Đổi cột của metric cũ cần **hai bước**: regenerate init (desired, `check`) + thêm migration `ALTER`
   (áp lên DB sống). Verifier `clickhouse_schema` bắt nếu quên bước hai. Chưa tự sinh migration từ diff
   contract (increment sau).
 - Cài mới vẫn chạy init riêng (runner không áp baseline). Bootstrap một-lệnh (init khi Kafka sống) để sau.

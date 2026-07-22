@@ -50,7 +50,7 @@ docker compose ps                 # kỳ vọng: 19 service Up (generator không
 
 ---
 
-## 3. Bootstrap thủ công (⚠️ bắt buộc — không tự động)
+## 3. Bootstrap thủ công (bắt buộc — không tự động)
 
 Hai việc **không** được compose làm hộ. Bỏ qua sẽ dẫn tới "chạy mà không ra dữ liệu".
 
@@ -104,7 +104,7 @@ docker exec bigdata-clickhouse clickhouse-client --user admin --password "$CLICK
 Đầy đủ ở [`cdc-and-connectors.md`](cdc-and-connectors.md). Bản rút gọn:
 
 ```bash
-# 1. Debezium source — phải chạy TRƯỚC (tạo topic CDC)
+# 1. Debezium source — phải chạy trước (tạo topic CDC)
 curl.exe -X POST http://localhost:8083/connectors -H "Content-Type: application/json" \
   --data-binary "@debezium/postgres-connector.json"
 
@@ -153,7 +153,7 @@ python -m dataplatform.deployers.flink_metrics apply
 docker exec -it bigdata-flink-jobmanager flink list
 ```
 
-> 2 runner (`metric_runner.py`, `fraud_runner.py`) SINH từ `metadata/pipelines/stream/` — thay
+> 2 runner (`metric_runner.py`, `fraud_runner.py`) sinh từ `metadata/pipelines/stream/` — thay
 > `lane1_dashboard.py` + `lane3_fraud_detection.py` đã xoá ([ADR-0023](../decisions/0023-flink-metric-runner-declarative.md)).
 
 ---
@@ -206,7 +206,7 @@ curl.exe http://localhost:9200/_cat/indices?v
 
 # 8. Bronze có file Parquet? → MinIO Console http://localhost:9001
 
-# 9. Có connector nào đang lỗi? (task VẪN XANH khi có lỗi — errors.tolerance=all)
+# 9. Có connector nào đang lỗi? (task vẫn xanh khi có lỗi — errors.tolerance=all)
 docker exec -it bigdata-clickhouse clickhouse-client --user admin --password "$CLICKHOUSE_PASSWORD" \
   --query "SELECT connector_name, category, count() FROM metrics.dlq_events GROUP BY 1,2"
 ```
@@ -220,8 +220,8 @@ docker exec -it bigdata-clickhouse clickhouse-client --user admin --password "$C
 ## 9. Dừng & reset
 
 ```bash
-docker compose down                 # dừng, GIỮ dữ liệu (volume còn nguyên)
-docker compose down -v              # dừng + XÓA SẠCH mọi volume
+docker compose down                 # dừng, giữ dữ liệu (volume còn nguyên)
+docker compose down -v              # dừng + xóa sạch mọi volume
 ```
 
 `down -v` xoá toàn bộ: dữ liệu Postgres, offset Kafka, bảng ClickHouse, bucket MinIO, index ES,

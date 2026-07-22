@@ -6,7 +6,7 @@
 
 ---
 
-## 1. Hai runner — SINH từ metadata
+## 1. Hai runner — Sinh từ metadata
 
 Thư mục [`flink/jobs/`](../../flink/jobs/) có 2 runner; SQL/tham số của chúng **sinh** từ
 [`metadata/pipelines/stream/`](../../metadata/pipelines/stream/) ([ADR-0023](../decisions/0023-flink-metric-runner-declarative.md)):
@@ -31,7 +31,7 @@ python -m dataplatform.deployers.flink_metrics plan    # xem sẽ submit gì (kh
 python -m dataplatform.deployers.flink_metrics apply   # submit metric_runner + fraud_runner
 ```
 
-> Deployer `apply` submit MỚI, **không** huỷ job cũ — nếu đang chạy thì `flink cancel` trước để tránh
+> Deployer `apply` submit mới, **không** huỷ job cũ — nếu đang chạy thì `flink cancel` trước để tránh
 > hai bản cùng ghi. Cần submit tay một runner (debug) thì vẫn được:
 > ```bash
 > docker exec -it bigdata-flink-jobmanager flink run -d -py /opt/flink/jobs/metric_runner.py

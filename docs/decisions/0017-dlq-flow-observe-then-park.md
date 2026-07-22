@@ -51,13 +51,13 @@ mọi lỗi rơi vào nhóm `UNKNOWN`, và việc phân loại thành vô nghĩa
 `customers` chứa `full_name`/`email`/`phone`. Log không phải chỗ cho PII. Nội dung gốc vẫn nằm nguyên
 trong topic DLQ nếu cần điều tra.
 
-**2. Danh sách topic DLQ được SINH từ metadata, không hardcode.**
+**2. Danh sách topic DLQ được sinh từ metadata, không hardcode.**
 
 Trước đây 6 topic `dlq.*` nằm cứng trong `dlq_processor.py`, tách rời khỏi cấu hình connector — thêm
 connector mà quên sửa list Python thì lỗi của nó rơi vào hư không (metadata sprawl #12). Nay
 `dlq-processor/dlq_topics.json` được sinh từ `metadata/datasets/*.yaml`, đi kèm ADR-0015.
 
-**3. DLQ event đi qua Kafka, KHÔNG INSERT thẳng ClickHouse.**
+**3. DLQ event đi qua Kafka, không INSERT thẳng ClickHouse.**
 
 ```text
 sink lỗi → dlq.<connector> → dlq-processor → dlq.events (Kafka)
@@ -73,7 +73,7 @@ Ba lý do, lý do thứ hai là quyết định:
    chúng nằm chờ; ClickHouse lên là đuổi kịp.
 3. ClickHouse ghét insert nhỏ lẻ; Kafka engine gom thành block lớn.
 
-**4. KHÔNG tự động phát lại. Mọi nhóm đều `PARKED`.**
+**4. Không tự động phát lại. Mọi nhóm đều `PARKED`.**
 
 Ghi nhận đầy đủ rồi dừng, chờ người xử lý. Đích phát lại **đúng** phải là một topic chỉ connector đó
 đọc — topic gốc không thoả vì Flink cũng đọc. Xây topic retry riêng thì vướng: ES sink lấy **tên
