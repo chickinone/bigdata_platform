@@ -1,0 +1,19 @@
+# Grafana - dashboard realtime doc tu ClickHouse serving.
+# Khong co khoi trino (Grafana khong query duoc qua Trino).
+# dashboards: ban ke de nap vao catalog OM + noi lineage bang metric -> dashboard.
+name: grafana_dashboards
+type: grafana
+description: Grafana realtime dashboard - doc metrics tu ClickHouse (Kafka engine + MV).
+
+endpoints:
+  url: http://localhost:3000
+  internal_url: http://grafana:3000
+
+dashboards:
+  - name: realtime-transactions
+    title: Realtime Transaction Dashboard
+    tables:
+      - bank.metric.timeseries
+      - bank.metric.kpi
+      - bank.metric.breakdown
+      - bank.metric.topn

@@ -1,0 +1,31 @@
+# Superset - BI tren du lieu governance (OM API -> ClickHouse -> day).
+# Phien rieng nhu openmetadata/: khong chay cung full stack chinh (RAM).
+# Can: network bigdata-net ton tai (stack chinh da tao) + bigdata-clickhouse song.
+#
+#   docker compose -f superset/docker-compose-superset.yml up -d
+#   UI: http://localhost:8088 (admin/admin)
+
+services:
+  superset:
+    build: .
+    container_name: bigdata-superset
+    restart: unless-stopped
+    ports:
+      - "8088:8088"
+    environment:
+      SUPERSET_CONFIG_PATH: /app/superset_config.py
+      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY:-bdp-dev-not-secret}
+    volumes:
+      - ./superset_config.py:/app/superset_config.py:ro
+      - superset_home:/app/superset_home
+    # Mot dong duy nhat: folded scalar cua YAML giu newline voi dong thut sau hon,
+    # tach lenh create-admin lam no roi vao prompt tuong tac (da vap).
+    command: bash -c "superset db upgrade && (superset fab create-admin --username admin --firstname Bdp --lastname Admin --email admin@bdp.local --password admin || true) && superset init && superset run -h 0.0.0.0 -p 8088"
+    networks: [bigdata-net]
+
+volumes:
+  superset_home:
+
+networks:
+  bigdata-net:
+    external: true

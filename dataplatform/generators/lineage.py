@@ -41,6 +41,10 @@ def _dataset_nodes(datasets: list[Dataset]) -> list[dict]:
             "columns": [c["name"] for c in cols],
             "pii_columns": [c["name"] for c in cols if c.get("pii")],
             "tags": d.raw.get("tags", []),
+            # governance: catalog (OM) đọc các trường này để gán domain/tier/mô tả.
+            "domain": d.raw.get("domain"),
+            "tier": d.raw.get("tier"),
+            "description": d.raw.get("description", ""),
         })
     return nodes
 

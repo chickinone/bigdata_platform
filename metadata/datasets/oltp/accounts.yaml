@@ -3,6 +3,8 @@ urn: bank.public.accounts
 kind: source_table
 layer: oltp
 owner: team-core-banking
+domain: core-banking
+tier: Tier1
 description: Tài khoản ngân hàng - số dư cập nhật liên tục.
 
 source:

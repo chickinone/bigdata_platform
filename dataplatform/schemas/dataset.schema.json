@@ -33,6 +33,17 @@
 
     "description": { "type": "string" },
 
+    "domain": {
+      "description": "Miền nghiệp vụ (governance). Dùng để nhóm dataset trong catalog: core-banking, analytics, risk-fraud...",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+
+    "tier": {
+      "description": "Mức quan trọng của dataset (chuẩn Tier OpenMetadata). Tier1 = mission-critical.",
+      "enum": ["Tier1", "Tier2", "Tier3", "Tier4", "Tier5"]
+    },
+
     "source": {
       "description": "Dữ liệu của dataset này nằm ở đâu và tới Kafka bằng cách nào.",
       "type": "object",

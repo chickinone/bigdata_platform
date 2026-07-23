@@ -4,6 +4,8 @@ urn: bank.public.transactions
 kind: source_table
 layer: oltp
 owner: team-core-banking
+domain: core-banking
+tier: Tier1
 description: Giao dịch ngân hàng - deposit, withdrawal, fee, interest, transfer in/out.
 
 source:

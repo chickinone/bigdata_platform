@@ -71,3 +71,4 @@
 | ADR | Quyết định |
 |---|---|
 | [0037](0037-cutover-complete-single-source.md) | Chốt cutover — `metadata/` là nguồn sự thật duy nhất |
+| [0038](0038-om-governance-from-metadata.md) | Governance OM sinh từ metadata — domain/tier, test case, metric, dashboard, KPI |

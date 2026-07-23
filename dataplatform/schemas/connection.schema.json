@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://bigdata-platform/schemas/connection.schema.json",
   "title": "Connection contract",
-  "description": "Khai báo MỘT hệ thống kết nối một lần. Dataset tham chiếu qua source.connection; artifact kết nối (vd Trino catalog) sinh từ đây. KHÔNG chứa secret — dùng ${ENV:...}.",
+  "description": "Khai báo một hệ thống kết nối một lần. Dataset tham chiếu qua source.connection; artifact kết nối (vd Trino catalog) sinh từ đây. Không chứa secret — dùng ${ENV:...}.",
 
   "type": "object",
   "additionalProperties": false,
@@ -11,15 +11,36 @@
   "properties": {
     "name": { "type": "string", "minLength": 1 },
     "type": {
-      "enum": ["postgres", "clickhouse", "iceberg", "kafka", "elasticsearch", "s3", "schema_registry"]
+      "enum": ["postgres", "clickhouse", "iceberg", "kafka", "elasticsearch", "s3", "schema_registry", "grafana"]
     },
     "description": { "type": "string" },
 
     "endpoints": {
-      "description": "Placeholder endpoint cho consumer NGOÀI Trino (Kafka Connect, Debezium, Spark, Flink). Map key ổn định -> chuỗi ${env:...}/${ENV:...} hoặc literal host:port. Consumer đọc theo key. KHÔNG chứa secret thật.",
+      "description": "Placeholder endpoint cho consumer ngoài Trino (Kafka Connect, Debezium, Spark, Flink). Map key ổn định -> chuỗi ${env:...}/${ENV:...} hoặc literal host:port. Consumer đọc theo key. Không chứa secret thật.",
       "type": "object",
       "minProperties": 1,
       "additionalProperties": { "type": "string" }
+    },
+
+    "dashboards": {
+      "description": "Chỉ cho type=grafana: bản kê dashboard để nạp vào catalog (OpenMetadata) + nối lineage bảng nguồn -> dashboard.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "title"],
+        "properties": {
+          "name":   { "type": "string", "minLength": 1, "description": "Định danh trong catalog (kebab-case)." },
+          "title":  { "type": "string", "minLength": 1 },
+          "uid":    { "type": "string", "description": "UID dashboard trong Grafana (đường dẫn /d/<uid>)." },
+          "tables": {
+            "description": "URN các dataset mà dashboard đọc (nguồn cạnh lineage).",
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
     },
 
     "trino": {

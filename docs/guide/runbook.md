@@ -97,6 +97,21 @@ liệu Iceberg: `CALL iceberg.system.rollback_to_snapshot(...)`.
   phụ thuộc). Silver hiện là full-refresh overwrite (nợ #13).
 - Qua Airflow: trigger DAG `medallion_batch` (cần stack Spark sống).
 
+### Cập nhật governance catalog (domain / tier / test case / dashboard)
+
+Mọi thứ hiển thị trong OpenMetadata đều suy từ metadata ([ADR-0038](../decisions/0038-om-governance-from-metadata.md)):
+
+| Muốn đổi | Sửa ở đâu |
+|---|---|
+| Domain / tier / owner / mô tả của dataset | `metadata/datasets/<layer>/<name>.yaml` (`domain:`, `tier:`, `owner:`, `description:`) |
+| Test case data quality | `metadata/quality/<dataset>.yaml` (range/accepted_values) — not_null/unique tự suy từ contract. Kết quả chạy thật: `verifiers.quality --push-om` (cần Postgres/ClickHouse sống) |
+| Metric definition | `metadata/pipelines/stream/<metric>.yaml` (aggregations) |
+| Dashboard Grafana + lineage | `metadata/connections/grafana.yaml` (khối `dashboards`) |
+
+Rồi: `cli write && cli check` (nếu đổi dataset) → bật OM (phiên riêng) →
+`python -m dataplatform.deployers.openmetadata apply` (idempotent — replace nguyên khối, chạy lại không nhân đôi).
+Không gõ governance trên UI — lần `apply` sau sẽ ghi đè theo contract.
+
 ---
 
 ## Runtime phiên-riêng (máy 15GB, không chạy tất cả cùng lúc)
@@ -106,6 +121,7 @@ liệu Iceberg: `CALL iceberg.system.rollback_to_snapshot(...)`.
 | Catalog UI | `docker compose -f openmetadata/docker-compose-openmetadata.yml up -d openmetadata-server elasticsearch` | 8585 |
 | Federation query | `docker compose up -d minio iceberg-rest trino` (+ postgres/clickhouse) | trino 8085 |
 | Orchestration | `docker compose -f airflow/docker-compose-airflow.yml up -d` (+ stack Spark cho task) | 8090 |
+| BI (Superset) | `docker compose -f superset/docker-compose-superset.yml up -d` (+ clickhouse/postgres tuỳ dashboard) | 8088 |
 
 Dừng bớt để nhường RAM: `docker compose stop` (stack chính) / `... -f <file> stop`.
 
@@ -124,6 +140,7 @@ Dừng bớt để nhường RAM: `docker compose stop` (stack chính) / `... -f
 | CDC không produce, log `UNKNOWN_TOPIC_OR_PARTITION` | `auto.create.topics=false` (ADR-0020) + chưa tạo topic | `docker compose up -d kafka-init` (chạy create-topics.sh) trước khi CDC produce |
 | Sau restart chỉ vài bảng có Avro schema | Slot Debezium bền (PG volume) nhưng Schema Registry reset → resume từ offset cũ, không re-snapshot | Xoá connector → đợi slot `active=f` → `pg_drop_replication_slot` → re-apply (fresh snapshot). Bảng rỗng thì không có schema — đúng, không phải lỗi |
 | OM search trả 0 table (entity vẫn còn) | ES của OM chết → search rỗng dù postgres còn entity | Bật lại ES; hoặc nạp lại `openmetadata apply` (catalog tái tạo từ `graph.json`) |
+| OM search hiện entity "ma" của project khác (đã xoá khỏi DB) | Search index (ES) lệch DB — sự kiện xoá không tới ES (ES down/OOM lúc xoá). OM instance này từng phục vụ project khác trên cùng volume | Trigger reindex: `POST /api/v1/apps/trigger/SearchIndexingApplication` (app có `recreateIndex: true`) rồi đợi status `success` |
 | File cứ hiện "modified" (LF↔CRLF) | Generator ghi LF, Git chuẩn hoá CRLF | Nhiễu vô hại; `git checkout -- <file>` nếu không có diff thật |
 
 ---

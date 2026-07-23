@@ -3,6 +3,8 @@ urn: bank.public.transfers
 kind: source_table
 layer: oltp
 owner: team-core-banking
+domain: core-banking
+tier: Tier2
 description: Chuyển tiền giữa hai tài khoản - có state machine, dùng cho CEP.
 
 source:

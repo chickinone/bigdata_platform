@@ -4,6 +4,8 @@ urn: bank.metric.timeseries
 kind: olap_table
 layer: metric
 owner: team-analytics
+domain: analytics
+tier: Tier2
 description: Số lượng và tổng giá trị giao dịch theo phút, chẻ theo loại giao dịch.
 
 source:

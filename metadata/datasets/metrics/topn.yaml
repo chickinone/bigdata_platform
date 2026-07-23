@@ -4,6 +4,8 @@ urn: bank.metric.topn
 kind: olap_table
 layer: metric
 owner: team-analytics
+domain: analytics
+tier: Tier3
 description: Top 10 tài khoản theo tổng giá trị giao dịch, cộng dồn trong ngày.
 
 source:

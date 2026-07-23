@@ -6,6 +6,8 @@ urn: bank.alerts.fraud_alerts
 kind: stream
 layer: alert
 owner: team-fraud
+domain: risk-fraud
+tier: Tier1
 description: >-
   Cảnh báo gian lận do Flink Lane 3 phát ra. Hình dạng message KHÁC NHAU theo
   alert_type (VELOCITY_FRAUD vs FAILED_STORM) nên không khai columns - đây là

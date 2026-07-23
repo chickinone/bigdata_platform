@@ -4,6 +4,8 @@ urn: bank.metric.kpi
 kind: olap_table
 layer: metric
 owner: team-analytics
+domain: analytics
+tier: Tier2
 description: 6 KPI tổng hợp cộng dồn trong ngày — dùng cho thẻ số trên dashboard.
 
 source:

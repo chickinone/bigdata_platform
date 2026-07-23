@@ -26,7 +26,7 @@ là để xử lý nó:
 | Không lineage/catalog | Lineage cấp cột (Flink + Spark) + OpenMetadata, sinh từ metadata |
 | Deploy thủ công qua REST/`curl` | Deployer idempotent (plan/apply) + rollback từ git ref |
 
-Quá trình làm được ghi lại trong 37 ADR ([`docs/decisions/`](docs/decisions/README.md)) và
+Quá trình làm được ghi lại trong 38 ADR ([`docs/decisions/`](docs/decisions/README.md)) và
 [roadmap 8 pha](docs/roadmap/BDP-metadata-driven-roadmap.md), đã hoàn tất và kiểm chứng trên
 hệ thống chạy thật.
 
@@ -136,13 +136,13 @@ bigdata-platform/
 ├── dataplatform/                # control plane (Python)
 │   ├── registry.py  cli.py  compat.py
 │   ├── schemas/                 #   JSON Schema validate contract
-│   ├── generators/  deployers/  verifiers/
+│   ├── generators/  deployers/  verifiers/  exporters/
 ├── migrations/                  # versioned migration (clickhouse/ + iceberg native)
 ├── lineage/                     # graph.json + LINEAGE.md (sinh)
-├── airflow/  openmetadata/      # chạy phiên riêng (compose riêng + DAG sinh)
+├── airflow/  openmetadata/  superset/   # chạy phiên riêng (compose riêng)
 ├── debezium/ kafka-connect/ kafka/ clickhouse/ trino/ postgres/   # artifact sinh, đừng sửa tay
 ├── flink/ spark/ dlq-processor/ fraud-notifier/ generator/        # runtime services + runner generic
-├── docs/                        # decisions/ (37 ADR), roadmap/, architecture/, guide/ (runbook)
+├── docs/                        # decisions/ (38 ADR), roadmap/, architecture/, guide/ (runbook)
 ├── .github/                     # CI (metadata-check) + CODEOWNERS
 └── docker-compose.yml
 ```
@@ -163,7 +163,8 @@ artifact sinh. Sửa tay là CI `check` đỏ; muốn đổi thì sửa contract
 | Search | Elasticsearch + Kibana | tra cứu / điều tra CDC + fraud alert |
 | Lakehouse | MinIO (S3) + Spark 3.5 + Apache Iceberg (REST catalog) | Bronze/Silver/Gold + snapshot/time-travel |
 | Federation | Trino | query chéo Postgres × ClickHouse × Iceberg |
-| Catalog/Lineage | OpenMetadata | discovery + lineage cấp cột + PII tag |
+| Catalog/Lineage | OpenMetadata | discovery + lineage cấp cột + PII tag + data quality 4 lớp |
+| BI | Apache Superset | dashboard nghiệp vụ (OLTP) + governance (OM → ClickHouse) |
 | Orchestration | Apache Airflow (DAG sinh từ deps) | lịch batch medallion |
 | Runtime | Docker Compose | chạy toàn bộ local/dev |
 
@@ -213,7 +214,35 @@ Catalog UI (OpenMetadata) và Airflow chạy phiên riêng (compose riêng, tố
 
 Service URLs: Kafka UI `:8080`, Connect `:8083`, Schema Registry `:8081`, Flink `:8082`,
 ClickHouse `:8123`, Grafana `:3000`, MinIO `:9001`, Kibana `:5601`, Trino `:8085`,
-OpenMetadata `:8585`, Airflow `:8090`
+OpenMetadata `:8585`, Airflow `:8090`, Superset `:8088`
+
+## Governance & BI (OpenMetadata + Superset)
+
+Sau cutover, catalog không chỉ để tra cứu mà thành nguồn dữ liệu phân tích được:
+
+- **Governance sinh từ metadata** ([ADR-0038](docs/decisions/0038-om-governance-from-metadata.md)):
+  domain/tier/owner khai trong contract, đẩy vào OpenMetadata cùng classification, 14 metric entity,
+  và data quality đủ 4 lớp của OM (TestDefinition → TestCase → TestSuite basic/logical → TestCaseResult).
+  66 test case dùng đúng một nguồn luật với quality gate — `verifiers/quality --push-om` chạy trên dữ
+  liệu thật rồi đẩy kết quả lên OM thành time-series. Lineage nối trọn chuỗi tới điểm cuối:
+  `transactions → Flink metric → ClickHouse → Grafana dashboard`.
+- **BI trên hai tuyến** (Superset, compose phiên riêng trong `superset/`):
+
+```text
+Postgres OLTP ─────────────────────────▶ Superset "Banking Transaction Analytics"
+OpenMetadata API ──exporter──▶ ClickHouse governance.* ──▶ Superset "Governance"
+```
+
+  Tuyến governance phải đi qua ClickHouse vì OM chỉ expose REST API (DB nội bộ của nó là JSON blob,
+  không phải hợp đồng tích hợp); exporter (`dataplatform/exporters/om_governance.py`) dọn blob một lần
+  thành bảng phẳng, dashboard sống độc lập kể cả khi OM tắt. Dashboard dựng bằng API, idempotent
+  (`superset/build_dashboard.py` + `build_banking_dashboard.py`).
+
+<p align="center">
+  <img src="assets/images/dashboard_OM.png" alt="Superset — Banking Transaction Analytics trên dữ liệu OLTP thật" width="90%" />
+</p>
+
+---
 
 ## Reliability & Observability
 
@@ -230,7 +259,7 @@ liệu truy vấn được. Theo dõi qua Kafka UI, Flink UI, Spark UI, Grafana,
 ## Cách làm việc trong repo này
 
 - ADR-first: quyết định đáng kể nào cũng có một ADR (bối cảnh, quyết định, hệ quả, phương án đã
-  cân nhắc). Hiện có [37 ADR](docs/decisions/README.md).
+  cân nhắc). Hiện có [38 ADR](docs/decisions/README.md).
 - Generator phải sinh ra đúng từng byte bản viết tay cũ trước khi được phép thay nó.
 - CI (`.github/workflows/metadata-check.yml`): drift (`check`) + BACKWARD (`compat`) + plan hệ quả,
   chạy thuần tĩnh.
@@ -245,7 +274,7 @@ liệu truy vấn được. Theo dõi qua Kafka UI, Flink UI, Spark UI, Grafana,
 | Cái đích + từng pha | [`docs/roadmap/BDP-metadata-driven-roadmap.md`](docs/roadmap/BDP-metadata-driven-roadmap.md) |
 | Điểm xuất phát (metadata sprawl) | [`docs/architecture/BDP-current-state.md`](docs/architecture/BDP-current-state.md) |
 | Vận hành hằng ngày + gotchas | [`docs/guide/runbook.md`](docs/guide/runbook.md) |
-| Vì sao mỗi quyết định | [`docs/decisions/README.md`](docs/decisions/README.md) (index 37 ADR) |
+| Vì sao mỗi quyết định | [`docs/decisions/README.md`](docs/decisions/README.md) (index 38 ADR) |
 
 ## Tác giả
 

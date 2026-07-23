@@ -3,6 +3,8 @@ urn: bank.metric.breakdown
 kind: olap_table
 layer: metric
 owner: team-analytics
+domain: analytics
+tier: Tier3
 description: KPI cộng dồn trong ngày, chẻ theo loại giao dịch.
 
 source:

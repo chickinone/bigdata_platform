@@ -1,6 +1,7 @@
 """Data quality gate — chạy luật chất lượng trên dữ liệu thật, fail thì chặn promote (Pha 7).
 
-    python -m dataplatform.verifiers.quality        # chạy mọi luật, exit 1 nếu có vi phạm
+    python -m dataplatform.verifiers.quality            # chạy mọi luật, exit 1 nếu có vi phạm
+    python -m dataplatform.verifiers.quality --push-om  # + đẩy TestCaseResult lên OpenMetadata
 
 Hai nguồn luật:
   - tự SUY từ contract: `not_null` cho mọi cột `nullable:false`, `unique` cho `primary_key`.
@@ -58,34 +59,59 @@ def _q(v: str) -> str:
     return "'" + v.replace("'", "''") + "'"
 
 
-def _checks_for(table: str, ds: Dataset, rules: list[dict]) -> list[tuple[str, str]]:
-    out: list[tuple[str, str]] = []
-    # tự suy: not_null
+def case_specs(ds: Dataset, rules: list[dict]) -> list[dict]:
+    """Danh sách test case chuẩn của một dataset — nguồn dùng chung.
+
+    Đây là nơi duy nhất định nghĩa "dataset này có những check nào". Hai consumer:
+      - verifier này (dựng SQL đếm vi phạm, chạy trên nguồn thật);
+      - deployer OpenMetadata (dựng TestCase + đẩy TestCaseResult, ADR-0038).
+    Mỗi spec: {kind, column, params, label, om_name} — om_name là tên TestCase
+    trong OM, phải ổn định vì FQN kết quả treo vào nó.
+    """
+    tname = ds.urn.split(".")[-1]
+    specs: list[dict] = []
+
+    def _add(kind: str, col: str, params: dict) -> None:
+        specs.append({
+            "kind": kind, "column": col, "params": params,
+            "label": f"{kind}({col})",
+            "om_name": f"{tname}_{col}_{kind}",
+        })
+
+    # tự suy: not_null cho mọi cột nullable:false + unique cho PK
     for col in ds.columns():
         if not col.get("nullable", True):
-            out.append((f"not_null({col['name']})",
-                        f"SELECT count(*) FROM {table} WHERE {col['name']} IS NULL"))
-    # tự suy: unique (PK)
+            _add("not_null", col["name"], {})
     if ds.primary_key:
-        pk = ds.primary_key
-        out.append((f"unique({pk})",
-                    f"SELECT count(*) FROM (SELECT {pk} FROM {table} GROUP BY {pk} HAVING count(*) > 1) AS _dup"))
-    # tường minh
+        _add("unique", ds.primary_key, {})
+    # tường minh từ metadata/quality
     for r in rules:
-        col, rtype = r["column"], r["type"]
-        if rtype == "not_null":
-            out.append((f"not_null({col})", f"SELECT count(*) FROM {table} WHERE {col} IS NULL"))
-        elif rtype == "unique":
-            out.append((f"unique({col})",
-                        f"SELECT count(*) FROM (SELECT {col} FROM {table} GROUP BY {col} HAVING count(*) > 1) AS _dup"))
-        elif rtype == "accepted_values":
-            vals = ", ".join(_q(v) for v in r["values"])
-            out.append((f"accepted_values({col})",
-                        f"SELECT count(*) FROM {table} WHERE {col} NOT IN ({vals}) AND {col} IS NOT NULL"))
-        elif rtype == "range":
-            out.append((f"range({col})",
-                        f"SELECT count(*) FROM {table} WHERE {col} < {r['min']} OR {col} > {r['max']}"))
-    return out
+        if r["type"] in ("not_null", "unique"):
+            _add(r["type"], r["column"], {})
+        elif r["type"] == "range":
+            _add("range", r["column"], {"min": r["min"], "max": r["max"]})
+        elif r["type"] == "accepted_values":
+            _add("accepted_values", r["column"], {"values": r["values"]})
+    return specs
+
+
+def _sql_for(table: str, spec: dict) -> str:
+    """Câu SQL đếm vi phạm cho một spec (chung cú pháp Postgres/ClickHouse)."""
+    col, kind, p = spec["column"], spec["kind"], spec["params"]
+    if kind == "not_null":
+        return f"SELECT count(*) FROM {table} WHERE {col} IS NULL"
+    if kind == "unique":
+        return f"SELECT count(*) FROM (SELECT {col} FROM {table} GROUP BY {col} HAVING count(*) > 1) AS _dup"
+    if kind == "accepted_values":
+        vals = ", ".join(_q(v) for v in p["values"])
+        return f"SELECT count(*) FROM {table} WHERE {col} NOT IN ({vals}) AND {col} IS NOT NULL"
+    if kind == "range":
+        return f"SELECT count(*) FROM {table} WHERE {col} < {p['min']} OR {col} > {p['max']}"
+    raise RuntimeError(f"kind chưa hỗ trợ: {kind}")
+
+
+def _checks_for(table: str, ds: Dataset, rules: list[dict]) -> list[tuple[dict, str]]:
+    return [(spec, _sql_for(table, spec)) for spec in case_specs(ds, rules)]
 
 
 def _target(ds: Dataset) -> tuple[str | None, str | None]:
@@ -114,31 +140,68 @@ def _load_rules() -> dict[str, list[dict]]:
     return out
 
 
-def cmd_verify() -> int:
+def _push_results_om(outcomes: list[tuple[Dataset, dict, str, str]]) -> None:
+    """Đẩy TestCaseResult (time-series) lên OpenMetadata — lớp thứ 4 của mô hình DQ.
+
+    outcomes: (dataset, spec, status Success/Failed/Aborted, thông điệp).
+    FQN test case = <service>.<db>.<layer>.<table>.<cột>.<om_name> — cùng quy ước
+    tên với deployer openmetadata (nó tạo case, verifier này gắn kết quả vào).
+    Import lười để tránh vòng import (deployer cũng import module này).
+    """
+    import time as _time
+    from ..deployers.openmetadata import DATABASE, SERVICE, _login, _req
+
+    token = _login()
+    now = int(_time.time() * 1000)
+    ok = err = 0
+    for ds, spec, status, message in outcomes:
+        tname = ds.urn.split(".")[-1]
+        fqn = f"{SERVICE}.{DATABASE}.{ds.raw['layer']}.{tname}.{spec['column']}.{spec['om_name']}"
+        code, payload = _req("POST", f"/api/v1/dataQuality/testCases/testCaseResults/{fqn}",
+                             token, {"timestamp": now, "testCaseStatus": status, "result": message})
+        if code in (200, 201):
+            ok += 1
+        else:
+            err += 1
+            print(f"  [CHÚ Ý] push {fqn} ({code}): {json.dumps(payload)[:120]}")
+    print(f"Đẩy OM: {ok} kết quả" + (f", {err} lỗi" if err else "") + ".")
+
+
+def cmd_verify(push_om: bool = False) -> int:
     datasets = load_datasets()
     rules_by_urn = _load_rules()
     fails = skips = passed = 0
+    outcomes: list[tuple[Dataset, dict, str, str]] = []
 
     for ds in sorted(datasets, key=lambda d: d.urn):
         engine, table = _target(ds)
         if engine is None:
             continue
         runner = _pg_scalar if engine == "postgres" else _ch_scalar
-        for label, sql in _checks_for(table, ds, rules_by_urn.get(ds.urn, [])):
+        for spec, sql in _checks_for(table, ds, rules_by_urn.get(ds.urn, [])):
+            label = spec["label"]
             try:
                 violations = runner(sql)
             except RuntimeError as exc:
                 print(f"  [SKIP] {ds.urn} :: {label} ({engine} không chạy được: {str(exc)[:60]})")
                 skips += 1
+                outcomes.append((ds, spec, "Aborted", f"nguồn {engine} không chạy"))
                 continue
             if violations > 0:
                 print(f"  [FAIL] {ds.urn} :: {label} — {violations} vi phạm")
                 fails += 1
+                outcomes.append((ds, spec, "Failed", f"{violations} vi phạm"))
             else:
                 print(f"  [ OK ] {ds.urn} :: {label}")
                 passed += 1
+                outcomes.append((ds, spec, "Success", "0 vi phạm"))
 
     print(f"\nKẾT QUẢ: {passed} đạt, {fails} vi phạm, {skips} bỏ qua (nguồn không chạy).")
+    if push_om:
+        try:
+            _push_results_om(outcomes)
+        except Exception as exc:  # noqa: BLE001 — push là phụ, gate là chính
+            print(f"  [CHÚ Ý] không đẩy được kết quả lên OM: {str(exc)[:150]}")
     if fails:
         print("Có vi phạm chất lượng -> chặn promote.")
         return 1
@@ -153,8 +216,10 @@ def _force_utf8() -> None:
 
 def main(argv: list[str] | None = None) -> int:
     _force_utf8()
+    args = argv if argv is not None else sys.argv[1:]
+    push_om = "--push-om" in args
     try:
-        return cmd_verify()
+        return cmd_verify(push_om=push_om)
     except (RuntimeError, FileNotFoundError) as exc:
         print(f"LỖI: {exc}", file=sys.stderr)
         return 3

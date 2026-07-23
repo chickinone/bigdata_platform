@@ -14,7 +14,10 @@
         "fraud",
         "alert",
         "generated"
-      ]
+      ],
+      "domain": "risk-fraud",
+      "tier": "Tier1",
+      "description": "Cảnh báo gian lận do Flink Lane 3 phát ra. Hình dạng message KHÁC NHAU theo alert_type (VELOCITY_FRAUD vs FAILED_STORM) nên không khai columns - đây là JSON tự do, không phải bảng có schema cố định."
     },
     {
       "id": "bank.metric.breakdown",
@@ -37,7 +40,10 @@
         "metric",
         "realtime",
         "dashboard"
-      ]
+      ],
+      "domain": "analytics",
+      "tier": "Tier3",
+      "description": "KPI cộng dồn trong ngày, chẻ theo loại giao dịch."
     },
     {
       "id": "bank.metric.kpi",
@@ -61,7 +67,10 @@
         "metric",
         "realtime",
         "dashboard"
-      ]
+      ],
+      "domain": "analytics",
+      "tier": "Tier2",
+      "description": "6 KPI tổng hợp cộng dồn trong ngày — dùng cho thẻ số trên dashboard."
     },
     {
       "id": "bank.metric.timeseries",
@@ -82,7 +91,10 @@
         "metric",
         "realtime",
         "dashboard"
-      ]
+      ],
+      "domain": "analytics",
+      "tier": "Tier2",
+      "description": "Số lượng và tổng giá trị giao dịch theo phút, chẻ theo loại giao dịch."
     },
     {
       "id": "bank.metric.topn",
@@ -104,7 +116,10 @@
         "metric",
         "realtime",
         "dashboard"
-      ]
+      ],
+      "domain": "analytics",
+      "tier": "Tier3",
+      "description": "Top 10 tài khoản theo tổng giá trị giao dịch, cộng dồn trong ngày."
     },
     {
       "id": "bank.public.accounts",
@@ -131,7 +146,10 @@
       "tags": [
         "banking",
         "dimension"
-      ]
+      ],
+      "domain": "core-banking",
+      "tier": "Tier1",
+      "description": "Tài khoản ngân hàng - số dư cập nhật liên tục."
     },
     {
       "id": "bank.public.customers",
@@ -160,7 +178,10 @@
         "banking",
         "dimension",
         "pii"
-      ]
+      ],
+      "domain": "core-banking",
+      "tier": "Tier2",
+      "description": "Khách hàng - thông tin định danh, trạng thái KYC, điểm rủi ro."
     },
     {
       "id": "bank.public.transactions",
@@ -188,7 +209,10 @@
         "banking",
         "fact",
         "high-throughput"
-      ]
+      ],
+      "domain": "core-banking",
+      "tier": "Tier1",
+      "description": "Giao dịch ngân hàng - deposit, withdrawal, fee, interest, transfer in/out."
     },
     {
       "id": "bank.public.transfers",
@@ -215,7 +239,10 @@
         "banking",
         "fact",
         "lifecycle"
-      ]
+      ],
+      "domain": "core-banking",
+      "tier": "Tier2",
+      "description": "Chuyển tiền giữa hai tài khoản - có state machine, dùng cho CEP."
     }
   ],
   "lake_nodes": [
