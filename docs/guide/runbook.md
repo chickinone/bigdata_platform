@@ -41,7 +41,11 @@ contract rồi `write`.
 2. `cli write` → tự sinh: Debezium `table.include.list`, publication, ES/S3 sink, topic, DDL ClickHouse,
    lineage, DAG. `cli check`.
 3. Áp: `connectors apply` (Kafka Connect), `clickhouse_migrate apply` nếu có sink CH.
-4. Bảng metric mới = init sinh tự có (idempotent), không cần migration.
+4. **Bảng CDC trên DB đang sống:** `04_publication.sql` là init script, không chạy lại → phải tự gõ
+   `ALTER PUBLICATION dbz_publication ADD TABLE <schema>.<table>;`. Quên bước này thì bảng có snapshot
+   nhưng **không bao giờ có bản ghi mới**, connector vẫn `RUNNING` và `cli check` vẫn xanh.
+   Kiểm bằng `python -m dataplatform.verifiers.postgres_publication` ([ADR-0039](../decisions/0039-verify-publication-vs-contract.md)).
+5. Bảng metric mới = init sinh tự có (idempotent), không cần migration.
 
 ### Thêm một metric (Flink → ClickHouse)
 
