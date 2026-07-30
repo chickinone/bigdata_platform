@@ -13,7 +13,10 @@ from ..registry import METADATA_DIR, REPO_ROOT, load_connections, load_datasets
 
 OM_URL = os.getenv("OM_URL", "http://localhost:8585")
 OM_ADMIN = os.getenv("OM_ADMIN", "admin@open-metadata.org")
-OM_PASSWORD_B64 = os.getenv("OM_PASSWORD_B64", "YWRtaW4=")  # "admin"
+# Default công khai của OpenMetadata (base64 của "admin"). Giữ làm default để chạy được
+# ngay trên stack lab, nhưng KHÔNG hardcode giá trị thật của môi trường nào — đổi
+# credential = đặt env, không sửa dòng này.
+OM_PASSWORD_B64 = os.getenv("OM_PASSWORD_B64", "YWRtaW4=")
 SERVICE = "bdp"
 DATABASE = "bank"
 

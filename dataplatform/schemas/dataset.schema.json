@@ -45,7 +45,7 @@
     },
 
     "source": {
-      "description": "Dữ liệu của dataset này nằm ở đâu và tới Kafka bằng cách nào.",
+      "description": "Dữ liệu của dataset này nằm ở đâu và tới Kafka bằng cách nào. LƯU Ý: schema_name/table/columns[].name/sinks.clickhouse.{database,table} có `pattern` định danh vì chúng đi THẲNG vào DDL sinh ra (CREATE TABLE, Flink DDL, SQL quality gate) — không có pattern thì một contract chứa `table: \"x; DROP ...\"` sẽ sinh ra câu lệnh chạy được.",
       "type": "object",
       "additionalProperties": false,
       "required": ["type", "topic"],
@@ -60,8 +60,8 @@
           "minLength": 1
         },
         "connection": { "type": "string" },
-        "schema_name": { "type": "string" },
-        "table": { "type": "string" },
+        "schema_name": { "type": "string", "pattern": "^[a-z_][a-z0-9_]*$" },
+        "table": { "type": "string", "pattern": "^[a-z_][a-z0-9_]*$" },
         "replica_identity": {
           "description": "full = Postgres ghi cả row cũ vào WAL (cần cho audit thay đổi). default = chỉ ghi PK. Xem ADR-0004.",
           "enum": ["default", "full"]
@@ -95,7 +95,7 @@
         "additionalProperties": false,
         "required": ["name", "type"],
         "properties": {
-          "name": { "type": "string", "minLength": 1 },
+          "name": { "type": "string", "pattern": "^[a-z_][a-z0-9_]*$" },
           "type": {
             "description": "Kiểu LOGIC, độc lập engine. Mỗi generator tự dịch sang kiểu của engine mình.",
             "type": "string",
@@ -149,8 +149,8 @@
           "required": ["enabled", "database", "table", "engine", "order_by"],
           "properties": {
             "enabled": { "type": "boolean", "default": true },
-            "database": { "type": "string", "minLength": 1 },
-            "table": { "type": "string", "minLength": 1 },
+            "database": { "type": "string", "pattern": "^[a-z_][a-z0-9_]*$" },
+            "table": { "type": "string", "pattern": "^[a-z_][a-z0-9_]*$" },
             "engine": {
               "description": "ReplacingMergeTree gộp bản trùng theo order_by lúc merge — cần vì sink Flink là AT_LEAST_ONCE (ADR-0007).",
               "enum": ["MergeTree", "ReplacingMergeTree"]

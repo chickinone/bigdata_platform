@@ -27,6 +27,19 @@ jobs:
       - name: Cài phụ thuộc control plane
         run: pip install -r requirements-dev.txt
 
+      - name: Quét secret (gitleaks)
+        # Quét WORKING TREE (--no-git), không quét history: history có một credential cũ
+        # đã được xử lý bằng cách đổi mật khẩu, quét lại chỉ làm CI đỏ vĩnh viễn. Mục
+        # đích của gate này là chặn secret MỚI lọt vào — đúng thứ đã lọt một lần.
+        # --redact: không in giá trị secret ra log CI công khai.
+        run: |
+          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:latest \
+            detect --source /repo --no-git --redact --exit-code 1
+
+      - name: Test hàm thuần của control plane
+        # Không cần engine nào — chỉ registry/compat/generator/verifier ở mức hàm.
+        run: python -m pytest tests -q
+
       - name: Đối chiếu artifact sinh vs file trên đĩa (drift gate)
         # Exit 1 nếu lệch (contract sửa mà quên generator), exit 2 nếu contract sai schema.
         run: python -m dataplatform.cli check

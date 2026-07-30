@@ -19,13 +19,13 @@ from .generators import (
     topic_manifest,
     trino_catalog,
 )
-from .generators.flink_sql import load_pipelines
 from .registry import (
     REPO_ROOT,
     ContractError,
     connections_by_name,
     load_connections,
     load_datasets,
+    load_pipelines,
 )
 
 # Ghi JSON với indent 2 + newline cuối file. Đây là QUY ước, không phải yêu cầu

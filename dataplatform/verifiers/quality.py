@@ -9,25 +9,20 @@ import yaml
 from jsonschema import Draft202012Validator
 
 from ..registry import METADATA_DIR, SCHEMA_DIR, Dataset, load_datasets
+from .postgres_schema import _psql
 
-PG_CONTAINER = os.getenv("POSTGRES_CONTAINER", "bigdata-source-postgres")
-PG_USER = os.getenv("POSTGRES_USER", "admin")
-PG_DB = os.getenv("POSTGRES_DB", "bankdb")
-PG_PASSWORD = os.getenv("POSTGRES_PASSWORD", "phantruong1")
 CH_CONTAINER = os.getenv("CLICKHOUSE_CONTAINER", "bigdata-clickhouse")
 QUALITY_DIR = METADATA_DIR / "quality"
 
 
 # ---------- chạy SQL trả về một số (đếm vi phạm) ----------
 def _pg_scalar(sql: str) -> int:
-    proc = subprocess.run(
-        ["docker", "exec", "-e", f"PGPASSWORD={PG_PASSWORD}", "-i", PG_CONTAINER,
-         "psql", "-U", PG_USER, "-d", PG_DB, "-tAc", sql],
-        capture_output=True, text=True, encoding="utf-8",
-    )
-    if proc.returncode != 0:
-        raise RuntimeError(proc.stderr.strip() or "psql lỗi")
-    return int(proc.stdout.strip() or "0")
+    # Dùng `_psql` của postgres_schema: nó chạy psql BÊN TRONG container bằng chính
+    # env POSTGRES_USER/POSTGRES_DB của container, nên verifier không cầm credential.
+    # Trước đây hàm này tự truyền PGPASSWORD với mật khẩu hardcode làm default — vừa
+    # là credential lọt vào repo, vừa là bản copy thứ hai của cách gọi psql.
+    rows = _psql(sql)
+    return int(rows[0][0]) if rows and rows[0] and rows[0][0] else 0
 
 
 def _ch_scalar(sql: str) -> int:

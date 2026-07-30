@@ -5,11 +5,8 @@ import json
 import subprocess
 import sys
 
-import yaml
+from ..registry import REPO_ROOT, ContractError, load_pipelines
 
-from ..registry import REPO_ROOT, ContractError
-
-BATCH_DIR = REPO_ROOT / "metadata" / "pipelines" / "batch"
 SPARK_CONTAINER = "bigdata-spark-master"
 SPARK_SUBMIT = "/opt/spark/bin/spark-submit"
 SPARK_MASTER = "spark://spark-master:7077"
@@ -37,11 +34,9 @@ def _packages(spec: dict) -> str:
 
 
 def load_batch_specs() -> list[dict]:
-    specs = []
-    for path in sorted(BATCH_DIR.rglob("*.yaml")):
-        spec = yaml.safe_load(path.read_text(encoding="utf-8"))
-        if spec.get("engine") == "spark_sql":
-            specs.append(spec)
+    # Spec đi qua registry (validate schema + kiểm trùng tên) rồi mới lọc engine —
+    # không tự yaml.safe_load, để chỉ có MỘT nơi biết "spec hợp lệ là gì".
+    specs = [s for s in load_pipelines() if s.get("engine") == "spark_sql"]
     return sorted(specs, key=lambda s: (_stage(s), s["name"]))
 
 

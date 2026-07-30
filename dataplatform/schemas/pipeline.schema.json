@@ -1,0 +1,197 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bigdata-platform/schemas/pipeline.schema.json",
+  "title": "Pipeline spec",
+  "description": "Khai báo MỘT phép biến đổi. `engine` quyết định trường nào bắt buộc: flink_sql (metric streaming, cấu-trúc-hoá), flink_datastream (fraud, chỉ tham số hoá vì detector có state), spark_sql (medallion batch, mô hình dbt — transform là SQL).",
+
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "engine"],
+
+  "properties": {
+    "name": {
+      "description": "Tên pipeline, duy nhất toàn hệ thống. Dùng làm tên job Flink / task Airflow / file job plan.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "engine": {
+      "enum": ["flink_sql", "flink_datastream", "spark_sql"]
+    },
+
+    "source_urn": { "type": "string", "description": "URN dataset nguồn (phải có trong metadata/datasets)." },
+    "sink_urn":   { "type": "string", "description": "URN dataset đích." },
+
+    "filter": {
+      "description": "Điều kiện WHERE trên envelope CDC, vd \"op = 'c'\" để chỉ lấy giao dịch mới (bỏ snapshot op='r').",
+      "type": "string"
+    },
+
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "time_col"],
+      "properties": {
+        "type": {
+          "description": "tumble = cửa sổ không chồng lấn. cumulate = cộng dồn, lớn dần từ đầu `size` rồi reset.",
+          "enum": ["tumble", "cumulate"]
+        },
+        "time_col": { "type": "string" },
+        "size": { "type": "string", "pattern": "^[0-9]+ [A-Z]+$", "description": "vd \"1 MINUTE\", \"1 DAY\"." },
+        "step": { "type": "string", "pattern": "^[0-9]+ [A-Z]+$", "description": "Chỉ cumulate: bước nhảy." }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "cumulate" } } },
+          "then": { "required": ["size", "step"] }
+        },
+        {
+          "if": { "properties": { "type": { "const": "tumble" } } },
+          "then": { "required": ["size"] }
+        }
+      ]
+    },
+
+    "dimensions": {
+      "description": "Cột vừa GROUP BY vừa xuất ra. Rỗng = một dòng mỗi cửa sổ. Thứ tự cột sink = [window_start, window_end] + rank + dimensions + aggregations.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/projection" }
+    },
+    "aggregations": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/projection" }
+    },
+
+    "rank": {
+      "description": "Xếp hạng trong mỗi cửa sổ rồi giữ top N (sinh ROW_NUMBER() OVER ... + WHERE <= keep).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["as", "partition_by", "order_by", "keep"],
+      "properties": {
+        "as": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "partition_by": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "order_by": { "type": "string" },
+        "keep": { "type": "integer", "minimum": 1 }
+      }
+    },
+
+    "startup": {
+      "description": "scan.startup.mode của Kafka source. latest-offset = chỉ dữ liệu mới (fraud); earliest-offset = replay từ đầu.",
+      "enum": ["earliest-offset", "latest-offset"]
+    },
+    "source_columns": {
+      "description": "Chỉ flink_datastream: cột `after` mà detector đọc (sinh ROW từ contract theo mã hoá trên dây). flink_sql KHÔNG khai — nó tự suy từ expr.",
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string" }
+    },
+    "detectors": {
+      "description": "Chỉ flink_datastream: ngưỡng/cửa sổ của detector. Logic là code Python, chỉ tham số lái từ đây (ADR-0023).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["velocity", "failed_storm"],
+      "properties": {
+        "velocity":     { "$ref": "#/$defs/detector" },
+        "failed_storm": { "$ref": "#/$defs/detector" }
+      }
+    },
+
+    "layer": {
+      "description": "Chỉ spark_sql: tầng medallion của output.",
+      "enum": ["bronze", "silver", "gold"]
+    },
+    "inputs": {
+      "description": "Chỉ spark_sql: mỗi input đọc thành một view có tên; SQL tham chiếu tên đó.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["view", "path"],
+        "properties": {
+          "view": { "type": "string", "pattern": "^[a-z_][a-z0-9_]*$" },
+          "path": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "sql": {
+      "description": "Chỉ spark_sql: phép biến đổi. Là SQL (không cấu-trúc-hoá) vì ETL medallion khác khuôn — xem ADR-0024.",
+      "type": "string",
+      "minLength": 1
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "mode"],
+      "properties": {
+        "format": { "enum": ["parquet", "iceberg"] },
+        "mode": { "enum": ["overwrite", "append"] },
+        "path": { "type": "string", "description": "Bắt buộc với format=parquet." },
+        "table": { "type": "string", "description": "Bắt buộc với format=iceberg: <catalog>.<namespace>.<table>." },
+        "partition_by": { "type": "array", "items": { "type": "string" } },
+        "columns": {
+          "description": "Hợp đồng cột của output — biết hạ nguồn phụ thuộc cột gì (sprawl #10).",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "type"],
+            "properties": {
+              "name": { "type": "string", "pattern": "^[a-z_][a-z0-9_]*$" },
+              "type": { "type": "string", "minLength": 1 },
+              "pii":  { "type": "boolean" }
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "format": { "const": "iceberg" } } },
+          "then": { "required": ["table"] }
+        },
+        {
+          "if": { "properties": { "format": { "const": "parquet" } } },
+          "then": { "required": ["path"] }
+        }
+      ]
+    }
+  },
+
+  "allOf": [
+    {
+      "if": { "properties": { "engine": { "const": "flink_sql" } }, "required": ["engine"] },
+      "then": { "required": ["source_urn", "sink_urn", "window", "aggregations"] }
+    },
+    {
+      "if": { "properties": { "engine": { "const": "flink_datastream" } }, "required": ["engine"] },
+      "then": { "required": ["source_urn", "sink_urn", "startup", "source_columns", "detectors"] }
+    },
+    {
+      "if": { "properties": { "engine": { "const": "spark_sql" } }, "required": ["engine"] },
+      "then": { "required": ["layer", "inputs", "sql", "output"] }
+    }
+  ],
+
+  "$defs": {
+    "projection": {
+      "description": "Một cột xuất ra: `as` là tên cột (phải khớp contract sink), `expr` là biểu thức SQL.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["as", "expr"],
+      "properties": {
+        "as":   { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "expr": { "type": "string", "minLength": 1 }
+      }
+    },
+    "detector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["threshold", "window_minutes"],
+      "properties": {
+        "threshold":      { "type": "integer", "minimum": 1 },
+        "window_minutes": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

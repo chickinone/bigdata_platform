@@ -10,6 +10,7 @@ from jsonschema import Draft202012Validator
 REPO_ROOT = Path(__file__).resolve().parent.parent
 METADATA_DIR = REPO_ROOT / "metadata"
 CONNECTIONS_DIR = METADATA_DIR / "connections"
+PIPELINES_DIR = METADATA_DIR / "pipelines"
 SCHEMA_DIR = Path(__file__).resolve().parent / "schemas"
 
 
@@ -148,6 +149,43 @@ def load_connections(connections_dir: Path = CONNECTIONS_DIR) -> list[dict]:
     if errors:
         raise ContractError("Connection không hợp lệ:\n" + "\n".join(errors))
     return sorted(conns, key=lambda c: c["name"])
+
+
+def load_pipelines(pipelines_dir: Path = PIPELINES_DIR) -> list[dict]:
+    """Đọc + validate mọi pipeline spec, sắp theo name để output ổn định.
+
+    Trước đây spec chỉ được `yaml.safe_load` ở ba nơi (flink_sql, spark_batch, cli) —
+    không schema, không kiểm trùng tên. Spec thiếu trường thì vỡ bằng KeyError sâu
+    trong generator thay vì nói rõ file nào sai. Nay đi qua đây, cùng đường với
+    dataset và connection.
+    """
+    if not pipelines_dir.exists():
+        return []
+    schema = json.loads((SCHEMA_DIR / "pipeline.schema.json").read_text(encoding="utf-8"))
+    validator = Draft202012Validator(schema)
+
+    specs: list[dict] = []
+    errors: list[str] = []
+    seen: dict[str, Path] = {}
+    for path in sorted(pipelines_dir.rglob("*.yaml")):
+        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+        rel = path.relative_to(REPO_ROOT)
+        for err in sorted(validator.iter_errors(raw), key=lambda e: list(e.path)):
+            loc = ".".join(str(p) for p in err.path) or "(gốc)"
+            errors.append(f"  {rel} -> {loc}: {err.message}")
+        if raw is None:
+            continue
+        name = raw.get("name")
+        # Tên trùng = hai spec cùng ghi ra một job plan / task Airflow, cái sau đè cái
+        # trước không xác định. Cùng loại lỗi mà _check_unique_urns chặn cho dataset.
+        if name in seen:
+            errors.append(f"  pipeline trùng tên: {name}\n    {seen[name]}\n    {rel}")
+        seen[name] = rel
+        specs.append(raw)
+
+    if errors:
+        raise ContractError("Pipeline spec không hợp lệ:\n" + "\n".join(errors))
+    return sorted(specs, key=lambda p: p["name"])
 
 
 def connections_by_name(connections_dir: Path = CONNECTIONS_DIR) -> dict[str, dict]:

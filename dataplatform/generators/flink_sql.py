@@ -2,11 +2,7 @@ from __future__ import annotations
 
 import re
 
-import yaml
-
-from ..registry import REPO_ROOT, ContractError, Dataset, load_datasets
-
-PIPELINE_DIR = REPO_ROOT / "metadata" / "pipelines"
+from ..registry import ContractError, Dataset, load_datasets, load_pipelines
 
 # Kiểu logic + mã hoá -> kiểu Flink cho SOURCE (đọc Avro trên dây).
 # Khác sink: ở đây theo mã hoá thật trên Kafka, không phải kiểu logic.
@@ -50,14 +46,6 @@ def _sink_type(col: dict) -> str:
     if t == "double":
         return "DOUBLE"
     raise ContractError(f"sink: kiểu chưa hỗ trợ '{t}' (cột {col['name']})")
-
-
-def load_pipelines() -> list[dict]:
-    """Đọc mọi pipeline spec, sắp theo name để output ổn định."""
-    specs = []
-    for path in sorted(PIPELINE_DIR.rglob("*.yaml")):
-        specs.append(yaml.safe_load(path.read_text(encoding="utf-8")))
-    return sorted(specs, key=lambda p: p["name"])
 
 
 def _by_urn(datasets: list[Dataset]) -> dict[str, Dataset]:
