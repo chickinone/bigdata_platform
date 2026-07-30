@@ -1,22 +1,3 @@
-"""Đối chiếu contract OLTP với schema Postgres thật (information_schema).
-
-    python -m dataplatform.verifiers.postgres_schema
-
-Postgres là nguồn sự thật độc lập: contract được reverse-engineer từ nó, không phải
-ngược lại. Nên đối chiếu contract ↔ Postgres bắt được lỗi mà đối chiếu contract ↔
-artifact (vốn cùng sinh từ contract) không thể thấy.
-
-Kiểm 4 thứ cho mỗi dataset CDC:
-  1. Tên cột       — contract thiếu cột DB có (pipeline bỏ sót), hoặc contract có cột
-                     DB không có (artifact sinh ra tham chiếu cột ma → vỡ).
-  2. Kiểu          — kiểu logic của contract có tương thích kiểu Postgres thật không.
-  3. Nullable      — contract khai nullable có khớp NOT NULL của DB không.
-  4. Primary key   — contract.primary_key có đúng PK thật của bảng không.
-
-Không cần credential: chạy psql bên trong container bằng chính env POSTGRES_USER/DB
-của nó (`docker exec ... sh -c 'psql -U "$POSTGRES_USER" ...'`). Verifier không bao
-giờ cầm mật khẩu.
-"""
 from __future__ import annotations
 
 import os

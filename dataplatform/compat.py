@@ -1,23 +1,3 @@
-"""Compatibility gate — chặn thay đổi contract phá vỡ BACKWARD (Avro/Schema-Registry).
-
-**BACKWARD** = schema mới đọc được dữ liệu ghi bằng schema cũ (consumer nâng cấp
-trước producer). Đây là chế độ Schema Registry chặn ở Pha 2 — nay đưa lên PR/CI để
-breaking change đỏ trước khi merge, thay vì nổ lúc runtime.
-
-Dịch luật Avro BACKWARD sang contract cột (so base ref vs working tree):
-
-  Vỡ (chặn merge):
-    - Thêm cột `nullable:false` (không default) — reader mới đọc data cũ thiếu cột.
-    - Đổi type sang kiểu không promote được (vd long->int, string->long).
-    - Đổi `nullable: true -> false` (biến optional thành required).
-  OK (cho qua):
-    - Xoá cột — reader mới bỏ qua field thừa của data cũ (chỉ ghi chú, không chặn).
-    - Thêm cột `nullable:true` — reader mới điền null cho data cũ.
-    - `nullable: false -> true`; promote type (int->long, string->bytes...).
-
-Type "hiệu dụng" tính theo lớp Avro trên dây: cột `encoded_as: string` (decimal ->
-string, ADR-0003) coi là `string`, không phải decimal — vì đó là thứ thật sự ở Avro.
-"""
 from __future__ import annotations
 
 import subprocess

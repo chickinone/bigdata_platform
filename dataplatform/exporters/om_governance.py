@@ -1,22 +1,3 @@
-"""Exporter governance: OpenMetadata API -> ClickHouse `governance.*` (cho Superset).
-
-    python -m dataplatform.exporters.om_governance
-
-Superset không chart trực tiếp từ REST API, nên kéo dữ liệu catalog về ClickHouse
-(đang là tầng serving OLAP của platform) rồi cho Superset query bằng SQL:
-
-    OM API ──pull──▶ governance.catalog_tables    (snapshot catalog: domain/tier/PII/owner)
-                     governance.test_case_results (time-series kết quả quality gate)
-
-Hai bảng, hai tính chất:
-  - catalog_tables: snapshot — mỗi lần chạy TRUNCATE + INSERT lại (trạng thái hiện tại).
-  - test_case_results: append — ReplacingMergeTree khoá (case_fqn, ts) nên chạy lại
-    không nhân đôi điểm dữ liệu cũ.
-
-Nguồn kết quả test là OM (lớp TestCaseResult, ADR-0038) — verifier `quality --push-om`
-đẩy vào OM, exporter này kéo ra. Không đọc tắt từ verifier để giữ OM là nơi tập trung
-kết quả (kể cả khi sau này có nguồn test khác đẩy vào).
-"""
 from __future__ import annotations
 
 import json

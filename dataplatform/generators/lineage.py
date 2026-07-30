@@ -1,18 +1,3 @@
-"""Sinh lineage graph + data catalog từ metadata — Pha 6 (discovery/lineage).
-
-Trả lời ba câu hỏi Pha 6, thuần từ metadata (không cần chạy engine):
-  - "cột `amount` chảy tới đâu?"        -> lineage cột (Flink) + graph dataset
-  - "dataset nào chứa PII?"             -> catalog đánh dấu cột pii
-  - "ai sở hữu dataset này?"            -> catalog owner
-
-Ghép mọi cạnh từ các nguồn metadata đã có:
-  - dataset.sinks           -> dataset chảy tới ES / S3-bronze / ClickHouse
-  - pipeline stream (Flink) -> source_urn -> sink_urn (+ cột lineage từ expr)
-  - pipeline batch (Spark)  -> input (bronze topic / silver) -> output (silver/gold/iceberg)
-
-Đầu ra: `lineage/graph.json` (máy đọc, feed DataHub sau) + `lineage/LINEAGE.md` (người đọc).
-Cả hai sinh lại từ metadata nên `check` giữ chúng đồng bộ.
-"""
 from __future__ import annotations
 
 import json

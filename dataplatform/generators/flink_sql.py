@@ -1,24 +1,3 @@
-"""Sinh Flink SQL cho pipeline metric streaming — diệt sprawl #6/#8.
-
-Phần sinh của runner tổng quát. Thay 4 câu INSERT + source ROW + 4 sink DDL
-viết tay trong `flink/jobs/lane1_dashboard.py` bằng: 1 pipeline spec khai báo cho
-mỗi metric, sinh ra toàn bộ SQL.
-
-Ba mẩu sinh, mỗi mẩu bịt một chỗ:
-  - source DDL  : ROW<...> sinh từ cột contract thật sự được tham chiếu (diệt sprawl
-                  #6 - trước đây ROW lặp tay ở nhiều file). Kiểu theo mã hoá trên dây
-                  (amount encoded_as:string -> STRING), không phải kiểu logic.
-  - sink DDL    : sinh từ cột contract metric (diệt nửa Flink của sprawl #8 - trước
-                  đây sink DDL viết tay, có thể lệch ClickHouse). Cùng nguồn cột với
-                  DDL ClickHouse nên không thể lệch.
-  - INSERT SQL  : dựng từ window/filter/dimensions/aggregations/rank của spec.
-
-Kiểm chéo quan trọng: thứ tự cột SELECT = [window_start, window_end] + rank +
-dimensions + aggregations, và nó phải khớp đúng cột của contract sink. Nếu spec mô
-tả ra tập cột khác sink, generator dừng — spec và sink không thể lệch âm thầm.
-
-Kiến trúc: sinh SQL ở đây (host, có deps), runner mỏng trong container chỉ thực thi.
-"""
 from __future__ import annotations
 
 import re

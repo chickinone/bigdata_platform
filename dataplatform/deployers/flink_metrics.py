@@ -1,19 +1,3 @@
-"""Deployer job Flink streaming — sinh config từ metadata rồi submit.
-
-    python -m dataplatform.deployers.flink_metrics plan     # sinh + xem, không submit
-    python -m dataplatform.deployers.flink_metrics apply    # sinh + submit vào Flink
-
-Deploy cả HAI job sinh từ metadata: metric runner (SQL) và fraud runner (DataStream).
-Thay việc submit tay `flink run -py lane1_dashboard.py` / `lane3_fraud_detection.py`.
-Config sinh trên host từ pipeline spec + contract (ADR-0023), ghi ra file runtime rồi
-runner trong container thực thi.
-
-Cùng triết lý với connector deployer (ADR-0021): control plane sinh, data plane thực
-thi; thêm/sửa metric hoặc chỉnh ngưỡng fraud = sửa YAML, không đụng Python.
-
-Lưu ý: `apply` submit mới, không huỷ job cũ — nếu job đang chạy thì huỷ trước bằng
-`flink cancel` để tránh hai bản cùng ghi. (Chưa có reconcile — Pha 7.)
-"""
 from __future__ import annotations
 
 import argparse

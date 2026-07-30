@@ -1,15 +1,3 @@
-"""Sinh config Elasticsearch sink connector từ dataset contract.
-
-Thay cho 5 file JSON viết tay trong kafka-connect/es-sinks/.
-
-Ý chính: mọi thứ trong config đều được SUY RA từ contract, không khai lại.
-Ví dụ rõ nhất là `key.ignore` và `write.method` — chúng không phải hai lựa chọn
-độc lập mà là hệ quả của một sự thật: "dataset này có khoá chính hay không".
-
-Viết tay thì hai trường đó có thể lệch nhau (key.ignore=false nhưng không có
-extractKey → connector chết lúc chạy). Sinh ra thì chúng không thể lệch, vì cùng
-đọc một nguồn.
-"""
 from __future__ import annotations
 
 from ..registry import Dataset, endpoint

@@ -1,13 +1,4 @@
--- =====================================================================
--- FILE SINH TỰ ĐỘNG — đừng sửa tay.
---   Nguồn:    metadata/datasets/metrics/*.yaml
---   Sinh lại: python -m dataplatform.cli write
---
--- Bảng đệm (Kafka engine) + MATERIALIZED VIEW cho mỗi metric.
---   topic Kafka -> <m>_kafka -> <m>_mv -> <m>
--- Bảng Kafka đọc một lần là mất: đừng SELECT thẳng vào nó khi MV đang
--- chạy, sẽ cướp dữ liệu của MV.
--- =====================================================================
+-- FILE SINH TỰ ĐỘNG — đừng sửa tay. Sinh lại: python -m dataplatform.cli write
 
 -- bank.metric.breakdown
 CREATE TABLE IF NOT EXISTS metrics.breakdown_kafka (

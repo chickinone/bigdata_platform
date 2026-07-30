@@ -1,13 +1,3 @@
-"""CLI của control plane.
-
-    python -m dataplatform.cli check    # so bản sinh với bản đang có trên đĩa
-    python -m dataplatform.cli write    # ghi bản sinh đè lên đĩa
-    python -m dataplatform.cli show     # in ra để xem, không đụng đĩa
-
-`check` là bước quan trọng nhất của chiến lược strangler-fig: chừng nào bản sinh
-còn khác bản viết tay, ta chưa được phép cắt chuyển. Nó cũng là lưới an toàn cho
-CI về sau — contract sửa mà quên chạy generator thì CI đỏ.
-"""
 from __future__ import annotations
 
 import argparse

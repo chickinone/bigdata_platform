@@ -1,22 +1,3 @@
-"""Deployer OpenMetadata — nạp catalog + governance từ metadata vào UI.
-
-    python -m dataplatform.deployers.openmetadata apply
-
-Đọc `lineage/graph.json` (sinh từ metadata, ADR-0026) và registry, PUSH vào
-OpenMetadata qua REST. Giữ đúng triết lý "Git là nguồn sự thật, catalog là nơi
-tra cứu" — nạp từ metadata, không gõ tay trên UI.
-
-Hai tầng, hai mức nghiêm ngặt:
-  - Lõi (service/database/schema/table/lineage): lỗi là dừng — thiếu là catalog vô dụng.
-  - Enrichment (domain/tier/owner, classification, test case, metric, dashboard, KPI):
-    lỗi in [CHÚ Ý] rồi đi tiếp — API các phần này đổi theo version OM, không để
-    một endpoint lệch làm hỏng cả lần nạp.
-
-Idempotent: các field ghép (tags/domains/owners) được replace nguyên khối theo
-contract, không append — chạy lại bao nhiêu lần cũng ra cùng trạng thái.
-
-Chỉ chạy khi OpenMetadata bật (compose riêng). Xem openmetadata/README.
-"""
 from __future__ import annotations
 
 import json

@@ -1,15 +1,3 @@
-"""Fraud runner (Lane 3) — detector có STATE giữ là code, mọi tham số lái từ metadata.
-
-Khác metric_runner: logic phát hiện gian lận (đếm vận tốc, "failed storm") có state
-tuỳ biến, không tổng quát hoá bằng SQL được — nên giữ VelocityDetector và
-FailedStormDetector là code Python. Nhưng nguồn/đích/ngưỡng/cửa sổ nay đọc từ config
-sinh trên host (`dataplatform/generators/flink_sql.build_fraud_config`, ADR-0023):
-  - source DDL sinh từ contract (diệt nốt sprawl #6 — hết ROW viết tay);
-  - threshold/window/topic tham số hoá (trước hardcode).
-
-Đã bỏ hai print sink debug (`ds.print("LANE3-RAW")`, `all_alerts.print("ALERT")`):
-chúng in mọi giao dịch ra log TaskManager ở 150 RPS — khoảng trống #6 trong audit.
-"""
 import json
 import os
 

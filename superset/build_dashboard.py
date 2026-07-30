@@ -1,12 +1,4 @@
 # -*- coding: utf-8 -*-
-"""Dựng dashboard Governance trên Superset qua REST API — idempotent.
-
-    python superset/build_dashboard.py
-
-Nguồn dữ liệu: ClickHouse `governance.*` (exporter om_governance kéo từ OpenMetadata).
-Tạo: 1 database connection + 2 dataset + 6 chart + 1 dashboard có layout.
-Chạy lại: tìm theo tên, có rồi thì dùng lại (không tạo trùng).
-"""
 from __future__ import annotations
 
 import json

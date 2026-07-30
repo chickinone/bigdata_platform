@@ -1,12 +1,3 @@
-"""Runner medallion tổng quát — thực THI batch job plan sinh từ metadata.
-
-Data plane của Pha 5: không chứa logic transform nào. Job plan (inputs + SQL +
-output) sinh trên host từ batch pipeline spec (`metadata/pipelines/batch/*.yaml`,
-ADR-0024). Runner này chỉ: đọc input thành view -> chạy SQL -> ghi theo output.
-
-Mô hình dbt: transform là SQL (ETL medallion khác khuôn), còn schema/path/format/
-partition của output khai trong spec. Thay enrich_transactions.py + build_gold_layer.py.
-"""
 import json
 import os
 

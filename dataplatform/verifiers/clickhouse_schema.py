@@ -1,18 +1,3 @@
-"""Đối chiếu contract metric với bảng đích ClickHouse thật (system.columns).
-
-    python -m dataplatform.verifiers.clickhouse_schema
-
-Khác với verifier Postgres ở một điểm cần nói thẳng: quan hệ ở đây hơi vòng — bảng
-ClickHouse được SINH từ contract (ADR-0019), nên "khớp" là điều mong đợi, không phải
-tin tức. Giá trị của verifier này là bắt **DRIFT thủ công**: ai đó `ALTER TABLE` tay,
-hoặc bảng phiên bản cũ còn sót từ lần chạy trước, hoặc `write` chưa được `apply`.
-Nói cách khác: Postgres verifier hỏi "contract có đúng nguồn không"; cái này hỏi
-"ClickHouse đang chạy có còn khớp contract không".
-
-Tái dùng ánh xạ kiểu của generator (`clickhouse_ddl._ch_type`) thay vì viết lại —
-nếu viết lại, verifier và generator sẽ là hai nguồn tri thức kiểu, tự đẻ ra đúng
-thứ sprawl đang diệt.
-"""
 from __future__ import annotations
 
 import os

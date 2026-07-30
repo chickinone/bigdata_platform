@@ -1,9 +1,3 @@
-"""Cấu hình dead-letter queue cho sink connector + bản kê topic DLQ.
-
-Chính sách: **mọi sink đều bật DLQ**. Không có trường bật/tắt trong contract, vì
-"im lặng làm mất bản ghi" không phải một lựa chọn hợp lệ trong hệ thống ngân hàng.
-Đây là chính sách nền tảng, không phải quyết định của từng dataset.
-"""
 from __future__ import annotations
 
 from ..registry import Dataset
@@ -87,7 +81,6 @@ def targets(datasets: list[Dataset]) -> dict[str, dict]:
         INVENTORY_PATH: {
             "_comment": (
                 "FILE SINH TỰ ĐỘNG - đừng sửa tay. "
-                "Nguồn: metadata/datasets/*.yaml. "
                 "Sinh lại: python -m dataplatform.cli write"
             ),
             "connectors": connectors(datasets),

@@ -1,32 +1,3 @@
-"""Đối chiếu bản kê topic với Kafka thật (kafka-topics --describe).
-
-    python -m dataplatform.verifiers.kafka_topics
-
-Đóng lỗ hổng runtime của chặng topic, y hệt hình dạng lỗ hổng publication (ADR-0039):
-`cli check` chỉ chứng minh `kafka/topics.json` khớp metadata — nó không biết broker
-đang có topic nào. Mà `create-topics.sh` chỉ chạy khi dựng stack (service `kafka-init`,
-`restart: "no"`), nên thêm dataset trên cluster đang sống thì manifest đúng, `check`
-xanh, mà topic thật chưa tồn tại.
-
-Với `auto.create.topics.enable=false` (ADR-0020), topic thiếu KHÔNG âm thầm như
-publication — connector/Flink sẽ lỗi khi ghi. Nhưng lỗi nổ ở tầng consumer, cách xa
-nguyên nhân: log Connect báo "topic không tồn tại" chứ không báo "anh quên chạy
-create-topics.sh". Verifier này rút ngắn khoảng cách đó.
-
-Ba loại lệch, mức nghiêm trọng khác nhau:
-  - THIẾU  (manifest có, broker không)  -> error. Pipeline sẽ đứt ở topic này.
-  - LỆCH   (partitions / RF khác)       -> error. Partition ảnh hưởng mức song song và
-    phân bố key_by; RF ảnh hưởng độ bền. Cả hai KHÔNG tự sửa được bằng --if-not-exists.
-  - THỪA   (broker có, manifest không)  -> warning. Thường là topic rác từ thời
-    auto-create còn bật, hoặc dataset đã xoá mà chưa dọn broker.
-
-Config: chỉ so những KHOÁ mà manifest khai (giống cách deployer connector chỉ xét khoá
-trong desired). Manifest cố ý không khai giá trị mặc định broker (ADR-0020), nên so
-toàn bộ sẽ báo lệch giả với mọi override mà broker tự đặt.
-
-Chỉ ĐỌC. Sửa là chạy lại `create-topics.sh` (cho THIẾU) hoặc quyết định có chủ ý
-(cho LỆCH/THỪA — đổi partition không thể rollback dễ).
-"""
 from __future__ import annotations
 
 import os

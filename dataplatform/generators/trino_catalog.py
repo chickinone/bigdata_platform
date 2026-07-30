@@ -1,13 +1,3 @@
-"""Sinh Trino catalog properties từ connection registry — Pha 6 (federation).
-
-Trước đây `trino/etc/catalog/*.properties` viết tay, tách rời khỏi định nghĩa
-connection (sprawl #13). Nay sinh từ connection contract: mỗi connection có khối
-`trino` → một file catalog. Thêm nguồn cho Trino = thêm khối `trino` vào connection,
-không sửa file .properties tay.
-
-Secret không nằm ở đây: mọi giá trị nhạy cảm là `${ENV:...}` để Trino tự resolve
-(cùng nguyên tắc với connector/deployer).
-"""
 from __future__ import annotations
 
 

@@ -1,26 +1,3 @@
-"""Deployer migration ClickHouse — versioned, không init-once (Pha 7).
-
-    python -m dataplatform.deployers.clickhouse_migrate plan    # xem migration chờ
-    python -m dataplatform.deployers.clickhouse_migrate apply   # áp migration chờ
-
-Vấn đề với init-once: `clickhouse/init/*.sql` (schema metric sinh từ contract) chỉ chạy
-lúc DB mới. DB đang sống mà đổi contract — thêm cột vào metric cũ, thêm bảng infra —
-thì `CREATE ... IF NOT EXISTS` không đụng bảng đã tồn tại, nên thay đổi không tới nơi.
-
-Hai lớp tách bạch, mỗi lớp làm đúng việc:
-
-  Baseline (khai báo) — `clickhouse/init/*.sql`, sinh từ contract, idempotent. Là mầm
-    cài mới: bảng metric mới = tự có. Không do runner này áp (nó có bảng Kafka-engine
-    cần broker sống; cài mới chạy lúc dựng stack).
-
-  Migration (mệnh lệnh, versioned) — `migrations/clickhouse/NNNN_*.sql`. Thay đổi
-    incremental mà IF NOT EXISTS không làm được: `ALTER TABLE ADD COLUMN`, bảng infra
-    mới, backfill. Runner này lo lớp đó: áp một lần theo thứ tự, ghi
-    `metrics.schema_migrations`, bất biến (sửa file đã áp = lỗi). Áp được lên DB sống.
-
-Idempotent: chạy lại chỉ áp phần chưa áp. Kiểm chứng cuối vẫn là verifier
-`clickhouse_schema` (live vs contract).
-"""
 from __future__ import annotations
 
 import hashlib

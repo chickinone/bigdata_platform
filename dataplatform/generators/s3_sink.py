@@ -1,13 +1,3 @@
-"""Sinh config S3 sink connector (Bronze) từ dataset contract.
-
-Khác ES sink ở một điểm quan trọng về mô hình:
-
-    ES sink   : một dataset  -> một connector   (quan hệ 1-1)
-    S3 sink   : nhiều dataset -> một connector   (quan hệ N-1, gộp `topics`)
-
-Đây là generator "tổng hợp" đầu tiên — nó phải nhìn toàn bộ registry chứ không
-chỉ một contract. Cũng chính là hình dạng mà Debezium `table.include.list` sẽ cần.
-"""
 from __future__ import annotations
 
 from ..registry import Dataset, endpoint

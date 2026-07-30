@@ -1,13 +1,3 @@
-"""Sinh config Debezium source connector từ dataset contract.
-
-Generator fan-in: sinh `table.include.list` bằng cách
-gộp mọi dataset CDC. Cùng với generator publication (postgres_publication.py),
-nó đóng sprawl #2/#3 — trước đây danh sách bảng CDC bị khai tay ở hai nơi
-(publication SQL + connector JSON), lệch một bảng là mất CDC âm thầm.
-
-Sau khi cả hai cùng sinh từ registry, chúng không thể lệch nhau nữa, vì cùng đọc
-một nguồn (danh sách dataset CDC).
-"""
 from __future__ import annotations
 
 from ..registry import Dataset, endpoint

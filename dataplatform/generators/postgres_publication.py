@@ -1,15 +1,3 @@
-"""Sinh publication SQL của Postgres từ dataset contract.
-
-Đây là nửa còn lại của việc diệt sprawl #2/#3. Cùng với debezium.py, cả hai giờ
-đọc CHUNG một nguồn (danh sách dataset CDC), nên `table.include.list` (connector)
-và `FOR TABLE ...` (publication) không thể lệch nhau nữa.
-
-Trước đây: hai file khai tay độc lập. Lệch một bảng = Debezium subscribe bảng
-không có trong publication → bảng đó IM lặng không có CDC, không lỗi.
-
-Artifact này là TEXT (SQL), không phải JSON. Nó được control plane sở hữu hoàn
-toàn, nên `check` so nguyên văn (xem cli._compare).
-"""
 from __future__ import annotations
 
 from ..registry import Dataset
@@ -17,22 +5,10 @@ from .debezium import PUBLICATION_NAME, cdc_datasets
 
 # Header đánh dấu file sinh tự động. Giống dlq_topics.json — để không ai sửa tay
 # artifact thay vì sửa contract (đó là drift).
-_HEADER = """\
--- =====================================================================
--- FILE SINH TỰ ĐỘNG — đừng sửa tay.
---   Nguồn:    metadata/datasets/*.yaml (mọi dataset có source.type=cdc_debezium)
---   Sinh lại: python -m dataplatform.cli write
---
--- Publication = declarative API của Postgres để publish bảng cho logical
--- replication; Debezium subscribe vào đây. Danh sách bảng dưới đây được gộp từ
--- registry, nên luôn khớp table.include.list của connector (diệt sprawl #2/#3).
---
--- Không dùng "FOR ALL TABLES" vì:
---   1. Rủi ro bảo mật — bảng nhạy cảm mới tạo tự động bị publish.
---   2. Khó audit "Debezium đang đọc bảng nào".
---   3. Explicit is better than implicit.
--- =====================================================================
-"""
+_HEADER = (
+    "-- FILE SINH TỰ ĐỘNG — đừng sửa tay. "
+    "Sinh lại: python -m dataplatform.cli write\n"
+)
 
 
 def render(datasets: list[Dataset]) -> str:

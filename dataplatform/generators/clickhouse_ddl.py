@@ -1,22 +1,3 @@
-"""Sinh DDL ClickHouse cho tầng serving metric.
-
-Đóng sprawl #8/#9 — chỗ gây ra chế độ hỏng khó chịu nhất hệ thống.
-
-Mỗi metric cần đúng bộ 3 đối tượng, và schema của cả 3 phải khớp tuyệt đối:
-
-    metrics.<m>          bảng đích   (ReplacingMergeTree)  <- Grafana đọc
-    metrics.<m>_kafka    bảng đệm    (Kafka engine)        <- kéo từ topic
-    metrics.<m>_mv       MV          (INSERT ... SELECT)   <- nối 2 cái trên
-
-Viết tay = 4 metric × 3 = 12 khối schema phải khớp nhau bằng tay, cộng 4 sink DDL
-bên Flink. Lệch một cột thì MV **bỏ dữ liệu mà không báo lỗi** — dashboard vẫn
-xanh, chỉ là rỗng. Sinh ra thì cả 3 cùng đọc `columns` của một contract, nên
-không thể lệch.
-
-Một điểm tinh tế: cùng một cột logic được render khác nhau tuỳ đối tượng —
-`tx_type` là `LowCardinality(String)` ở bảng đích nhưng `String` ở bảng Kafka.
-Đó là lý do "một spec, nhiều cách render đúng" chứ không phải "copy 3 lần".
-"""
 from __future__ import annotations
 
 from ..registry import Dataset
@@ -154,37 +135,21 @@ def render_mv(ds: Dataset) -> str:
     )
 
 
-_HEADER = """\
--- =====================================================================
--- FILE SINH TỰ ĐỘNG — đừng sửa tay.
---   Nguồn:    metadata/datasets/metrics/*.yaml
---   Sinh lại: python -m dataplatform.cli write
---
-{purpose}
--- =====================================================================
-"""
+_HEADER = (
+    "-- FILE SINH TỰ ĐỘNG — đừng sửa tay. "
+    "Sinh lại: python -m dataplatform.cli write\n"
+)
 
 
 def render_schema_file(datasets: list[Dataset]) -> str:
-    purpose = (
-        "-- Bảng đích cho mỗi metric (nơi lưu thật, Grafana đọc).\n"
-        "-- Cột sinh từ `columns` của contract, nên luôn khớp bảng Kafka + MV\n"
-        "-- ở 02_kafka_consumers.sql (diệt sprawl #8/#9)."
-    )
-    parts = [_HEADER.format(purpose=purpose)]
+    parts = [_HEADER]
     for ds in ch_datasets(datasets):
         parts.append(f"\n-- {ds.urn}\n{render_target_table(ds)}\n")
     return "".join(parts)
 
 
 def render_consumers_file(datasets: list[Dataset]) -> str:
-    purpose = (
-        "-- Bảng đệm (Kafka engine) + MATERIALIZED VIEW cho mỗi metric.\n"
-        "--   topic Kafka -> <m>_kafka -> <m>_mv -> <m>\n"
-        "-- Bảng Kafka đọc một lần là mất: đừng SELECT thẳng vào nó khi MV đang\n"
-        "-- chạy, sẽ cướp dữ liệu của MV."
-    )
-    parts = [_HEADER.format(purpose=purpose)]
+    parts = [_HEADER]
     for ds in ch_datasets(datasets):
         parts.append(f"\n-- {ds.urn}\n{render_kafka_table(ds)}\n\n{render_mv(ds)}\n")
     return "".join(parts)

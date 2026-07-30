@@ -1,12 +1,4 @@
--- =====================================================================
--- FILE SINH TỰ ĐỘNG — đừng sửa tay.
---   Nguồn:    metadata/datasets/metrics/*.yaml
---   Sinh lại: python -m dataplatform.cli write
---
--- Bảng đích cho mỗi metric (nơi lưu thật, Grafana đọc).
--- Cột sinh từ `columns` của contract, nên luôn khớp bảng Kafka + MV
--- ở 02_kafka_consumers.sql (diệt sprawl #8/#9).
--- =====================================================================
+-- FILE SINH TỰ ĐỘNG — đừng sửa tay. Sinh lại: python -m dataplatform.cli write
 
 -- bank.metric.breakdown
 CREATE TABLE IF NOT EXISTS metrics.breakdown (

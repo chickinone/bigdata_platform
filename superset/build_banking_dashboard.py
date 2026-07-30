@@ -1,15 +1,4 @@
 # -*- coding: utf-8 -*-
-"""Dashboard "Banking Transaction Analytics" trên Superset — dữ liệu OLTP thật.
-
-    python superset/build_banking_dashboard.py
-
-Bố cục theo mẫu BI ngân hàng: hàng KPI (tổng giao dịch / tổng giá trị / ATV /
-tỉ lệ thành công) + amount theo thời gian + giá trị theo loại tài khoản +
-khách hàng theo quốc gia (treemap) + phân bố KYC (donut) + trạng thái theo loại.
-
-Nguồn: Postgres OLTP (bankdb) — Superset query thẳng qua network bigdata-net.
-Idempotent như build_dashboard.py: có rồi thì dùng lại.
-"""
 from __future__ import annotations
 
 import json

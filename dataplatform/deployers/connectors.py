@@ -1,24 +1,3 @@
-"""Deployer connector Kafka Connect — áp config sinh từ metadata, idempotent.
-
-    python -m dataplatform.deployers.connectors plan    # chỉ xem sẽ đổi gì (mặc định)
-    python -m dataplatform.deployers.connectors apply   # PUT thật lên Connect
-
-Trước deployer này, metadata chưa "gánh" gì cả: connector đăng ký
-bằng `curl -X POST` thủ công — file JSON sinh ra chỉ là tài liệu, thứ thật sự cấu
-hình Connect là bàn tay người. Sau deployer này, "đăng ký connector" = chạy một
-lệnh đọc thẳng metadata.
-
-Vì sao `PUT /connectors/{name}/config` chứ không `POST /connectors`:
-  - POST tạo mới, gọi lần hai trên connector đã tồn tại -> 409 Conflict.
-  - PUT là "đặt config này làm trạng thái hiện tại": chưa có thì tạo, có rồi thì
-    cập nhật. Idempotent -> chạy lại bao nhiêu lần cũng an toàn, đúng tinh thần
-    plan/apply như Terraform.
-
-Config đọc thẳng từ generator (không đọc file trên đĩa) nên không thể áp bản cũ:
-desired state luôn suy từ contract mới nhất. Các placeholder `${env:...}` giữ
-nguyên — Connect tự resolve bằng EnvVarConfigProvider bên trong container, nên
-deployer không bao giờ chạm secret.
-"""
 from __future__ import annotations
 
 import argparse

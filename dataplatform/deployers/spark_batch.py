@@ -1,15 +1,3 @@
-"""Deployer batch Spark medallion — sinh job plan từ metadata rồi spark-submit.
-
-    python -m dataplatform.deployers.spark_batch plan     # sinh + xem, không submit
-    python -m dataplatform.deployers.spark_batch apply    # sinh + spark-submit theo thứ tự layer
-
-Thay việc submit tay `enrich_transactions.py` / `build_gold_layer.py`. Batch spec
-(inputs + SQL + output) sinh ra job plan JSON; runner mỏng `medallion_runner.py`
-thực thi (ADR-0024). Chạy theo thứ tự layer (silver trước gold) vì gold đọc silver.
-
-Cùng triết lý deployer khác: control plane sinh, data plane thực thi; thêm bảng lake
-= thêm YAML, không đụng Python.
-"""
 from __future__ import annotations
 
 import argparse

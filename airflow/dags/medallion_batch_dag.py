@@ -1,9 +1,4 @@
-"""FILE SINH TỰ ĐỘNG - đừng sửa tay. Nguồn: metadata/pipelines/batch/. Sinh lại: python -m dataplatform.cli write.
-
-DAG orchestration medallion batch (Bronze -> Silver -> Gold/Iceberg). Thứ tự task suy
-từ phụ thuộc input/output của batch spec. Mỗi task = spark-submit trong container
-spark-master (Airflow cần docker CLI + socket; xem airflow/README.md).
-"""
+# FILE SINH TỰ ĐỘNG - đừng sửa tay. Sinh lại: python -m dataplatform.cli write
 from datetime import datetime, timedelta
 
 from airflow import DAG

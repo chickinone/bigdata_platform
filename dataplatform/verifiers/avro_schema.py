@@ -1,26 +1,3 @@
-"""Đối chiếu contract CDC với schema Avro thật trong Schema Registry.
-
-    python -m dataplatform.verifiers.avro_schema
-
-Đây là nguồn sự thật độc lập thứ ba, và nó thấy thứ hai verifier kia không thấy:
-**cách dữ liệu được mã hoá trên dây** (trên Kafka), không phải trong DB nguồn hay
-bảng đích.
-
-Ví dụ quyết định: cột `balance` là `numeric(19,4)` trong Postgres, nhưng trên dây
-nó là **`string`** — vì `decimal.handling.mode=string` (ADR-0003). Contract phải
-khai `encoded_as: string` cho đúng, và generator dựa vào đó để chèn `CAST`. Nếu
-contract quên `encoded_as`, Flink sẽ hiểu sai kiểu → hỏng. Chỉ đối chiếu với Avro
-thật mới bắt được sai lệch này; Postgres verifier chỉ thấy `numeric`, không thấy
-`string` trên dây.
-
-Cấu trúc message Debezium: envelope `{before, after, op, ts_ms, ...}`. `before` và
-`after` cùng dùng một record (tên `Value`); `after` thường chỉ THAM chiếu tên record
-đã định nghĩa đầy đủ ở `before`. Verifier lấy field từ record đó.
-
-Chỉ áp cho dataset CDC (Avro). Dataset app_json (metric/alert) là JSON trần, không
-có schema trong registry. Dataset có bảng rỗng chưa produce message nào -> chưa có
-subject -> verifier bỏ QUA (không phải lỗi).
-"""
 from __future__ import annotations
 
 import json

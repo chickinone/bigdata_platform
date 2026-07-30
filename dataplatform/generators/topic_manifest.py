@@ -1,40 +1,3 @@
-"""Sinh bản kê (manifest) topic Kafka từ registry — đóng khoảng trống production #8.
-
-Vấn đề: hôm nay Kafka bật `auto.create.topics.enable=true`: hễ ai đó produce/consume
-một topic chưa tồn tại, broker lẳng lặng tạo nó với partition/retention/RF mặc định.
-Tiện lúc dựng lab, nhưng ở production đây là một lỗ hổng:
-  - gõ sai tên topic -> tạo ra topic rác thay vì báo lỗi;
-  - không ai kiểm soát được số partition (giới hạn song song) hay retention;
-  - "có những topic nào" không có nguồn sự thật — phải đi hỏi broker đang chạy.
-
-Mục tiêu: khai mọi topic một lần trong registry, sinh ra:
-  (a) kafka/topics.json      — manifest khai báo, máy đọc được, diff được;
-  (b) kafka/create-topics.sh — script tạo topic idempotent (`--if-not-exists`).
-Có hai thứ này rồi thì mới tắt được `auto.create.topics` một cách an toàn (bước cuối,
-sau khi đối chiếu với Kafka thật — xem ADR-0020).
-
-Topic đến từ ba nguồn, và đây là chỗ tinh tế nhất của file:
-
-  1. dataset  — mọi dataset có `source.topic`. Suy thẳng từ registry. Đây là phần
-     "metadata-driven" thật: thêm một dataset = thêm một topic, không đụng file này.
-
-  2. DLQ      — mỗi sink connector có một topic `dlq.<connector>`. Không tự liệt kê
-     lại ở đây; tái dùng đúng danh sách mà generators/dlq.py đã tính, nếu không ta
-     lại đẻ ra chính thứ sprawl đang đóng (hai nơi cùng khai danh sách DLQ, lệch nhau).
-
-  3. hạ tầng  — `dlq.events` (đầu ra của dlq-processor) và `_connect_{configs,offsets,
-     status}` (topic nội bộ của Kafka Connect). Chúng không phải dataset, nên được
-     khai tường minh ở đây dưới dạng hằng số có giải thích. Ranh giới quan trọng:
-     phần (1)(2) suy ra được, phần (3) phải khai tay — và ta nói rõ điều đó thay vì
-     giấu, để người đọc biết chỗ nào là "sự thật suy diễn" chỗ nào là "sự thật khai báo".
-
-Nguyên tắc "tái tạo hiện trạng trước" (strangler-fig): manifest đầu tiên phải mô tả
-đúng những gì auto-create đang tạo ra, để khi tắt auto-create thì không có gì đổi.
-Vì vậy: partition = mặc định hiện tại, RF = 1 (single node, ADR-0005). Việc tăng
-partition cho `transactions` (throughput cao) hay kéo dài retention cho DLQ là thay
-đổi có chủ ý về sau, không lén nhét vào bước này — nếu nhét, manifest sẽ lệch với
-topic thật và mất luôn khả năng đối chiếu.
-"""
 from __future__ import annotations
 
 import json
@@ -146,9 +109,7 @@ def _kind(entry: dict) -> str:
 
 
 _JSON_COMMENT = (
-    "FILE SINH TỰ ĐỘNG - đừng sửa tay. "
-    "Nguồn: metadata/datasets/*.yaml + generators/dlq.py + hằng số hạ tầng trong "
-    "generators/topic_manifest.py. Sinh lại: python -m dataplatform.cli write"
+    "FILE SINH TỰ ĐỘNG - đừng sửa tay. Sinh lại: python -m dataplatform.cli write"
 )
 
 
@@ -175,10 +136,6 @@ def render_script(datasets: list[Dataset], bootstrap: str, rf: int) -> str:
     lines = [
         "#!/usr/bin/env bash",
         "# " + _JSON_COMMENT,
-        "#",
-        "# Tạo mọi topic mà hệ thống cần, idempotent. Chạy trước khi tắt",
-        "# auto.create.topics (xem ADR-0020). Vd:",
-        "#   docker exec bigdata-kafka bash /opt/bitnami/kafka/create-topics.sh",
         "set -euo pipefail",
         "",
         f'BOOTSTRAP="${{KAFKA_BOOTSTRAP:-{bootstrap}}}"',

@@ -1,5 +1,5 @@
 {
-  "_comment": "FILE SINH TỰ ĐỘNG - đừng sửa tay. Nguồn: metadata/datasets/*.yaml. Sinh lại: python -m dataplatform.cli write",
+  "_comment": "FILE SINH TỰ ĐỘNG - đừng sửa tay. Sinh lại: python -m dataplatform.cli write",
   "connectors": [
     {
       "connector": "es-sink-accounts",

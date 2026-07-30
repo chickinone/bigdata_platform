@@ -1,5 +1,5 @@
 {
-  "_comment": "FILE SINH TỰ ĐỘNG - đừng sửa tay. Nguồn: metadata/datasets/*.yaml + generators/dlq.py + hằng số hạ tầng trong generators/topic_manifest.py. Sinh lại: python -m dataplatform.cli write",
+  "_comment": "FILE SINH TỰ ĐỘNG - đừng sửa tay. Sinh lại: python -m dataplatform.cli write",
   "topics": [
     {
       "name": "__debezium-heartbeat.bankdb",

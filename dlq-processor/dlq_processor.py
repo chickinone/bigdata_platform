@@ -1,32 +1,3 @@
-"""DLQ processor — biến lỗi của Kafka Connect thành dữ liệu truy vấn được.
-
-Luồng:
-
-    sink lỗi ──> dlq.<connector>  (Kafka Connect tự ghi + header __connect.errors.*)
-                      │
-                      ▼
-              dlq-processor        (phân loại TRANSIENT / PERMANENT / UNKNOWN)
-                      │
-                      ▼
-                 dlq.events        (Kafka, JSON đã enrich)
-                      │
-                      ▼
-        metrics.dlq_events_kafka -> _mv -> metrics.dlq_events  (ClickHouse)
-                      │
-                      ▼
-                   Grafana
-
-Hai quyết định thiết kế đáng chú ý (chi tiết ở docs/decisions/0017-*.md):
-
-1. **Ghi qua Kafka, không INSERT thẳng ClickHouse.** DLQ event là thứ ta cần
-   nhất đúng lúc hệ thống đang hỏng. Nếu ClickHouse cũng đang sập mà ta INSERT
-   thẳng, ta mất bản ghi lỗi ngay tại thời điểm cần nó nhất.
-
-2. **không tự động replay.** Bản trước đây gửi message lỗi ngược về *topic gốc*.
-   Với `bankdb.public.transactions`, topic đó cũng là nguồn của Flink — nên một
-   lỗi ES tạm thời sẽ khiến giao dịch **bị đếm lại** và làm sai dashboard. Ta ghi
-   nhận và PARK; việc phát lại là quyết định của con người, có công cụ riêng.
-"""
 import datetime
 import json
 import logging
