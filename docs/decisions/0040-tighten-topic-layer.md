@@ -1,6 +1,6 @@
 # ADR-0040: Siết chặt chặng topic — topic duy nhất, một nguồn RF, config trong contract, verifier broker
 
-- **Status:** Accepted — 5 thay đổi, `check` 19/19 không đổi (refactor byte-identical); verifier broker chưa chạy live
+- **Status:** Accepted — 5 thay đổi, `check` 19/19 không đổi (refactor byte-identical); verifier broker đã verify live trên `cp-kafka:7.7.1`
 - **Date:** 2026-07-30
 - **Deciders:** Phan Trường
 
@@ -94,9 +94,19 @@ Parser tách thành `parse_describe(stdout)` thuần để test được mà kh�
 - `cli check`: **19/19 khớp** — refactor 1–4 không đổi một byte artifact nào.
 - `grep`: không còn tham chiếu `DLQ_REPLICATION_FACTOR` hay `_members`.
 
-**Chưa chạy:** `verifiers.kafka_topics` đối chiếu broker thật (Docker Desktop tắt lúc làm). Parser đã test
-bằng output mẫu nhưng **chưa xác nhận với đúng image `confluentinc/cp-kafka:7.7.1`** — format `--describe`
-có thể khác ở thứ tự field. Đây là rủi ro còn lại, phải chạy live trước khi tin.
+**Live trên broker thật** (`bigdata-kafka`, `confluentinc/cp-kafka:7.7.1`) — parser xác nhận đúng với
+output thật, không chỉ output mẫu:
+
+- **Chiều dương:** 21/21 topic `[KHỚP]`, 0 lệch, 0 chú ý, exit 0.
+- **THIẾU:** `kafka-topics --delete --topic dlq.es-sink-transfers` → báo `[THIẾU]` kèm gợi ý chạy lại
+  `create-topics.sh`, exit 1.
+- **LỆCH partitions:** tạo lại topic đó với `--partitions 2` → báo `manifest=1 vs broker=2` kèm ghi chú
+  `--if-not-exists` không sửa được topic đã tồn tại, exit 1.
+- **THỪA:** tạo `rac.topic-khong-khai` → warning, không phải error, exit vẫn theo lỗi khác.
+- **Whitelist thật sự được kiểm:** `__consumer_offsets` **có** trên broker (broker tự tạo) mà verifier vẫn
+  báo 0 warning — nếu không whitelist thì nó sẽ nhiễu vĩnh viễn.
+- Khôi phục bằng `create-topics.sh` → 21 topic, 0 lệch, exit 0. (Lần chạy này cũng xác nhận script sau khi
+  rút header về một dòng vẫn chạy đúng.)
 
 ## Hệ quả
 
