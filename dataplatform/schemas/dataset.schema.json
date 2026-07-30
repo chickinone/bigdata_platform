@@ -65,6 +65,19 @@
         "replica_identity": {
           "description": "full = Postgres ghi cả row cũ vào WAL (cần cho audit thay đổi). default = chỉ ghi PK. Xem ADR-0004.",
           "enum": ["default", "full"]
+        },
+
+        "partitions": {
+          "description": "Số partition của topic. Thiếu = mặc định của platform (1, single-node ADR-0005). Khai ở đây vì mức song song là thuộc tính của dòng dữ liệu, không phải của generator. LƯU Ý: đổi partition của topic nguồn làm thay đổi phân bố key_by của fraud detector — thay đổi có chủ ý, cần đối chiếu lại.",
+          "type": "integer",
+          "minimum": 1
+        },
+
+        "topic_configs": {
+          "description": "Config topic tường minh (retention.ms, cleanup.policy, max.message.bytes...). Thiếu/rỗng = để mặc định broker. Chỉ khai thứ CÓ CHỦ Ý khác mặc định — khai lại giá trị mặc định làm bản kê lệch topic thật (ADR-0020).",
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "type": "string" }
         }
       }
     },

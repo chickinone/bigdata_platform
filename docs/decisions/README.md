@@ -73,3 +73,4 @@
 | [0037](0037-cutover-complete-single-source.md) | Chốt cutover — `metadata/` là nguồn sự thật duy nhất |
 | [0038](0038-om-governance-from-metadata.md) | Governance OM sinh từ metadata — domain/tier, test case, metric, dashboard, KPI |
 | [0039](0039-verify-publication-vs-contract.md) | Verifier publication + replica identity — đóng lỗ hổng runtime của mối nối CDC |
+| [0040](0040-tighten-topic-layer.md) | Siết chặt chặng topic — topic duy nhất, một nguồn RF, config trong contract, verifier broker |

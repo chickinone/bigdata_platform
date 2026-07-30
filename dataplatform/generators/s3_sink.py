@@ -16,18 +16,22 @@ CONNECTOR_NAME = "s3-sink-cdc"
 CONNECTOR_CLASS = "io.confluent.connect.s3.S3SinkConnector"
 
 
-def _members(datasets: list[Dataset]) -> list[Dataset]:
+def members(datasets: list[Dataset]) -> list[Dataset]:
     """Dataset nào đi vào Bronze.
 
     Chỉ CDC mới vào Bronze: Bronze là bản sao trung thực của dữ liệu nguồn.
     fraud-alerts là dữ liệu phái sinh do Flink đẻ ra — tính lại được từ nguồn,
     nên không cần lưu trữ lâu dài ở lake.
+
+    Public (không `_`) vì `dlq.py` phải dùng CHÍNH luật này để kê `original_topics`.
+    Trước đây dlq.py chép lại biểu thức lọc — hai bản copy của một luật, nới luật ở
+    đây mà quên chỗ kia thì DLQ mất khả năng truy nguyên topic gốc.
     """
     return [d for d in datasets if d.is_cdc and d.sink_enabled("s3_bronze")]
 
 
 def render(datasets: list[Dataset], conns: dict[str, dict]) -> dict:
-    members = _members(datasets)
+    selected = members(datasets)
     sr = endpoint(conns, "schema_registry", "connect_url")
     config = {
         "connector.class": CONNECTOR_CLASS,
@@ -35,7 +39,7 @@ def render(datasets: list[Dataset], conns: dict[str, dict]) -> dict:
         # Gộp topic của mọi dataset bật s3_bronze. Trước đây danh sách này được
         # chép tay - quên một topic là mất dữ liệu lake mà không có lỗi nào
         # (metadata sprawl #4).
-        "topics": ",".join(d.topic for d in members),
+        "topics": ",".join(d.topic for d in selected),
 
         # Endpoint object store đọc từ connection s3_minio, không hardcode.
         "s3.bucket.name": endpoint(conns, "s3_minio", "bucket_bronze"),
@@ -79,12 +83,12 @@ def render(datasets: list[Dataset], conns: dict[str, dict]) -> dict:
 
     from .dlq import dlq_config
 
-    config.update(dlq_config(CONNECTOR_NAME))
+    config.update(dlq_config(CONNECTOR_NAME, endpoint(conns, "kafka", "replication_factor")))
 
     return {"name": CONNECTOR_NAME, "config": config}
 
 
 def targets(datasets: list[Dataset], conns: dict[str, dict]) -> dict[str, dict]:
-    if not _members(datasets):
+    if not members(datasets):
         return {}
     return {f"kafka-connect/s3-sinks/{CONNECTOR_NAME}.json": render(datasets, conns)}

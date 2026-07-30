@@ -8,3 +8,8 @@ description: Kafka broker — trung tam ingestion (CDC, stream, DLQ).
 
 endpoints:
   bootstrap: "kafka:9092"
+  # RF cua CLUSTER, khong cua tung topic -> thuoc tinh cua connection. Truoc day gia
+  # tri nay bi khai hai lan (topic_manifest.REPLICATION_FACTOR + dlq.DLQ_REPLICATION_
+  # FACTOR) o hai file, doi mot cho quen cho kia thi topic du lieu va topic DLQ lech RF.
+  # =1 vi Kafka single-node (ADR-0005); len multi-broker thi sua DUNG dong nay.
+  replication_factor: "1"

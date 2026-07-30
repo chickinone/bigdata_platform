@@ -21,6 +21,12 @@ def connector_name(ds: Dataset) -> str:
     return f"es-sink-{ds.entity}"
 
 
+def members(datasets: list[Dataset]) -> list[Dataset]:
+    """Dataset nào có ES sink. Public vì `dlq.py` phải dùng CHÍNH luật này để kê
+    danh sách connector có DLQ — không chép lại biểu thức lọc ở đó."""
+    return [ds for ds in datasets if ds.sink_enabled("elasticsearch")]
+
+
 def render(ds: Dataset, conns: dict[str, dict]) -> dict:
     """Dựng config connector cho một dataset.
 
@@ -62,9 +68,10 @@ def render(ds: Dataset, conns: dict[str, dict]) -> dict:
 
     # DLQ cho mọi sink - chính sách nền tảng, xem generators/dlq.py.
     # Import tại chỗ để tránh vòng lặp import (dlq.py cần connector_name từ đây).
+    # RF đọc từ connection kafka: RF là thuộc tính của cluster, khai một nơi.
     from .dlq import dlq_config
 
-    config.update(dlq_config(connector_name(ds)))
+    config.update(dlq_config(connector_name(ds), endpoint(conns, "kafka", "replication_factor")))
 
     return {"name": connector_name(ds), "config": config}
 
@@ -112,9 +119,7 @@ def _cdc_transforms(ds: Dataset) -> dict:
 
 def targets(datasets: list[Dataset], conns: dict[str, dict]) -> dict[str, dict]:
     """Trả về {đường_dẫn_tương_đối: nội_dung} cho mọi dataset bật ES sink."""
-    out = {}
-    for ds in datasets:
-        if not ds.sink_enabled("elasticsearch"):
-            continue
-        out[f"kafka-connect/es-sinks/{connector_name(ds)}.json"] = render(ds, conns)
-    return out
+    return {
+        f"kafka-connect/es-sinks/{connector_name(ds)}.json": render(ds, conns)
+        for ds in members(datasets)
+    }

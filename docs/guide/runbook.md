@@ -45,7 +45,16 @@ contract rồi `write`.
    `ALTER PUBLICATION dbz_publication ADD TABLE <schema>.<table>;`. Quên bước này thì bảng có snapshot
    nhưng **không bao giờ có bản ghi mới**, connector vẫn `RUNNING` và `cli check` vẫn xanh.
    Kiểm bằng `python -m dataplatform.verifiers.postgres_publication` ([ADR-0039](../decisions/0039-verify-publication-vs-contract.md)).
-5. Bảng metric mới = init sinh tự có (idempotent), không cần migration.
+5. **Topic trên cluster đang sống:** `create-topics.sh` chỉ chạy khi dựng stack (`kafka-init`), nên chạy tay
+   `docker exec bigdata-kafka bash /opt/bitnami/kafka/create-topics.sh` (idempotent). Kiểm bằng
+   `python -m dataplatform.verifiers.kafka_topics` ([ADR-0040](../decisions/0040-tighten-topic-layer.md)).
+6. Bảng metric mới = init sinh tự có (idempotent), không cần migration.
+
+**Cần nhiều partition / retention riêng cho một topic?** Khai `source.partitions` / `source.topic_configs`
+trong contract dataset, không sửa generator ([ADR-0040](../decisions/0040-tighten-topic-layer.md)). Lưu ý:
+đổi partition của topic nguồn làm thay đổi phân bố `key_by` của fraud detector — thay đổi có chủ ý, cần đối
+chiếu lại, và `--if-not-exists` **không** sửa được topic đã tồn tại (phải xoá/tạo lại hoặc dùng
+`kafka-topics --alter`).
 
 ### Thêm một metric (Flink → ClickHouse)
 

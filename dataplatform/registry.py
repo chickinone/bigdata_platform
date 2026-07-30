@@ -66,6 +66,20 @@ class Dataset:
             return self.raw["source"]["table"]
         return self.topic
 
+    @property
+    def partitions(self) -> int | None:
+        """Số partition mong muốn cho topic của dataset này, hoặc None = dùng mặc
+        định của platform. Khai được ở contract vì nó là thuộc tính của DÒNG DỮ LIỆU
+        (throughput, mức song song cần thiết), không phải của generator."""
+        return self.raw["source"].get("partitions")
+
+    @property
+    def topic_configs(self) -> dict[str, str]:
+        """Config topic tường minh (retention.ms, cleanup.policy...). Rỗng = để mặc
+        định broker. Chỉ khai thứ CÓ CHỦ Ý khác mặc định — khai lại giá trị mặc định
+        sẽ làm bản kê lệch với topic thật và mất khả năng đối chiếu (ADR-0020)."""
+        return self.raw["source"].get("topic_configs", {})
+
     def sink_enabled(self, name: str) -> bool:
         return self.raw.get("sinks", {}).get(name, {}).get("enabled", False)
 
@@ -105,6 +119,7 @@ def load_datasets(metadata_dir: Path = METADATA_DIR) -> list[Dataset]:
         )
 
     _check_unique_urns(datasets)
+    _check_unique_topics(datasets)
     return sorted(datasets, key=lambda d: d.urn)
 
 
@@ -171,3 +186,22 @@ def _check_unique_urns(datasets: list[Dataset]) -> None:
                 f"URN trùng: {ds.urn}\n  {seen[ds.urn]}\n  {ds.path}"
             )
         seen[ds.urn] = ds.path
+
+
+def _check_unique_topics(datasets: list[Dataset]) -> None:
+    """Chiều thứ hai của cùng một lỗi: hai contract khác URN nhưng cùng
+    `source.topic`. JSON Schema không bắt được (nó chỉ nhìn từng file), và
+    `_check_unique_urns` cũng không — hai URN khác nhau là hợp lệ với nó.
+
+    Vì sao vẫn chí mạng: topic là định danh THẬT của dòng dữ liệu trên Kafka. Trùng
+    topic nghĩa là hai contract cùng mô tả một dòng dữ liệu, và hạ nguồn không thể
+    phân biệt: bản kê topic có hai dòng cùng `name` (tự nói dối), hai ES sink cùng
+    đọc một topic rồi ghi đè `_id` của nhau, hai topic DLQ cho cùng một nguồn lỗi.
+    """
+    seen: dict[str, Path] = {}
+    for ds in datasets:
+        if ds.topic in seen:
+            raise ContractError(
+                f"source.topic trùng: {ds.topic}\n  {seen[ds.topic]}\n  {ds.path}"
+            )
+        seen[ds.topic] = ds.path

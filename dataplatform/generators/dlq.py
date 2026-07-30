@@ -9,10 +9,6 @@ from __future__ import annotations
 from ..registry import Dataset
 from . import es_sink, s3_sink
 
-# RF=1 vì Kafka đang single-node (ADR-0005). Lên multi-broker thì giá trị này
-# phải theo env - hiện khoá ở một chỗ, đổi một dòng là xong.
-DLQ_REPLICATION_FACTOR = "1"
-
 INVENTORY_PATH = "dlq-processor/dlq_topics.json"
 
 
@@ -20,8 +16,14 @@ def dlq_topic(connector_name: str) -> str:
     return f"dlq.{connector_name}"
 
 
-def dlq_config(connector_name: str) -> dict:
-    """Khối config bật DLQ, dùng chung cho mọi loại sink."""
+def dlq_config(connector_name: str, replication_factor: str) -> dict:
+    """Khối config bật DLQ, dùng chung cho mọi loại sink.
+
+    `replication_factor` truyền vào (không phải hằng số ở đây) vì RF là thuộc tính
+    của CLUSTER, sống trong `connections/kafka.yaml`. Trước đây nó bị khai hai lần —
+    ở đây và ở topic_manifest — nên topic DLQ và topic dữ liệu có thể lệch RF khi lên
+    multi-broker.
+    """
     return {
         # all: chuyển bản ghi lỗi sang DLQ thay vì để task chết.
         # Mặc định là `none` -> một message hỏng làm đứng toàn bộ connector.
@@ -29,7 +31,7 @@ def dlq_config(connector_name: str) -> dict:
         # kiện đó nay đã có, nên bật được.
         "errors.tolerance": "all",
         "errors.deadletterqueue.topic.name": dlq_topic(connector_name),
-        "errors.deadletterqueue.topic.replication.factor": DLQ_REPLICATION_FACTOR,
+        "errors.deadletterqueue.topic.replication.factor": replication_factor,
         # Bắt buộc. Thiếu dòng này thì header __connect.errors.* không được ghi,
         # dlq-processor không đọc được nguyên nhân lỗi, và mọi lỗi rơi vào nhóm
         # UNKNOWN -> phân loại thành vô dụng.
@@ -52,9 +54,11 @@ def connectors(datasets: list[Dataset]) -> list[dict]:
     """
     out: list[dict] = []
 
-    for ds in datasets:
-        if not ds.sink_enabled("elasticsearch"):
-            continue
+    # Luật "dataset nào có sink X" thuộc về generator của sink X. Gọi hàm của nó thay
+    # vì chép biểu thức lọc — nếu chép, nới luật ở generator mà quên ở đây thì
+    # `original_topics` thiếu topic và dlq-processor mất khả năng truy nguyên nguồn lỗi
+    # (đúng chế độ hỏng của sprawl #12 mà file này được viết để đóng).
+    for ds in es_sink.members(datasets):
         name = es_sink.connector_name(ds)
         out.append(
             {
@@ -64,7 +68,7 @@ def connectors(datasets: list[Dataset]) -> list[dict]:
             }
         )
 
-    s3_members = [d for d in datasets if d.is_cdc and d.sink_enabled("s3_bronze")]
+    s3_members = s3_sink.members(datasets)
     if s3_members:
         out.append(
             {

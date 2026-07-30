@@ -42,23 +42,26 @@ import json
 from ..registry import Dataset, endpoint
 from . import debezium, dlq
 
-# RF=1 vì Kafka single-node (ADR-0005). Khoá ở một chỗ; lên multi-broker thì đây là
-# giá trị đổi theo env — cùng lý do và cùng kiểu với DLQ_REPLICATION_FACTOR bên dlq.py.
-REPLICATION_FACTOR = 1
-
 # Số partition mặc định cho topic dữ liệu. Bằng 1 để tái tạo đúng thứ auto-create
-# đang sinh ra (broker không set num.partitions -> mặc định Kafka = 1). Tăng nó là
-# quyết định hiệu năng riêng, có ràng buộc (đổi partition của topic nguồn ảnh hưởng
-# key_by của fraud detector) — làm sau, có đối chiếu.
+# đang sinh ra (broker không set num.partitions -> mặc định Kafka = 1). Dataset nào
+# cần nhiều hơn thì khai `source.partitions` trong contract — mức song song là thuộc
+# tính của dòng dữ liệu, không phải hằng số của generator. Ràng buộc phải biết khi
+# tăng: đổi partition của topic nguồn làm thay đổi phân bố key_by của fraud detector.
 DEFAULT_PARTITIONS = 1
+
+# RF không còn là hằng số ở đây: nó là thuộc tính của CLUSTER, đọc từ
+# connections/kafka.yaml (endpoints.replication_factor). Trước đây giá trị này bị khai
+# hai lần — ở đây và DLQ_REPLICATION_FACTOR bên dlq.py — nên đổi một chỗ quên chỗ kia
+# thì topic dữ liệu và topic DLQ lệch RF.
 
 # Topic đầu ra của dlq-processor (dlq_processor.py: EVENTS_TOPIC = "dlq.events").
 # Đây là topic PIPELINE nội bộ, không gắn dataset nào — nên khai tay ở đây.
 DLQ_EVENTS_TOPIC = "dlq.events"
 
 
-def _topic(name: str, provenance: str, *, partitions: int = DEFAULT_PARTITIONS,
-           compact: bool = False) -> dict:
+def _topic(name: str, provenance: str, replication_factor: int, *,
+           partitions: int = DEFAULT_PARTITIONS, compact: bool = False,
+           configs: dict[str, str] | None = None) -> dict:
     """Một dòng manifest. `provenance` trả lời 'topic này từ đâu ra' — để người đọc
     (và catalog về sau) truy được nguồn, không phải đoán.
 
@@ -71,48 +74,56 @@ def _topic(name: str, provenance: str, *, partitions: int = DEFAULT_PARTITIONS,
     # do auto-create sinh ra không có override này (cột Configs trống khi describe).
     # Khai thừa sẽ làm manifest lệch với hiện trạng và mất khả năng đối chiếu sạch.
     # Cùng lý do retention để mặc định broker (tinh chỉnh sau, có chủ ý).
-    configs = {"cleanup.policy": "compact"} if compact else {}
+    # `configs` tường minh (từ contract) gộp SAU cờ compact — contract thắng, vì nó là
+    # khai báo có chủ ý của người sở hữu dataset.
+    merged = {"cleanup.policy": "compact"} if compact else {}
+    merged.update(configs or {})
     return {
         "name": name,
         "partitions": partitions,
-        "replication_factor": REPLICATION_FACTOR,
-        "configs": configs,
+        "replication_factor": replication_factor,
+        "configs": merged,
         "provenance": provenance,
     }
 
 
-def _entries(datasets: list[Dataset]) -> list[dict]:
+def _entries(datasets: list[Dataset], rf: int) -> list[dict]:
     """Gộp cả ba nguồn topic thành một danh sách đã sắp xếp ổn định."""
     entries: list[dict] = []
 
-    # (1) DATASET — suy thẳng từ registry.
+    # (1) DATASET — suy thẳng từ registry. partitions/configs lấy từ contract nếu khai;
+    # không khai thì dùng mặc định platform (giữ nguyên hiện trạng).
     for ds in datasets:
-        entries.append(_topic(ds.topic, f"dataset:{ds.urn}"))
+        entries.append(_topic(
+            ds.topic, f"dataset:{ds.urn}", rf,
+            partitions=ds.partitions or DEFAULT_PARTITIONS,
+            configs=ds.topic_configs,
+        ))
 
     # (2) DLQ — tái dùng danh sách của dlq.py, không tự liệt kê lại.
     for conn in dlq.connectors(datasets):
-        entries.append(_topic(conn["dlq_topic"], f"dlq:{conn['connector']}"))
+        entries.append(_topic(conn["dlq_topic"], f"dlq:{conn['connector']}", rf))
 
     # (3) hạ tầng — khai tay, có giải thích. Đây là các topic không gắn dataset nào
     # nhưng vẫn phải tồn tại trước khi dám tắt auto.create.topics. Danh sách này được
     # chốt bằng cách đối chiếu với Kafka thật (ADR-0020), không phải đoán — `_schemas`
     # lọt lưới ở bản đầu và chỉ lộ ra khi describe cluster đang chạy.
-    entries.append(_topic(DLQ_EVENTS_TOPIC, "pipeline:dlq-processor"))
+    entries.append(_topic(DLQ_EVENTS_TOPIC, "pipeline:dlq-processor", rf))
     # Topic nội bộ Connect: partition khớp mặc định Connect (offsets=25, status=5,
     # configs=1) để tái tạo đúng hiện trạng; tất cả compacted.
-    entries.append(_topic("_connect_configs", "infra:kafka-connect", partitions=1, compact=True))
-    entries.append(_topic("_connect_offsets", "infra:kafka-connect", partitions=25, compact=True))
-    entries.append(_topic("_connect_status", "infra:kafka-connect", partitions=5, compact=True))
+    entries.append(_topic("_connect_configs", "infra:kafka-connect", rf, partitions=1, compact=True))
+    entries.append(_topic("_connect_offsets", "infra:kafka-connect", rf, partitions=25, compact=True))
+    entries.append(_topic("_connect_status", "infra:kafka-connect", rf, partitions=5, compact=True))
     # Store schema của Confluent Schema Registry: single-partition, compacted (SR bắt
     # buộc như vậy). SR tự tạo, nhưng vẫn phải khai để manifest là bản kê đầy đủ.
-    entries.append(_topic("_schemas", "infra:schema-registry", partitions=1, compact=True))
+    entries.append(_topic("_schemas", "infra:schema-registry", rf, partitions=1, compact=True))
     # Heartbeat của Debezium: nếu có dataset CDC, Debezium tự tạo
     # __debezium-heartbeat.<prefix> (do heartbeat.interval.ms) để đẩy replication slot
     # tiến kể cả khi bảng không đổi. Tắt auto-create mà thiếu nó -> slot đứng -> WAL
     # phình vô hạn. Suy diễn từ TOPIC_PREFIX, chỉ thêm khi thực sự có CDC — cũng là
     # một topic mà đối chiếu-với-Kafka-thật lôi ra, không phải suy luận thuần.
     if debezium.cdc_datasets(datasets):
-        entries.append(_topic(f"__debezium-heartbeat.{debezium.TOPIC_PREFIX}", "infra:debezium-heartbeat"))
+        entries.append(_topic(f"__debezium-heartbeat.{debezium.TOPIC_PREFIX}", "infra:debezium-heartbeat", rf))
     # Lưu ý: __consumer_offsets không nằm đây. Nó do chính broker Kafka quản, tạo bất
     # kể auto.create.topics, không phải thứ control plane khai hay xoá được.
 
@@ -141,7 +152,7 @@ _JSON_COMMENT = (
 )
 
 
-def render_manifest(datasets: list[Dataset]) -> str:
+def render_manifest(datasets: list[Dataset], rf: int) -> str:
     """Manifest JSON — trả về chuỗi (không phải dict) để `check` so BYTE-EXACT.
 
     Vì sao byte-exact chứ không so ngữ nghĩa như connector JSON: file này DO CONTROL
@@ -150,11 +161,11 @@ def render_manifest(datasets: list[Dataset]) -> str:
     {name, config} của connector, đưa manifest {topics:[...]} vào đó sẽ luôn báo khớp
     một cách sai. Trả chuỗi là đi thẳng nhánh so nguyên văn (giống DDL SQL).
     """
-    payload = {"_comment": _JSON_COMMENT, "topics": _entries(datasets)}
+    payload = {"_comment": _JSON_COMMENT, "topics": _entries(datasets, rf)}
     return json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
 
 
-def render_script(datasets: list[Dataset], bootstrap: str) -> str:
+def render_script(datasets: list[Dataset], bootstrap: str, rf: int) -> str:
     """Script tạo topic idempotent, chạy được trong image confluent cp-kafka.
 
     `--if-not-exists`: topic đã có thì bỏ qua, không lỗi -> chạy lại bao nhiêu lần
@@ -176,7 +187,7 @@ def render_script(datasets: list[Dataset], bootstrap: str) -> str:
 
     # Gom theo nhóm (dataset -> dlq -> pipeline -> infra), trong nhóm sắp theo tên.
     # Manifest JSON vẫn sắp thuần theo tên; script gom nhóm để người chạy dễ đọc.
-    ordered = sorted(_entries(datasets), key=lambda t: (_KIND_ORDER[_kind(t)], t["name"]))
+    ordered = sorted(_entries(datasets, rf), key=lambda t: (_KIND_ORDER[_kind(t)], t["name"]))
 
     last_kind = None
     for t in ordered:
@@ -202,7 +213,10 @@ def render_script(datasets: list[Dataset], bootstrap: str) -> str:
 
 def targets(datasets: list[Dataset], conns: dict[str, dict]) -> dict[str, str]:
     bootstrap = endpoint(conns, "kafka", "bootstrap")
+    # RF là thuộc tính cluster, đọc từ connection kafka — cùng nguồn với DLQ config
+    # bên dlq.py, nên hai nhóm topic không thể lệch RF.
+    rf = int(endpoint(conns, "kafka", "replication_factor"))
     return {
-        "kafka/topics.json": render_manifest(datasets),
-        "kafka/create-topics.sh": render_script(datasets, bootstrap),
+        "kafka/topics.json": render_manifest(datasets, rf),
+        "kafka/create-topics.sh": render_script(datasets, bootstrap, rf),
     }
