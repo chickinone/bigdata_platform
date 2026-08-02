@@ -32,6 +32,9 @@ jobs:
         # đã được xử lý bằng cách đổi mật khẩu, quét lại chỉ làm CI đỏ vĩnh viễn. Mục
         # đích của gate này là chặn secret MỚI lọt vào — đúng thứ đã lọt một lần.
         # --redact: không in giá trị secret ra log CI công khai.
+        # Luật đọc từ `.gitleaks.toml` ở gốc repo (gitleaks tự tìm theo --source): nó
+        # loại các đường dẫn KHÔNG thuộc repo (volume Docker, .env local) để lần chạy ở
+        # máy dev cho cùng kết quả với CI.
         run: |
           docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:latest \
             detect --source /repo --no-git --redact --exit-code 1

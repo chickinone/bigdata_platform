@@ -67,7 +67,7 @@ flowchart LR
 ```
 
 Bước 3 là chốt an toàn: chứng minh bản sinh giống hệt bản cũ trước khi dám thay. Trình tự chi tiết
-từng pha nằm ở [`METADATA-DRIVEN-cac-buoc-trien-khai.md`](METADATA-DRIVEN-cac-buoc-trien-khai.md).
+từng pha nằm ở [`docs/roadmap/BDP-metadata-driven-roadmap.md`](docs/roadmap/BDP-metadata-driven-roadmap.md).
 
 Ba lớp trong `dataplatform/`:
 
@@ -170,6 +170,17 @@ artifact sinh. Sửa tay là CI `check` đỏ; muốn đổi thì sửa contract
 
 ## Quick start
 
+**Cần trước khi bắt đầu:**
+
+| | Yêu cầu |
+|---|---|
+| Control plane (bước 1) | Python 3.12+. **Không cần Docker** — thuần tĩnh, chạy được ngay sau `git clone` |
+| Runtime platform (bước 2+) | Docker Desktop, **~16 GB RAM** cho stack chính (21 service) |
+| OpenMetadata / Airflow | Chạy **phiên riêng**, không cùng lúc với stack chính — mỗi cái ~3 GB |
+
+Máy dưới 16 GB vẫn chạy được bước 1 để xem toàn bộ control plane hoạt động; stack runtime thì nên
+bật từng phần (`docker compose up -d kafka postgres` ...) thay vì `up -d` tất cả.
+
 1\) Control plane (không cần Docker, thuần tĩnh):
 
 ```bash
@@ -204,9 +215,12 @@ python -m dataplatform.deployers.spark_batch       apply   # medallion Silver→
 4\) Đối chiếu với hệ thống thật:
 
 ```bash
-python -m dataplatform.verifiers.avro_schema        # Avro trên dây vs contract
-python -m dataplatform.verifiers.clickhouse_schema  # bảng CH vs contract
-python -m dataplatform.verifiers.quality            # data quality gate
+python -m dataplatform.verifiers.postgres_schema       # bảng nguồn vs contract
+python -m dataplatform.verifiers.postgres_publication  # publication + replica identity vs contract
+python -m dataplatform.verifiers.avro_schema           # Avro trên dây vs contract
+python -m dataplatform.verifiers.kafka_topics          # topic trên broker vs bản kê
+python -m dataplatform.verifiers.clickhouse_schema     # bảng CH vs contract
+python -m dataplatform.verifiers.quality               # data quality gate (dữ liệu, không phải schema)
 ```
 
 Catalog UI (OpenMetadata) và Airflow chạy phiên riêng (compose riêng, tốn RAM), xem
@@ -259,23 +273,37 @@ liệu truy vấn được. Theo dõi qua Kafka UI, Flink UI, Spark UI, Grafana,
 ## Cách làm việc trong repo này
 
 - ADR-first: quyết định đáng kể nào cũng có một ADR (bối cảnh, quyết định, hệ quả, phương án đã
-  cân nhắc). Hiện có [38 ADR](docs/decisions/README.md).
+  cân nhắc). Hiện có [41 ADR](docs/decisions/README.md).
 - Generator phải sinh ra đúng từng byte bản viết tay cũ trước khi được phép thay nó.
-- CI (`.github/workflows/metadata-check.yml`): drift (`check`) + BACKWARD (`compat`) + plan hệ quả,
-  chạy thuần tĩnh.
-- Verify runtime: đối chiếu contract với schema thật ở Postgres/ClickHouse/Avro trên dây.
+- CI (`.github/workflows/metadata-check.yml`), toàn bộ thuần tĩnh — không cần engine nào:
+  quét secret (gitleaks) → test hàm thuần (`pytest tests`, 33 test) → drift (`check`) →
+  BACKWARD (`compat`, trên PR) → plan hệ quả (trên PR).
+- Verify runtime: 6 verifier đối chiếu contract với hệ thống THẬT (Postgres, publication, Avro trên
+  dây, topic Kafka, ClickHouse, và dữ liệu). `check` chỉ chứng minh artifact khớp metadata — nó
+  không biết hệ thống đang chạy có khớp không.
 - RBAC/audit: `.github/CODEOWNERS` theo vùng metadata + `owner` trong contract + audit qua Git/lineage.
 
 ## Tài liệu
 
 | Muốn hiểu | Đọc |
 |---|---|
-| Trình tự triển khai (làm từ đâu tới đâu) | [`METADATA-DRIVEN-cac-buoc-trien-khai.md`](METADATA-DRIVEN-cac-buoc-trien-khai.md) |
-| Cái đích + từng pha | [`docs/roadmap/BDP-metadata-driven-roadmap.md`](docs/roadmap/BDP-metadata-driven-roadmap.md) |
+| Bắt đầu từ đâu (bản đồ toàn bộ tài liệu) | [`docs/README.md`](docs/README.md) |
+| Trình tự triển khai + cái đích của từng pha | [`docs/roadmap/BDP-metadata-driven-roadmap.md`](docs/roadmap/BDP-metadata-driven-roadmap.md) |
 | Điểm xuất phát (metadata sprawl) | [`docs/architecture/BDP-current-state.md`](docs/architecture/BDP-current-state.md) |
 | Vận hành hằng ngày + gotchas | [`docs/guide/runbook.md`](docs/guide/runbook.md) |
-| Vì sao mỗi quyết định | [`docs/decisions/README.md`](docs/decisions/README.md) (index 38 ADR) |
+| Sinh artifact từ metadata | [`docs/guide/metadata-control-plane.md`](docs/guide/metadata-control-plane.md) |
+| Vì sao mỗi quyết định | [`docs/decisions/README.md`](docs/decisions/README.md) (index 41 ADR) |
 
 ## Tác giả
 
 Phan Văn Trường — Data Engineering (fintech CDC, streaming, lakehouse)
+
+## Giấy phép
+
+Mã nguồn: [MIT](LICENSE) — dùng, sửa, fork thoải mái, chỉ cần giữ ghi công.
+
+Các file `.jar` trong `flink/jobs/jars/` là phần mềm bên thứ ba (Apache-2.0), giữ giấy phép riêng —
+xem [`flink/jobs/jars/NOTICE.md`](flink/jobs/jars/NOTICE.md).
+
+Dữ liệu trong repo là **dữ liệu giả** do `generator/` sinh ra. Không có dữ liệu thật của người dùng
+hay tổ chức nào.

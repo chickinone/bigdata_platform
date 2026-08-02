@@ -1,0 +1,27 @@
+# Cấu hình gitleaks — dùng cho cả CI lẫn chạy tay ở local.
+#
+# `gitleaks detect --no-git` quét FILESYSTEM, không phải danh sách file git theo dõi.
+# Trên CI (checkout sạch) hai thứ đó trùng nhau, nhưng ở máy dev thì không: volume
+# Docker và thư mục build nằm ngay trong repo và bị .gitignore loại. Không khai báo
+# ở đây thì gate báo lỗi ở local mà xanh ở CI — và một gate báo sai là gate sẽ bị bỏ
+# qua, đúng thứ ADR-0041 muốn tránh.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Đường dẫn KHÔNG thuộc repo (đã .gitignore) hoặc nhị phân bên thứ ba"
+paths = [
+  # Volume Postgres của OpenMetadata — dữ liệu runtime, bị openmetadata/.gitignore loại.
+  # Nó chứa byte ngẫu nhiên của database nên thỉnh thoảng khớp luật entropy cao.
+  '''openmetadata/docker-volume/''',
+
+  # JAR bên thứ ba tải từ Maven (xem flink/jobs/jars/NOTICE.md). Nhị phân ~47 MB,
+  # không phải mã ta viết; quét chúng chỉ tốn thời gian.
+  '''flink/jobs/jars/.*\.jar$''',
+
+  # File .env thật không bao giờ được commit (.gitignore), nhưng nó CÓ ở máy dev.
+  # Loại khỏi scan để gate nói đúng một điều: "có secret nào lọt vào repo không".
+  # Việc canh .env không bị commit là của .gitignore, không phải của gitleaks.
+  '''^\.env$''',
+]
