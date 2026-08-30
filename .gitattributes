@@ -6,3 +6,22 @@
 
 # Cùng lý do cho các file cấu hình/khởi tạo chạy trong container.
 *.sql text eol=lf
+
+# Cùng lý do cho file .properties: Trino (Java) tự trim nên vẫn chạy, NHƯNG script
+# health-check của image là bash và làm `cut -d= -f2` rồi ghép thẳng vào URL —
+# CRLF biến port thành `8080\r`, curl báo "URL using bad/illegal format" và container
+# bị đánh dấu unhealthy VĨNH VIỄN dù Trino hoàn toàn khoẻ. Lỗi vô hình trong terminal
+# vì \r đẩy con trỏ về đầu dòng. 3/4 file là bản SINH nên chỉ ép được ở tầng git.
+*.properties text eol=lf
+
+# Chuan hoa TOAN BO file text ve LF trong working tree. Ba dong tren van giu lai vi
+# chung ghi ro Y DINH cho tung loai, nhung dong nay moi la thu dong cua lop loi: file
+# SINH nhu .py (DAG Airflow), .json (ban ke topic), .md (lineage) truoc day khong duoc
+# phu, nen `core.autocrlf=true` bien chung thanh CRLF o moi lan clone tren Windows.
+# Xem ADR-0043 — CRLF tung lam healthcheck Trino do vinh vien.
+* text=auto eol=lf
+
+# Ngoai le duy nhat: script Windows PHAI giu CRLF.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf

@@ -99,7 +99,12 @@ def _compare(rel_path: str, generated) -> tuple[str, list[str]]:
     if not path.exists():
         return "MOI", []
 
-    raw = path.read_text(encoding="utf-8")
+    # newline="" TAT universal newlines. Khong co no, Python dich CRLF -> LF NGAY LUC
+    # DOC, nen phep so ben duoi khong bao gio thay khac biet ket thuc dong — check tung
+    # bao "khop tuyet doi" tren file CRLF du kien lam healthcheck Trino do vinh vien
+    # (ADR-0043). Voi JSON thi vo hai (json.loads bo qua khoang trang), voi text thi
+    # day moi dung la "so nguyen van" nhu docstring tren kia hua.
+    raw = path.read_text(encoding="utf-8", newline="")
 
     if isinstance(generated, str):
         if raw == generated:
@@ -115,6 +120,18 @@ def _compare(rel_path: str, generated) -> tuple[str, list[str]]:
 def _diff_text(current: str, generated: str) -> list[str]:
     """Diff dòng cho artifact text — chỉ những dòng thật sự khác."""
     import difflib
+
+    # Khac biet CHI o ket thuc dong: splitlines() gom moi kieu xuong dong ve mot
+    # moi, nen neu tach dong ra bang nhau ma chuoi tho khac nhau thi loi nam dung o
+    # ky tu xuong dong. Bao tuong minh, vi diff dong se hien hai dong TRONG Y HET
+    # nhau va khong ai hieu noi.
+    if current.splitlines() == generated.splitlines():
+        cr = sum(1 for ch in current if ch == chr(13))
+        return [
+            f"CHI khac KET THUC DONG — noi dung giong het ({cr} ky tu CR tren dia, ban sinh dung LF).",
+            "Nguyen nhan thuong gap: core.autocrlf tren Windows doi file luc checkout.",
+            "Sua: `git add --renormalize <file>` (da co quy tac trong .gitattributes). Xem ADR-0043.",
+        ]
 
     diffs: list[str] = []
     for line in difflib.unified_diff(
@@ -287,6 +304,63 @@ def cmd_compat(base: str) -> int:
     return 0
 
 
+VERIFIERS = [
+    "postgres_schema", "postgres_publication", "kafka_topics",
+    "avro_schema", "clickhouse_schema", "trino_catalog", "quality",
+]
+
+
+def cmd_verify() -> int:
+    """Chay TOAN BO verifier runtime, gop thanh mot ma thoat.
+
+    Vi sao can lenh nay: truoc day 7 verifier la 7 diem vao roi rac, nen thuc te khong
+    ai chay du. Loi ClickHouse 0 bang (ADR-0043) lot dung vi the — `clickhouse_schema`
+    thua suc bat, chi la khong ai goi. Gop lai moi dat lich duoc.
+
+    Phan biet HAI loai that bai, vi chung doi hoi hai phan ung khac han:
+      - LECH  (exit 1): engine song nhung KHONG khop contract -> phai sua.
+      - KHONG TOI (exit 3): engine chet/chua bat -> chua ket luan duoc gi.
+    Gop chung lam mot se bien "stack chua bat" thanh bao dong gia, ma bao dong gia lap
+    lai thi ca cong bi bo qua — cung ly do da chon `--no-git` cho gitleaks (ADR-0041).
+    """
+    import importlib
+
+    results: list[tuple[str, int]] = []
+    for name in VERIFIERS:
+        print()
+        print("=" * 70)
+        print(name)
+        print("=" * 70)
+        mod = importlib.import_module(f"dataplatform.verifiers.{name}")
+        try:
+            rc = mod.main([])
+        except SystemExit as exc:
+            rc = int(exc.code or 0)
+        results.append((name, rc))
+
+    drift = [n for n, rc in results if rc == 1]
+    broken = [n for n, rc in results if rc not in (0, 1)]
+
+    print()
+    print("=" * 70)
+    print(f"TONG HOP {len(results)} verifier")
+    print("=" * 70)
+    for name, rc in results:
+        mark = {0: "DAT", 1: "LECH"}.get(rc, "KHONG TOI")
+        print(f"  [{mark:<9}] {name}  (exit {rc})")
+
+    print()
+    if drift:
+        print(f"KET QUA: {len(drift)} verifier bao LECH -> {', '.join(drift)}")
+        return 1
+    if broken:
+        print(f"KET QUA: khong ket luan duoc — {len(broken)} verifier khong toi duoc "
+              f"engine: {', '.join(broken)}. Stack da bat chua?")
+        return 3
+    print(f"KET QUA: {len(results)}/{len(results)} verifier DAT — runtime khop contract.")
+    return 0
+
+
 def _force_utf8_output() -> None:
     """Console Windows mặc định là cp1252, không in nổi tiếng Việt và sẽ ném
     UnicodeEncodeError. Ép UTF-8 để công cụ chạy được ở mọi terminal thay vì bắt
@@ -303,7 +377,7 @@ def main(argv: list[str] | None = None) -> int:
         prog="dataplatform.cli",
         description="Sinh artifact vận hành từ dataset contract trong metadata/.",
     )
-    parser.add_argument("command", choices=["check", "write", "show", "plan", "compat"])
+    parser.add_argument("command", choices=["check", "write", "show", "plan", "compat", "verify"])
     parser.add_argument("--base", default=None,
                         help="Git ref nền để so 'plan'/'compat' (mặc định origin/main hoặc GITHUB_BASE_REF).")
     args = parser.parse_args(argv)
@@ -314,7 +388,8 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_plan(base)
         if args.command == "compat":
             return cmd_compat(base)
-        return {"check": cmd_check, "write": cmd_write, "show": cmd_show}[args.command]()
+        return {"check": cmd_check, "write": cmd_write, "show": cmd_show,
+                "verify": cmd_verify}[args.command]()
     except ContractError as exc:
         print(f"LỖI CONTRACT\n{exc}", file=sys.stderr)
         return 2

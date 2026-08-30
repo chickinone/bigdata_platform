@@ -8,3 +8,6 @@ __pycache__/
 data/
 logs/
 tmp/
+
+# Ket qua chay verifier theo lich (scripts/verify-scheduled.cmd) — cuc bo, khong commit
+.verify/

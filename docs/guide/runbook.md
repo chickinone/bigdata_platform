@@ -104,11 +104,40 @@ liệu Iceberg: `CALL iceberg.system.rollback_to_snapshot(...)`.
 - Luật tường minh: `metadata/quality/<dataset>.yaml` (`range`, `accepted_values`).
 - Chạy gate: `python -m dataplatform.verifiers.quality` (fail → chặn promote, [ADR-0033](../decisions/0033-data-quality-gate.md)).
 
-### Backfill
+### Backfill / chạy lại batch
 
-- Batch: `python -m dataplatform.deployers.spark_batch apply` (chạy lại silver→gold→iceberg theo thứ tự
-  phụ thuộc). Silver hiện là full-refresh overwrite (nợ #13).
-- Qua Airflow: trigger DAG `medallion_batch` (cần stack Spark sống).
+Batch chạy theo **cửa sổ ngày** ([ADR-0042](../decisions/0042-incremental-batch-and-blast-radius.md)):
+mỗi lần chạy tính lại trọn vẹn `lookback_days` ngày gần nhất và ghi đè đúng những partition đó.
+Chạy lại cùng `--as-of` là idempotent.
+
+| Muốn gì | Lệnh |
+|---|---|
+| Chạy cửa sổ hôm nay | `python -m dataplatform.deployers.spark_batch apply` |
+| Vá một ngày cũ | `... apply --as-of 2026-08-01` (tính lại cửa sổ kết thúc ở ngày đó) |
+| Tính lại toàn bộ lịch sử | `... apply --full-refresh` |
+| Qua Airflow | trigger/clear task DAG `medallion_batch` — `AS_OF` lấy từ `{{ds}}`, nên clear một ngày cũ tự backfill đúng ngày đó |
+
+**Khi nào cần `--full-refresh`:**
+
+- Sau khi sửa chiều (đổi tên khách hàng, đổi `risk_score`): cửa sổ chỉ cập nhật dòng trong cửa sổ, dòng cũ
+  giữ giá trị tại thời điểm giao dịch. Chạy full refresh để đồng bộ lại toàn bộ.
+- Dữ liệu về muộn hơn `lookback_days` (mặc định 3 ngày).
+- Nên đặt lịch định kỳ (tuần/tháng) chứ đừng đợi phát hiện lệch.
+
+**Đọc log để tự kiểm:** runner in `cửa sổ <start> .. <end>` và `thay N partition: ...`. Chạy lại cùng
+`--as-of` phải ra **đúng cùng danh sách partition** — khác là có vấn đề.
+
+**Kiểm sâu hơn (đếm dòng từng partition):**
+
+```bash
+MSYS_NO_PATHCONV=1 docker exec bigdata-spark-master /opt/spark/bin/spark-submit --master spark://spark-master:7077 --conf spark.jars.ivy=/tmp/.ivy2 --packages org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262 /opt/spark-jobs/partition_census.py s3a://data-lake-silver/enriched_transactions/
+```
+
+Quy trình chứng minh: `apply --full-refresh` → census (mốc chuẩn) → `apply` → census → so. Tổng và từng
+partition phải khớp. Đây là cách ADR-0042 được verify.
+
+> `gold_customer_lifetime_metrics` và `iceberg_silver_enriched` cố ý vẫn full refresh mỗi lần chạy — gộp
+> trọn đời không khoanh theo ngày được, còn Iceberg đã ghi nguyên tử sẵn. Lý do ghi trong chính hai spec.
 
 ### Cập nhật governance catalog (domain / tier / test case / dashboard)
 
@@ -155,6 +184,82 @@ Dừng bớt để nhường RAM: `docker compose stop` (stack chính) / `... -f
 | OM search trả 0 table (entity vẫn còn) | ES của OM chết → search rỗng dù postgres còn entity | Bật lại ES; hoặc nạp lại `openmetadata apply` (catalog tái tạo từ `graph.json`) |
 | OM search hiện entity "ma" của project khác (đã xoá khỏi DB) | Search index (ES) lệch DB — sự kiện xoá không tới ES (ES down/OOM lúc xoá). OM instance này từng phục vụ project khác trên cùng volume | Trigger reindex: `POST /api/v1/apps/trigger/SearchIndexingApplication` (app có `recreateIndex: true`) rồi đợi status `success` |
 | File cứ hiện "modified" (LF↔CRLF) | Generator ghi LF, Git chuẩn hoá CRLF | Nhiễu vô hại; `git checkout -- <file>` nếu không có diff thật |
+| Postgres ngừng nhận write, `pg_wal` phình to | Slot Debezium kẹt (Kafka/connector chết) níu WAL — sự cố analytics giết DB nguồn | Đã chặn: `max_slot_wal_keep_size=2GB` (ADR-0042). Slot bị invalidate thì DB sống nhưng **mất liên tục CDC** → xoá connector, `pg_drop_replication_slot`, re-apply để snapshot lại |
+| Slot `wal_status = lost` trong `pg_replication_slots` | Đã vượt trần WAL, slot bị invalidate có chủ đích | Đúng thiết kế (thà mất CDC hơn mất DB). Re-snapshot như dòng trên |
+| Batch job chạy xong nhưng Silver/Gold thiếu ngày cũ | Cửa sổ `lookback_days` chỉ tính lại vài ngày gần nhất — đúng thiết kế | `apply --as-of <ngày>` để vá ngày đó, hoặc `--full-refresh` |
+| Task Airflow xanh mà không có dữ liệu | ~~BashOperator chỉ xét exit code~~ đã vá (ADR-0042): `grep '^WROTE '` là trọng tài | Nếu vẫn gặp: xem `/tmp/medallion_<job>.*.log` trong container Airflow |
+| Trino `unhealthy` mãi nhưng query vẫn chạy | File `.properties` có CRLF → script `health-check` (bash) dựng URL `localhost:8080\r` → `curl: (3)`. Java trim được nên Trino vẫn sống | Đã chặn: `*.properties text eol=lf` ([ADR-0043](../decisions/0043-cold-rebuild-findings.md)). Kiểm: `tr -cd '\r' < trino/etc/config.properties \| wc -c` phải ra 0 |
+| ClickHouse 0 bảng sau khi dựng lạnh | compose KHÔNG mount `clickhouse/init/` — baseline DDL không tự chạy | Nạp tay: `for f in clickhouse/init/*.sql; do docker exec -i bigdata-clickhouse clickhouse-client --multiquery < $f; done` rồi `clickhouse_migrate apply` |
+| `cli check` báo khớp mà file vẫn sai | `read_text()` bật universal newlines → CRLF bị chuẩn hoá TRƯỚC khi so, nên check mù về nó | Chưa vá (ADR-0043 việc #1). Kiểm CRLF bằng `tr -cd '\r'`, đừng tin check cho việc này |
+| Không biết Trino/ClickHouse có thật sự đúng không | Chỉ 4/19 container có healthcheck; không có verifier cho Trino | Chạy tay cả 6 verifier (xem mục dưới). Trino chưa có verifier — ADR-0043 việc #2 |
+
+---
+
+## Dựng lạnh từ số không (sau khi stack bị xoá / `prune`)
+
+Volume mới nghĩa là **không bước nào được bỏ qua** — thứ tự dưới đây là bắt buộc, đã chạy thông 30/08.
+
+```bash
+docker compose up -d
+```
+
+Chờ đủ 19 container. Ba việc tự chạy: postgres init (4 bảng + publication), `kafka-init` (22 topic),
+`minio-init` (6 bucket). Kiểm nhanh:
+
+```bash
+docker exec bigdata-kafka kafka-get-offsets --bootstrap-server localhost:9092 --topic bankdb.public.transactions
+```
+
+Rồi lần lượt:
+
+| # | Lệnh | Kiểm đậu |
+|---|---|---|
+| 1 | `python -m dataplatform.deployers.connectors apply` | 7 connector RUNNING |
+| 2 | `docker compose --profile generator up -d generator` | `transactions` tăng dần |
+| 3 | `for f in clickhouse/init/*.sql; do docker exec -i bigdata-clickhouse clickhouse-client --multiquery < $f; done` | **bắt buộc — không tự chạy** |
+| 4 | `python -m dataplatform.deployers.clickhouse_migrate apply` | chạy lại phải ra `0 migration CHỜ` |
+| 5 | `python -m dataplatform.deployers.flink_metrics apply` | `flink list` phải thấy **RUNNING**, không phải chỉ "submitted" |
+| 6 | 6 verifier (dưới) | tất cả `exit=0` |
+| 7 | `python -m dataplatform.deployers.spark_batch apply --full-refresh` | 5 job, mỗi job in `WROTE` |
+
+**Chạy cả 7 verifier một lượt:**
+
+```bash
+python -m dataplatform.cli verify
+```
+
+Mã thoát phân biệt hai loại thất bại — đừng gộp chúng khi đặt cảnh báo:
+
+| Mã | Nghĩa | Phải làm |
+|---|---|---|
+| 0 | mọi verifier đạt | — |
+| 1 | engine sống nhưng **lệch** contract | sửa contract hoặc áp lại deployer |
+| 3 | **không tới được** engine | bật stack; chưa kết luận được gì |
+
+**Chạy tự động mỗi giờ** — `scripts/verify-scheduled.cmd` qua Windows Task Scheduler ([ADR-0043](../decisions/0043-cold-rebuild-findings.md)).
+Kết quả ở `.verify/history.log` (một dòng mỗi lần chạy) và `.verify/last-run.txt` (output đầy đủ lần gần nhất).
+
+```bash
+schtasks /Query /TN "BDP-verify" /FO LIST
+```
+
+Đăng ký lại trên máy khác (script nằm trong repo, chỉ lịch là cục bộ):
+
+```bash
+schtasks /Create /TN "BDP-verify" /TR "D:igdata-platform\scriptserify-scheduled.cmd" /SC HOURLY /F
+```
+
+Lưu ý: **`schtasks` cần `MSYS_NO_PATHCONV=1` trên Git Bash**, nếu không `/Query` bị dịch thành đường dẫn.
+
+**Chốt cuối — federation 3 nguồn:**
+
+```bash
+docker exec bigdata-trino trino --execute "SELECT 'pg' n, count(*) c FROM postgres.public.transactions UNION ALL SELECT 'ice', count(*) FROM iceberg.silver.enriched_transactions UNION ALL SELECT 'ch', count(*) FROM clickhouse.metrics.timeseries"
+```
+
+**Lưu ý:** image `bigdata-pyflink:1.18.1` **build tại chỗ**, bước `pip install apache-flink` mất ~20
+phút. Đừng `docker system prune -a` nếu không thật sự cần — `docker compose stop` hoặc `down` (KHÔNG
+`-v`) giữ được cả volume lẫn image, dựng lại trong khoảng một phút.
 
 ---
 
