@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ..deployers.spark_batch import _stage, submit_argv
+from ..deployers.spark_batch import _stage, bash_command
 
 DAG_ID = "medallion_batch"
 _HEADER = '''# FILE SINH TỰ ĐỘNG - đừng sửa tay. Sinh lại: python -m dataplatform.cli write
@@ -51,11 +51,12 @@ def render(pipelines: list[dict]) -> str:
              '    tags=["medallion", "spark", "generated"],', ") as dag:"]
 
     for s in ordered:
-        cmd = " ".join(submit_argv(s))
+        # !r để Python tự lo trích dẫn: lệnh có nháy đơn (grep '^WROTE ') nên nhúng
+        # thẳng vào chuỗi nháy kép sẽ hỏng file sinh ra.
         lines += [
             f'    {s["name"]} = BashOperator(',
             f'        task_id="{s["name"]}",',
-            f'        bash_command="{cmd}",',
+            f"        bash_command={bash_command(s)!r},",
             "    )",
         ]
 

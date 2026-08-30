@@ -18,6 +18,15 @@ sql: |
   FROM silver
   GROUP BY year, month, day, country_code, transaction_type
 
+# Cua so ngay (ADR-0042). An toan vi GROUP BY co chua year/month/day: moi partition
+# output chi phu thuoc DUNG partition cung ngay ben Silver, khong cat ngang partition
+# nao. input_margin_days = 0 vi partition Silver da la ngay nghiep vu (posted_at),
+# cung thang do voi output — khong lech moc nhu chang Bronze -> Silver.
+incremental:
+  lookback_days: 3
+  date_columns: [year, month, day]
+  windowed_inputs: [silver]
+
 output:
   path: "s3a://data-lake-gold/daily_transaction_summary/"
   format: parquet

@@ -18,6 +18,13 @@ sql: |
   FROM silver
   GROUP BY customer_id, customer_name, country_code, kyc_status, risk_score
 
+# KHONG incremental — co chu dich, khong phai bo sot (ADR-0042).
+# "Tron doi" nghia la gop tren TOAN BO lich su cua moi khach: min/max/count/avg khong
+# khoanh duoc theo ngay, va count(DISTINCT account_id) khong cong don duoc tu cac
+# manh. Ep cua so vao day se cho ra so sai chu khong phai so cu.
+# Chi phi van la O(t) moi lan chay, nhung doc Silver (1 dong/giao dich) chu khong doc
+# Bronze — va bang output nho (chieu khach hang). Neu sau nay dau, huong sua la Iceberg
+# MERGE tich luy, khong phai partition overwrite.
 output:
   path: "s3a://data-lake-gold/customer_lifetime_metrics/"
   format: parquet

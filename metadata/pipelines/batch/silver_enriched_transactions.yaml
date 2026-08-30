@@ -49,6 +49,19 @@ sql: |
   JOIN accounts_current  a ON t.account_id = a.account_id
   JOIN customers_current c ON a.customer_id = c.customer_id
 
+# Chay theo cua so ngay thay vi doc lai toan bo Bronze (ADR-0042).
+# Chi bronze_transactions bi cat: no la bang fact, lon dan theo thoi gian. accounts/
+# customers doc TRON VEN vi SQL tren kia can trang thai hien tai cua chieu (row_number
+# tren toan bo lich su) — cat chung se lam sai ket qua join.
+# input_margin_days: Bronze partition theo thoi diem CDC bat duoc, con partition cua
+# Silver theo posted_at. Hai moc do khac nhau -> doc du 1 ngay cho chac; phan thua bi
+# loc lai o output nen khong partition nao bi ghi nua voi.
+incremental:
+  lookback_days: 3
+  date_columns: [year, month, day]
+  windowed_inputs: [bronze_transactions]
+  input_margin_days: 1
+
 # Output: schema + noi ghi. Schema khai o day = hop dong cot cua Silver (sprawl #10).
 output:
   path: "s3a://data-lake-silver/enriched_transactions/"

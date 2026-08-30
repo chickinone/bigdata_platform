@@ -16,6 +16,12 @@ CONTAINER_RUNNER = "/opt/spark-jobs/medallion_runner.py"
 PLAN_DIR_HOST = "spark/jobs/generated"
 PLAN_DIR_CONTAINER = "/opt/spark-jobs/generated"
 
+# Marker runner in ra khi ĐÃ ghi xong. Đây là một nguồn cho câu "thế nào là chạy xong":
+# _submit (Python) và bash_command (Airflow) cùng đọc hằng này. Trước đây chỉ _submit
+# đòi marker, còn BashOperator chỉ xét exit code - nên DAG báo xanh khi spark-submit
+# exit 0 mà job không ghi gì. Orchestrator báo xanh sai tệ hơn không có orchestrator.
+SUCCESS_MARKER = "WROTE"
+
 
 def _stage(spec: dict) -> int:
     """Thứ tự chạy theo phụ thuộc INPUT, không theo layer: job đọc Bronze là nguồn
@@ -45,17 +51,41 @@ def container_plan_path(spec: dict) -> str:
     return f"{PLAN_DIR_CONTAINER}/{spec['name']}.json"
 
 
-def submit_argv(spec: dict) -> list[str]:
+def submit_argv(spec: dict, as_of: str | None = None, full_refresh: bool = False) -> list[str]:
     """Lệnh `docker exec ... spark-submit` chạy một batch job — một nguồn sự thật cho
     'chạy job thế nào'. Deployer dùng để submit; generator Airflow dùng để dựng
     bash_command của task (cùng một lệnh -> DAG chạy y hệt tay/deployer)."""
+    env = ["-e", f"JOB_PLAN={container_plan_path(spec)}"]
+    if as_of:
+        env += ["-e", f"AS_OF={as_of}"]
+    if full_refresh:
+        env += ["-e", "FULL_REFRESH=1"]
     return [
-        "docker", "exec", "-e", f"JOB_PLAN={container_plan_path(spec)}", SPARK_CONTAINER,
+        "docker", "exec", *env, SPARK_CONTAINER,
         SPARK_SUBMIT, "--master", SPARK_MASTER,
         # ivy về /tmp: thư mục mặc định không ghi được khi container fresh.
         "--conf", "spark.jars.ivy=/tmp/.ivy2",
         "--packages", _packages(spec), CONTAINER_RUNNER,
     ]
+
+
+def bash_command(spec: dict) -> str:
+    """Lệnh shell cho task Airflow: submit RỒI đòi marker thành công.
+
+    BashOperator chỉ phán theo exit code của lệnh cuối. Nên nối trần `submit_argv` là
+    đánh mất đúng cái guard mà `_submit` có (`returncode == 0 AND có WROTE`) - hai
+    đường chạy cùng một lệnh nhưng khác tiêu chí đậu. Ở đây `grep` là lệnh cuối, nên
+    nó mới là trọng tài: không có WROTE trong log thì task đỏ, kể cả khi exit 0.
+
+    `tee` (không phải `grep -q` trực tiếp trên pipe) để log vẫn chảy ra Airflow theo
+    thời gian thực, và để `grep` khỏi đóng pipe sớm làm spark-submit dính SIGPIPE.
+    """
+    log = f"/tmp/medallion_{spec['name']}.$$.log"
+    # {{ds}} = đầu data interval của lần chạy. Nhờ nó, clear/backfill một ngày cũ sẽ
+    # tính lại đúng cửa sổ của ngày đó mà không cần cờ riêng. Viết liền không khoảng
+    # trắng để sau khi Jinja thay xong, chuỗi không cần trích dẫn thêm.
+    cmd = " ".join(submit_argv(spec, as_of="{{ds}}"))
+    return f"{cmd} 2>&1 | tee {log}; grep -q '^{SUCCESS_MARKER} ' {log}"
 
 
 def _write_plan(spec: dict) -> str:
@@ -66,6 +96,8 @@ def _write_plan(spec: dict) -> str:
         "sql": spec["sql"],
         "output": spec["output"],
     }
+    if spec.get("incremental"):
+        plan["incremental"] = spec["incremental"]
     rel = f"{PLAN_DIR_HOST}/{spec['name']}.json"
     path = REPO_ROOT / rel
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -86,16 +118,26 @@ def cmd_plan() -> int:
         print(f"  [stage {_stage(spec)}] {spec['name']}")
         print(f"           inputs: {ins}")
         print(f"           output: {target} ({fmt}, {len(out.get('columns', []))} cột)")
+        inc = spec.get("incremental")
+        if inc:
+            print(f"           chạy:   incremental {inc['lookback_days']}d "
+                  f"(cắt: {', '.join(inc['windowed_inputs'])})")
+        else:
+            print("           chạy:   full refresh — đọc lại toàn bộ lịch sử")
     print("\nChạy `apply` để spark-submit theo thứ tự.")
     return 0
 
 
-def _submit(spec: dict) -> bool:
+def _submit(spec: dict, as_of: str | None = None, full_refresh: bool = False) -> bool:
     _write_plan(spec)
     print(f"  spark-submit {spec['name']} (layer {spec.get('layer')}) ...")
-    proc = subprocess.run(submit_argv(spec), capture_output=True, text=True)
+    # encoding/errors tường minh: text=True dùng locale (cp1252 trên Windows), mà log
+    # Spark có byte không decode được -> thread đọc chết, proc.stdout thành None và
+    # dòng ghép bên dưới nổ TypeError. Cùng họ với lỗi đã vá ở _ch_exec/_pg_scalar.
+    proc = subprocess.run(submit_argv(spec, as_of, full_refresh), capture_output=True,
+                          text=True, encoding="utf-8", errors="replace")
     out = (proc.stdout + proc.stderr).splitlines()
-    wrote = [ln for ln in out if ln.startswith("WROTE")]
+    wrote = [ln for ln in out if ln.startswith(SUCCESS_MARKER)]
     if proc.returncode == 0 and wrote:
         print(f"    {wrote[0]}")
         return True
@@ -104,12 +146,13 @@ def _submit(spec: dict) -> bool:
     return False
 
 
-def cmd_apply() -> int:
+def cmd_apply(as_of: str | None = None, full_refresh: bool = False) -> int:
     specs = load_batch_specs()
-    print(f"Chạy {len(specs)} batch job theo thứ tự layer:\n")
+    scope = "TOÀN BỘ (full refresh)" if full_refresh else f"cửa sổ tới {as_of or 'hôm nay'}"
+    print(f"Chạy {len(specs)} batch job theo thứ tự layer — {scope}:\n")
     failed = 0
     for spec in specs:
-        if not _submit(spec):
+        if not _submit(spec, as_of, full_refresh):
             failed += 1
             print("    -> dừng chuỗi (job sau có thể phụ thuộc job này).")
             break
@@ -131,9 +174,17 @@ def main(argv: list[str] | None = None) -> int:
     _force_utf8()
     parser = argparse.ArgumentParser(prog="dataplatform.deployers.spark_batch")
     parser.add_argument("command", nargs="?", default="plan", choices=["plan", "apply"])
+    parser.add_argument("--as-of", metavar="YYYY-MM-DD",
+                        help="Ngày mốc của cửa sổ incremental. Mặc định hôm nay. "
+                             "Đặt ngày cũ = tính lại cửa sổ của ngày đó (backfill).")
+    parser.add_argument("--full-refresh", action="store_true",
+                        help="Bỏ qua cửa sổ, tính lại toàn bộ lịch sử. Dùng khi cần "
+                             "đồng bộ lại chiều đã đổi, hoặc vá dữ liệu về muộn hơn lookback.")
     args = parser.parse_args(argv)
     try:
-        return {"plan": cmd_plan, "apply": cmd_apply}[args.command]()
+        if args.command == "plan":
+            return cmd_plan()
+        return cmd_apply(args.as_of, args.full_refresh)
     except (ContractError, KeyError) as exc:
         print(f"LỖI SPEC\n{exc}", file=sys.stderr)
         return 2

@@ -28,6 +28,14 @@ services:
       - "shared_buffers=256MB"
       - "-c"
       - "wal_keep_size=512MB"
+      # Trần WAL mà MỘT replication slot được níu lại. wal_keep_size ở trên không làm
+      # việc này - nó là mức tối thiểu giữ cho streaming replica. Không có trần, slot
+      # Debezium kẹt (Kafka chết, connector fail) giữ WAL tới khi đầy đĩa và Postgres
+      # ngừng nhận write: sự cố ở tầng analytics giết database nguồn.
+      # Vượt trần thì slot bị invalidate - MẤT liên tục CDC (phải snapshot lại), nhưng
+      # database sống. Đây là đánh đổi có chủ đích, xem ADR-0042.
+      - "-c"
+      - "max_slot_wal_keep_size=2GB"
       - "-c"
       - "log_min_duration_statement=500"
     volumes:

@@ -119,6 +119,38 @@
       "type": "string",
       "minLength": 1
     },
+    "incremental": {
+      "description": "Chỉ spark_sql: chạy theo CỬA SỔ NGÀY thay vì đọc lại toàn bộ lịch sử. Vắng mặt = full refresh (hành vi cũ, giữ nguyên). Runner cắt input theo partition, tính lại TRỌN VẸN các partition trong cửa sổ, rồi ghi đè ĐÚNG những partition đó (dynamic partition overwrite) — nên chạy lại là idempotent, an toàn với retry của Airflow. Xem ADR-0042.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lookback_days", "date_columns", "windowed_inputs"],
+      "properties": {
+        "lookback_days": {
+          "description": "Số ngày tính lại, lùi từ AS_OF và GỒM cả AS_OF. 3 = tính lại AS_OF-2, AS_OF-1, AS_OF. Dữ liệu về muộn hơn ngần này bị bỏ sót cho tới lần chạy --full-refresh.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "date_columns": {
+          "description": "Ba cột output ghép thành ngày của partition, đúng thứ tự [năm, tháng, ngày]. PHẢI là tiền tố của output.partition_by — nếu không, ghi đè động sẽ đụng cả partition không được tính trọn vẹn và xoá mất dữ liệu.",
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": { "type": "string", "pattern": "^[a-z_][a-z0-9_]*$" }
+        },
+        "windowed_inputs": {
+          "description": "View bị cắt theo cửa sổ — bảng fact, lớn dần theo thời gian. View KHÔNG liệt kê ở đây vẫn đọc trọn vẹn: dùng cho bảng chiều nhỏ mà transform cần trạng thái hiện tại (accounts/customers).",
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "pattern": "^[a-z_][a-z0-9_]*$" }
+        },
+        "input_margin_days": {
+          "description": "Đọc thêm ngần này ngày TRƯỚC cửa sổ ở phía input. Cần khi partition của input đo thời gian KHÁC với ngày của output: Bronze partition theo thời điểm CDC bắt được, còn Silver theo posted_at. Không đổi partition nào được ghi — phần đọc thừa bị lọc ở output.",
+          "type": "integer",
+          "minimum": 0,
+          "default": 0
+        }
+      }
+    },
     "output": {
       "type": "object",
       "additionalProperties": false,

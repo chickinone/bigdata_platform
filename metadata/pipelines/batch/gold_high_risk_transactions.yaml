@@ -16,6 +16,13 @@ sql: |
   FROM silver
   WHERE risk_score > 60
 
+# Cua so ngay (ADR-0042). An toan tuyet doi vi day la loc theo dong: moi dong output
+# den tu dung mot dong Silver cung partition, khong co aggregate cat ngang ngay nao.
+incremental:
+  lookback_days: 3
+  date_columns: [year, month, day]
+  windowed_inputs: [silver]
+
 output:
   path: "s3a://data-lake-gold/high_risk_transactions/"
   format: parquet

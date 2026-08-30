@@ -24,23 +24,23 @@ with DAG(
 ) as dag:
     silver_enriched_transactions = BashOperator(
         task_id="silver_enriched_transactions",
-        bash_command="docker exec -e JOB_PLAN=/opt/spark-jobs/generated/silver_enriched_transactions.json bigdata-spark-master /opt/spark/bin/spark-submit --master spark://spark-master:7077 --conf spark.jars.ivy=/tmp/.ivy2 --packages org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262 /opt/spark-jobs/medallion_runner.py",
+        bash_command="docker exec -e JOB_PLAN=/opt/spark-jobs/generated/silver_enriched_transactions.json -e AS_OF={{ds}} bigdata-spark-master /opt/spark/bin/spark-submit --master spark://spark-master:7077 --conf spark.jars.ivy=/tmp/.ivy2 --packages org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262 /opt/spark-jobs/medallion_runner.py 2>&1 | tee /tmp/medallion_silver_enriched_transactions.$$.log; grep -q '^WROTE ' /tmp/medallion_silver_enriched_transactions.$$.log",
     )
     gold_customer_lifetime_metrics = BashOperator(
         task_id="gold_customer_lifetime_metrics",
-        bash_command="docker exec -e JOB_PLAN=/opt/spark-jobs/generated/gold_customer_lifetime_metrics.json bigdata-spark-master /opt/spark/bin/spark-submit --master spark://spark-master:7077 --conf spark.jars.ivy=/tmp/.ivy2 --packages org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262 /opt/spark-jobs/medallion_runner.py",
+        bash_command="docker exec -e JOB_PLAN=/opt/spark-jobs/generated/gold_customer_lifetime_metrics.json -e AS_OF={{ds}} bigdata-spark-master /opt/spark/bin/spark-submit --master spark://spark-master:7077 --conf spark.jars.ivy=/tmp/.ivy2 --packages org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262 /opt/spark-jobs/medallion_runner.py 2>&1 | tee /tmp/medallion_gold_customer_lifetime_metrics.$$.log; grep -q '^WROTE ' /tmp/medallion_gold_customer_lifetime_metrics.$$.log",
     )
     gold_daily_transaction_summary = BashOperator(
         task_id="gold_daily_transaction_summary",
-        bash_command="docker exec -e JOB_PLAN=/opt/spark-jobs/generated/gold_daily_transaction_summary.json bigdata-spark-master /opt/spark/bin/spark-submit --master spark://spark-master:7077 --conf spark.jars.ivy=/tmp/.ivy2 --packages org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262 /opt/spark-jobs/medallion_runner.py",
+        bash_command="docker exec -e JOB_PLAN=/opt/spark-jobs/generated/gold_daily_transaction_summary.json -e AS_OF={{ds}} bigdata-spark-master /opt/spark/bin/spark-submit --master spark://spark-master:7077 --conf spark.jars.ivy=/tmp/.ivy2 --packages org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262 /opt/spark-jobs/medallion_runner.py 2>&1 | tee /tmp/medallion_gold_daily_transaction_summary.$$.log; grep -q '^WROTE ' /tmp/medallion_gold_daily_transaction_summary.$$.log",
     )
     gold_high_risk_transactions = BashOperator(
         task_id="gold_high_risk_transactions",
-        bash_command="docker exec -e JOB_PLAN=/opt/spark-jobs/generated/gold_high_risk_transactions.json bigdata-spark-master /opt/spark/bin/spark-submit --master spark://spark-master:7077 --conf spark.jars.ivy=/tmp/.ivy2 --packages org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262 /opt/spark-jobs/medallion_runner.py",
+        bash_command="docker exec -e JOB_PLAN=/opt/spark-jobs/generated/gold_high_risk_transactions.json -e AS_OF={{ds}} bigdata-spark-master /opt/spark/bin/spark-submit --master spark://spark-master:7077 --conf spark.jars.ivy=/tmp/.ivy2 --packages org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262 /opt/spark-jobs/medallion_runner.py 2>&1 | tee /tmp/medallion_gold_high_risk_transactions.$$.log; grep -q '^WROTE ' /tmp/medallion_gold_high_risk_transactions.$$.log",
     )
     iceberg_silver_enriched = BashOperator(
         task_id="iceberg_silver_enriched",
-        bash_command="docker exec -e JOB_PLAN=/opt/spark-jobs/generated/iceberg_silver_enriched.json bigdata-spark-master /opt/spark/bin/spark-submit --master spark://spark-master:7077 --conf spark.jars.ivy=/tmp/.ivy2 --packages org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.6.0,org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262 /opt/spark-jobs/medallion_runner.py",
+        bash_command="docker exec -e JOB_PLAN=/opt/spark-jobs/generated/iceberg_silver_enriched.json -e AS_OF={{ds}} bigdata-spark-master /opt/spark/bin/spark-submit --master spark://spark-master:7077 --conf spark.jars.ivy=/tmp/.ivy2 --packages org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.6.0,org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262 /opt/spark-jobs/medallion_runner.py 2>&1 | tee /tmp/medallion_iceberg_silver_enriched.$$.log; grep -q '^WROTE ' /tmp/medallion_iceberg_silver_enriched.$$.log",
     )
 
     # Phụ thuộc suy từ input/output của batch spec.

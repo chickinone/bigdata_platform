@@ -12,6 +12,11 @@ inputs:
 sql: |
   SELECT * FROM silver_source
 
+# KHONG incremental — co chu dich (ADR-0042). Duong iceberg da ghi NGUYEN TU san:
+# writeTo().createOrReplace() doi snapshot, nguoi doc thay hoac ban cu hoac ban moi,
+# khong bao gio thay rong. Do la van de nguy hiem nhat cua overwrite, va no khong ton
+# tai o day. Con lai chi la chi phi O(t) — chap nhan duoc vi bang nay la ban sao de
+# demo time-travel, khong nam tren duong phuc vu.
 output:
   format: iceberg
   table: lakehouse.silver.enriched_transactions

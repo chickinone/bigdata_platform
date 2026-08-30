@@ -139,13 +139,13 @@ Xác minh trực tiếp từ code, không phải suy đoán.
 
 | # | Vấn đề | Chi tiết |
 |---|---|---|
-| 7 | **Single-node mọi thứ** | Kafka RF=1, ES single-node, 1 Spark worker, checkpoint 30s. Không HA, không chịu lỗi. |
+| 7 | [~] **Single-node mọi thứ** | Kafka RF=1, ES single-node, 1 Spark worker, checkpoint 30s. Không HA, không chịu lỗi. **Đã chặn bán kính sát thương tệ nhất** ([ADR-0042](../decisions/0042-incremental-batch-and-blast-radius.md)): `max_slot_wal_keep_size=2GB` để slot Debezium kẹt không giữ WAL tới lúc đầy đĩa và giết Postgres nguồn. Bản thân HA vẫn chưa có. |
 | 8 | [x] ~~**`AUTO_CREATE_TOPICS_ENABLE=true`**~~ | **Đã tắt** — topic tạo tường minh qua bản kê sinh từ registry + service `kafka-init`; `auto.create.topics=false`, chứng minh live 21/21 topic khớp và topic ma không bị tạo ([ADR-0020](../decisions/0020-generate-kafka-topic-manifest.md)). |
 | 9 | [x] ~~**Không orchestration**~~ | **DAG sinh từ deps** ([ADR-0031](../decisions/0031-airflow-dag-from-metadata.md)): silver→gold/iceberg, có lịch/retry/SLA; **boot Airflow thật, DAG load OK** (DagBag, 0 import error). Còn: chạy task spark-submit e2e + backfill. |
 | 10 | [x] ~~**Không lineage / data quality gate**~~ | **Lineage + catalog** (OpenMetadata, lineage cột — ADR-0026/27/28) + **data quality gate** (`verifiers/quality`, not_null/unique/range/accepted_values trên dữ liệu thật — [ADR-0033](../decisions/0033-data-quality-gate.md)). |
 | 11 | [~] ~~**Không CI/CD**~~ | CI có `check` (drift) + `compat` (BACKWARD) + `plan` (hệ quả) ở PR ([ADR-0030](../decisions/0030-ci-plan-compat-gate.md)). Còn nợ: apply tự động + rollback. |
 | 12 | **Không auth ở hầu hết service** | ES tắt security (`xpack.security.enabled=false`), Kafka PLAINTEXT, Trino/MinIO/Kafka UI không auth. |
-| 13 | **Silver là full refresh** | `enrich_transactions.py` dùng `mode("overwrite")` — đọc lại toàn bộ Bronze mỗi lần chạy. |
+| 13 | [x] ~~**Silver là full refresh**~~ | Thực tế nặng hơn ghi chú cũ: **cả 5 batch spec** đều full refresh, không riêng Silver (và `enrich_transactions.py` đã xoá từ Pha 5). **Đã chuyển sang cửa sổ ngày** ([ADR-0042](../decisions/0042-incremental-batch-and-blast-radius.md)): khối `incremental` trong contract + dynamic partition overwrite cho silver + 2 gold partition-aligned; `gold_customer_lifetime_metrics` (gộp trọn đời) và `iceberg_silver_enriched` (đã ghi nguyên tử) cố ý giữ full refresh. Chi phí từ O(t²) tích luỹ về O(cửa sổ). **Chưa verify live Spark.** |
 
 ### 4.3 Secrets — đánh giá chính xác
 
