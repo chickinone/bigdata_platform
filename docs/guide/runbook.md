@@ -13,8 +13,8 @@
 3. python -m dataplatform.cli check     # 19/19 — artifact khớp metadata (không thì sửa tiếp)
 4. git commit + mở PR
      CI tự chạy: check (drift) + compat (BACKWARD) + plan (hệ quả artifact)
-5. merge → deployer apply (idempotent)  # connectors / clickhouse_migrate / spark_batch / flink_metrics / openmetadata
-6. verify runtime           # verifiers/* + quality gate
+5. merge → python -m dataplatform.cli apply    # soạn 4 deployer đúng thứ tự + gate giữa các bước
+6. cli apply tự chạy `cli verify` ở cuối       # 7 verifier, một mã thoát
 ```
 
 **Không bao giờ sửa tay file sinh** (connector JSON, DDL, catalog, DAG, lineage) — CI `check` sẽ đỏ. Sửa
@@ -192,6 +192,8 @@ Dừng bớt để nhường RAM: `docker compose stop` (stack chính) / `... -f
 | ClickHouse 0 bảng sau khi dựng lạnh | compose KHÔNG mount `clickhouse/init/` — baseline DDL không tự chạy | Nạp tay: `for f in clickhouse/init/*.sql; do docker exec -i bigdata-clickhouse clickhouse-client --multiquery < $f; done` rồi `clickhouse_migrate apply` |
 | `cli check` báo khớp mà file vẫn sai | `read_text()` bật universal newlines → CRLF bị chuẩn hoá TRƯỚC khi so, nên check mù về nó | Chưa vá (ADR-0043 việc #1). Kiểm CRLF bằng `tr -cd '\r'`, đừng tin check cho việc này |
 | Không biết Trino/ClickHouse có thật sự đúng không | Chỉ 4/19 container có healthcheck; không có verifier cho Trino | Chạy tay cả 6 verifier (xem mục dưới). Trino chưa có verifier — ADR-0043 việc #2 |
+| Docker khởi động lại, 15 service về nhưng Spark/Trino/iceberg-rest nằm im | Bốn service từng thiếu `restart:` nên mặc định `no` | Đã sửa thành `unless-stopped` ([ADR-0044](../decisions/0044-cli-apply-orchestrator.md)). Kiểm policy bằng `docker inspect` |
+| Không biết stack có thiếu container nào không | Chỉ 4/19 có healthcheck; `docker ps` chỉ nói tiến trình chưa chết | `cli apply` đi hết chuỗi và bắt buộc từng bước đậu — đây là thứ đã phát hiện Spark chết âm thầm 30 phút |
 
 ---
 
@@ -210,17 +212,39 @@ Chờ đủ 19 container. Ba việc tự chạy: postgres init (4 bảng + publi
 docker exec bigdata-kafka kafka-get-offsets --bootstrap-server localhost:9092 --topic bankdb.public.transactions
 ```
 
-Rồi lần lượt:
+Sinh dữ liệu rồi áp toàn bộ bằng **một lệnh** ([ADR-0044](../decisions/0044-cli-apply-orchestrator.md)):
 
-| # | Lệnh | Kiểm đậu |
+```bash
+docker compose --profile generator up -d generator
+```
+
+```bash
+python -m dataplatform.cli apply
+```
+
+`cli apply` chạy 4 bước theo đúng thứ tự phụ thuộc, có **điều kiện tiên quyết** giữa các bước, rồi
+chạy `cli verify` ở cuối:
+
+| # | Bước | Điều kiện trước |
 |---|---|---|
-| 1 | `python -m dataplatform.deployers.connectors apply` | 7 connector RUNNING |
-| 2 | `docker compose --profile generator up -d generator` | `transactions` tăng dần |
-| 3 | `for f in clickhouse/init/*.sql; do docker exec -i bigdata-clickhouse clickhouse-client --multiquery < $f; done` | **bắt buộc — không tự chạy** |
-| 4 | `python -m dataplatform.deployers.clickhouse_migrate apply` | chạy lại phải ra `0 migration CHỜ` |
-| 5 | `python -m dataplatform.deployers.flink_metrics apply` | `flink list` phải thấy **RUNNING**, không phải chỉ "submitted" |
-| 6 | 6 verifier (dưới) | tất cả `exit=0` |
-| 7 | `python -m dataplatform.deployers.spark_batch apply --full-refresh` | 5 job, mỗi job in `WROTE` |
+| 1 | `connectors apply` | — |
+| 2 | `clickhouse_migrate baseline` rồi `apply` | — |
+| 3 | `flink_metrics apply` | **`clickhouse_schema` phải ĐẠT** |
+| 4 | `spark_batch apply` | — |
+
+Bước 3 là chỗ đáng chú ý: Flink **không cần** bảng ClickHouse để *submit*, nó chỉ cần để *ghi*. Không
+có gate thì job xanh mà dữ liệu không tới đâu — đúng lỗi đã gặp khi dựng lạnh ([ADR-0043](../decisions/0043-cold-rebuild-findings.md)).
+
+Xem trước không đụng gì: `cli apply --dry-run`. Chạy đúng một bước: `cli apply --only clickhouse`.
+Thêm OpenMetadata (phiên riêng): `--with-openmetadata`. Backfill: `--as-of` / `--full-refresh` được
+chuyển thẳng cho `spark_batch`.
+
+**Từng deployer vẫn gọi riêng được** — `cli apply` soạn chúng chứ không thay. Lúc sự cố cần sửa đúng
+một chỗ thì dùng lệnh lẻ:
+
+```bash
+python -m dataplatform.deployers.connectors apply
+```
 
 **Chạy cả 7 verifier một lượt:**
 

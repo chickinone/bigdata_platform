@@ -361,6 +361,156 @@ def cmd_verify() -> int:
     return 0
 
 
+# Thu tu ap len engine, suy tu phu thuoc THAT chu khong phai tu tang medallion.
+# `needs` = verifier phai DAT truoc khi chay buoc nay. Day moi la phan dat gia: thu tu
+# thoi chi tranh chay sai trinh tu, con `needs` chan duoc ca truong hop engine "Up"
+# nhung chua san sang — dung kieu that bai da lam ClickHouse rong ma khong ai biet
+# (ADR-0043): Flink submit thanh cong, roi im lang khong ghi duoc vi bang dich khong co.
+APPLY_STEPS = [
+    {
+        "name": "connectors",
+        "desc": "Debezium source + 5 ES sink + S3 sink len Kafka Connect",
+        "module": "dataplatform.deployers.connectors",
+        "argv": ["apply"],
+        "needs": None,
+    },
+    {
+        "name": "clickhouse",
+        "desc": "DDL baseline sinh-tu-contract, roi migration co phien ban",
+        "module": "dataplatform.deployers.clickhouse_migrate",
+        "argv": ["baseline"],
+        "then": ["apply"],
+        "needs": None,
+    },
+    {
+        "name": "flink",
+        "desc": "Submit metric runner + fraud runner",
+        "module": "dataplatform.deployers.flink_metrics",
+        "argv": ["apply"],
+        "needs": "clickhouse_schema",
+    },
+    {
+        "name": "spark",
+        "desc": "Batch medallion: Silver -> 3 Gold + Iceberg",
+        "module": "dataplatform.deployers.spark_batch",
+        "argv": ["apply"],
+        "needs": None,
+    },
+]
+
+# OpenMetadata KHONG nam trong chuoi mac dinh: no la phien rieng (phai dung stack chinh
+# de nhuong RAM, va can ES cua OM song). Bat bang --with-openmetadata khi da chuan bi.
+OM_STEP = {
+    "name": "openmetadata",
+    "desc": "Day catalog + lineage cot len OpenMetadata",
+    "module": "dataplatform.deployers.openmetadata",
+    "argv": ["apply"],
+    "needs": None,
+}
+
+
+def _run_module(module: str, argv: list) -> int:
+    import importlib
+
+    mod = importlib.import_module(module)
+    try:
+        return mod.main(list(argv))
+    except SystemExit as exc:
+        return int(exc.code or 0)
+
+
+def _gate(verifier: str) -> int:
+    """Chay mot verifier lam DIEU KIEN TIEN QUYET. Nuot output khi DAT, chi in khi hong."""
+    import contextlib
+    import importlib
+    import io as _io
+
+    print(f"  [gate] {verifier} ...", end=" ")
+    mod = importlib.import_module(f"dataplatform.verifiers.{verifier}")
+    buf = _io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buf):
+            rc = mod.main([])
+    except SystemExit as exc:
+        rc = int(exc.code or 0)
+    print({0: "DAT", 1: "LECH"}.get(rc, "KHONG TOI"))
+    if rc != 0:
+        for line in buf.getvalue().splitlines()[-12:]:
+            print(f"         {line}")
+    return rc
+
+
+def cmd_apply(as_of, full_refresh: bool, only, with_om: bool, dry_run: bool) -> int:
+    """Ap TOAN BO desired state len engine, theo dung thu tu phu thuoc.
+
+    Lop nay SOAN cac deployer chu khong THAY chung: moi buoc van goi duoc rieng le
+    (`python -m dataplatform.deployers.<ten> apply`). Do la co y — luc 3 gio sang khi
+    mot connector chet, ban can chay dung cai do, khong phai chay lai ca chuoi.
+
+    Thu tu truoc day chi song trong runbook, tuc trong tri nho nguoi van hanh. Dua vao
+    day de no duoc version, review va test nhu moi doan code khac.
+    """
+    steps = list(APPLY_STEPS) + ([OM_STEP] if with_om else [])
+    if only:
+        steps = [st for st in steps if st["name"] == only]
+        if not steps:
+            names = ", ".join(st["name"] for st in list(APPLY_STEPS) + [OM_STEP])
+            print(f"Khong co buoc ten '{only}'. Co: {names}", file=sys.stderr)
+            return 2
+
+    print("=" * 70)
+    print("APPLY" + (" (DRY RUN — khong dung gi)" if dry_run else "") + f" — {len(steps)} buoc")
+    print("=" * 70)
+    for i, st in enumerate(steps, 1):
+        print(f"  {i}. {st['name']:<12} {st['desc']}")
+        print(f"     {'':<12} dieu kien truoc: {st.get('needs') or '-'}")
+    print()
+    if dry_run:
+        print("DRY RUN: khong chay gi. Bo --dry-run de ap that.")
+        return 0
+
+    done = []
+    for i, st in enumerate(steps, 1):
+        print("-" * 70)
+        print(f"BUOC {i}/{len(steps)}: {st['name']} — {st['desc']}")
+        print("-" * 70)
+
+        if st.get("needs"):
+            rc = _gate(st["needs"])
+            if rc != 0:
+                print()
+                print(f"DUNG: dieu kien truoc cua buoc `{st['name']}` KHONG dat "
+                      f"({st['needs']} tra exit {rc}).")
+                print("Chay buoc truoc cho xong roi thu lai, hoac --only de bo qua co y.")
+                return 1 if rc == 1 else 3
+
+        argv = list(st["argv"])
+        if st["name"] == "spark":
+            if as_of:
+                argv += ["--as-of", as_of]
+            if full_refresh:
+                argv += ["--full-refresh"]
+
+        rc = _run_module(st["module"], argv)
+        if rc == 0 and st.get("then"):
+            rc = _run_module(st["module"], list(st["then"]))
+        if rc != 0:
+            print()
+            print(f"DUNG o buoc `{st['name']}` (exit {rc}). Buoc sau phu thuoc buoc nay "
+                  "nen khong chay tiep.")
+            return rc
+        done.append(st["name"])
+        print()
+
+    print("=" * 70)
+    print(f"DA AP {len(done)} buoc: {', '.join(done)}")
+    print("=" * 70)
+    print()
+    print("Doi chieu lai runtime voi contract:")
+    print()
+    return cmd_verify()
+
+
 def _force_utf8_output() -> None:
     """Console Windows mặc định là cp1252, không in nổi tiếng Việt và sẽ ném
     UnicodeEncodeError. Ép UTF-8 để công cụ chạy được ở mọi terminal thay vì bắt
@@ -377,9 +527,19 @@ def main(argv: list[str] | None = None) -> int:
         prog="dataplatform.cli",
         description="Sinh artifact vận hành từ dataset contract trong metadata/.",
     )
-    parser.add_argument("command", choices=["check", "write", "show", "plan", "compat", "verify"])
+    parser.add_argument("command", choices=["check", "write", "show", "plan", "compat", "verify", "apply"])
     parser.add_argument("--base", default=None,
                         help="Git ref nền để so 'plan'/'compat' (mặc định origin/main hoặc GITHUB_BASE_REF).")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Chỉ 'apply': in chuỗi bước sẽ chạy, không đụng engine nào.")
+    parser.add_argument("--only", default=None, metavar="BUOC",
+                        help="Chỉ 'apply': chạy đúng một bước (connectors/clickhouse/flink/spark).")
+    parser.add_argument("--with-openmetadata", action="store_true",
+                        help="Chỉ 'apply': thêm bước đẩy catalog OM (phiên riêng, cần OM sống).")
+    parser.add_argument("--as-of", metavar="YYYY-MM-DD",
+                        help="Chỉ 'apply': chuyển tiếp cho spark_batch (cửa sổ incremental).")
+    parser.add_argument("--full-refresh", action="store_true",
+                        help="Chỉ 'apply': chuyển tiếp cho spark_batch (tính lại toàn bộ).")
     args = parser.parse_args(argv)
 
     base = args.base or _default_base()
@@ -388,6 +548,9 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_plan(base)
         if args.command == "compat":
             return cmd_compat(base)
+        if args.command == "apply":
+            return cmd_apply(args.as_of, args.full_refresh, args.only,
+                             args.with_openmetadata, args.dry_run)
         return {"check": cmd_check, "write": cmd_write, "show": cmd_show,
                 "verify": cmd_verify}[args.command]()
     except ContractError as exc:

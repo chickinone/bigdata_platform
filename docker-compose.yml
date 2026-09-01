@@ -474,6 +474,10 @@ services:
   spark-master:
     image: apache/spark:3.5.0
     container_name: bigdata-spark-master
+    # Thieu dong nay = mac dinh `no`: Docker Desktop khoi dong lai thi 15 service
+    # quay ve con 4 cai nay nam im, VA KHONG CO GI BAO. Spark chet am tham nhu vay
+    # 30 phut ma stack van trong nhu binh thuong — chi `cli apply` moi lo ra.
+    restart: unless-stopped
     command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master --host 0.0.0.0 --port 7077 --webui-port 8080
     environment:
       S3_ENDPOINT: ${S3_ENDPOINT}
@@ -494,6 +498,10 @@ services:
   spark-worker:
     image: apache/spark:3.5.0
     container_name: bigdata-spark-worker
+    # Thieu dong nay = mac dinh `no`: Docker Desktop khoi dong lai thi 15 service
+    # quay ve con 4 cai nay nam im, VA KHONG CO GI BAO. Spark chet am tham nhu vay
+    # 30 phut ma stack van trong nhu binh thuong — chi `cli apply` moi lo ra.
+    restart: unless-stopped
     command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077 --webui-port 8081 --cores 2 --memory 2g
     environment:
       S3_ENDPOINT: ${S3_ENDPOINT}
@@ -515,6 +523,10 @@ services:
   iceberg-rest:
     image: tabulario/iceberg-rest:1.6.0
     container_name: bigdata-iceberg-rest
+    # Thieu dong nay = mac dinh `no`: Docker Desktop khoi dong lai thi 15 service
+    # quay ve con 4 cai nay nam im, VA KHONG CO GI BAO. Spark chet am tham nhu vay
+    # 30 phut ma stack van trong nhu binh thuong — chi `cli apply` moi lo ra.
+    restart: unless-stopped
     ports:
       - "8181:8181"
     environment:
@@ -533,6 +545,10 @@ services:
   trino:
     image: trinodb/trino:432
     container_name: bigdata-trino
+    # Thieu dong nay = mac dinh `no`: Docker Desktop khoi dong lai thi 15 service
+    # quay ve con 4 cai nay nam im, VA KHONG CO GI BAO. Spark chet am tham nhu vay
+    # 30 phut ma stack van trong nhu binh thuong — chi `cli apply` moi lo ra.
+    restart: unless-stopped
     ports:
       - "8085:8080"
     environment:

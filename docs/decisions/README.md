@@ -77,3 +77,4 @@
 | [0041](0041-harden-perimeter.md) | Siết vành đai — bỏ credential khỏi code, gate secret, validate pipeline spec, lưới test |
 | [0042](0042-incremental-batch-and-blast-radius.md) | Chặn bán kính sát thương — trần WAL, tiêu chí đậu dùng chung, batch chạy theo cửa sổ |
 | [0043](0043-cold-rebuild-findings.md) | Lỗ hổng phát hiện lộ ra khi dựng lạnh — CRLF, init không tự chạy, quan sát thưa |
+| [0044](0044-cli-apply-orchestrator.md) | `cli apply` — đưa thứ tự triển khai từ trí nhớ vào code |

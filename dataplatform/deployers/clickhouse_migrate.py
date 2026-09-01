@@ -9,6 +9,7 @@ from ..registry import REPO_ROOT
 
 CLICKHOUSE_CONTAINER = os.getenv("CLICKHOUSE_CONTAINER", "bigdata-clickhouse")
 MIGRATIONS_DIR = REPO_ROOT / "migrations" / "clickhouse"
+INIT_DIR = REPO_ROOT / "clickhouse" / "init"
 LEDGER = "metrics.schema_migrations"
 
 
@@ -64,6 +65,37 @@ def _version_of(path) -> str:
     return path.stem  # "0001_notification_events"
 
 
+def cmd_baseline() -> int:
+    """Ap DDL baseline sinh-tu-contract (clickhouse/init/*.sql).
+
+    Vi sao tach khoi `apply`: file init CHUA bang ENGINE=Kafka, ma bang Kafka-engine se
+    TREO neu broker chua song. `apply` (migration menh lenh) phai chay duoc ca khi Kafka
+    dang chet, nen no khong dung vao baseline — xem ADR-0032.
+
+    Vi sao van can lenh nay ton tai: docker-compose KHONG mount clickhouse/init/, nen
+    tren volume moi ClickHouse trong tron va khong service nao bao loi — Flink chi im
+    lang khong ghi duoc. Truoc day buoc nay chi nam trong runbook, tuc trong tri nho
+    (ADR-0043). Nay no la code, va `cli apply` goi no dung thu tu.
+
+    Idempotent: moi file init dung CREATE ... IF NOT EXISTS.
+    """
+    files = sorted(INIT_DIR.glob("*.sql")) if INIT_DIR.exists() else []
+    if not files:
+        print(f"Khong thay file init nao trong {INIT_DIR}")
+        return 1
+
+    print(f"Ap {len(files)} file DDL baseline (idempotent) len {CLICKHOUSE_CONTAINER}:")
+    print()
+    for f in files:
+        _ch_exec(f.read_text(encoding="utf-8"))
+        print(f"  [ap   ] {f.relative_to(REPO_ROOT)}")
+
+    n = _ch_exec("SELECT count() FROM system.tables WHERE database = 'metrics' FORMAT TabSeparated;").strip()
+    print()
+    print(f"KET QUA: baseline da ap. metrics co {n} bang.")
+    return 0
+
+
 def cmd_plan() -> int:
     try:
         _ensure_ledger()
@@ -116,11 +148,12 @@ def _force_utf8() -> None:
 def main(argv: list[str] | None = None) -> int:
     _force_utf8()
     cmd = (argv or sys.argv[1:] or ["plan"])[0]
-    if cmd not in ("plan", "apply"):
-        print("dùng: python -m dataplatform.deployers.clickhouse_migrate [plan|apply]", file=sys.stderr)
+    if cmd not in ("plan", "apply", "baseline"):
+        print("dùng: python -m dataplatform.deployers.clickhouse_migrate [plan|apply|baseline]",
+              file=sys.stderr)
         return 2
     try:
-        return cmd_plan() if cmd == "plan" else cmd_apply()
+        return {"plan": cmd_plan, "apply": cmd_apply, "baseline": cmd_baseline}[cmd]()
     except RuntimeError as exc:
         print(f"LỖI: {exc}", file=sys.stderr)
         return 3
