@@ -11,3 +11,8 @@ tmp/
 
 # Ket qua chay verifier theo lich (scripts/verify-scheduled.cmd) — cuc bo, khong commit
 .verify/
+
+# State cua deployer: ghi nhung tai nguyen CHINH TA da tao tren engine, de lan apply sau
+# biet cai nao da bi go khoi metadata/ ma xoa di (ADR-0045). Moi moi truong mot ban —
+# giong state cua Terraform — nen KHONG commit.
+.platform-state.json

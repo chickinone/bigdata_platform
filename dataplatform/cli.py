@@ -46,6 +46,38 @@ def _serialize(payload) -> str:
     return json.dumps(payload, indent=JSON_INDENT, ensure_ascii=False) + "\n"
 
 
+# Thu muc ma control plane so huu TRON VEN: moi file o day deu la ban sinh. Nho vay
+# phat hien file THUA khong can state — bat cu gi khop glob ma khong nam trong _collect()
+# deu la rac cua mot dataset da bi xoa khoi metadata/.
+#
+# Chi liet ke duoc nhung glob co hinh dang "N dataset -> N file". Artifact don le
+# (debezium/postgres-connector.json, kafka/topics.json...) khong bao gio thanh thua vi
+# chung luon duoc sinh, chi noi dung thay doi.
+OWNED_GLOBS = [
+    "kafka-connect/es-sinks/*.json",
+    "kafka-connect/s3-sinks/*.json",
+    "trino/etc/catalog/*.properties",
+]
+
+
+def _orphan_files(targets: dict) -> list:
+    """File nam trong vung control plane so huu nhung KHONG con duoc sinh nua.
+
+    Day la nua con thieu cua "nguon su that duy nhat": truoc day `metadata/` quyet dinh
+    duoc cai gi PHAI ton tai, nhung khong quyet dinh duoc cai gi KHONG DUOC ton tai.
+    Xoa `transfers.yaml` roi `write` thi es-sink-transfers.json van nam do vinh vien, va
+    `check` bao khop tuyet doi vi no chi nhin nhung file MINH SINH RA.
+    """
+    wanted = set(targets)
+    orphans = []
+    for glob in OWNED_GLOBS:
+        for path in sorted(REPO_ROOT.glob(glob)):
+            rel = path.relative_to(REPO_ROOT).as_posix()
+            if rel not in wanted:
+                orphans.append(rel)
+    return orphans
+
+
 def _collect() -> dict:
     datasets = load_datasets()
     conns = connections_by_name()
@@ -185,13 +217,20 @@ def cmd_check() -> int:
                 print(f"          {d}")
             drift += 1
 
+    orphans = _orphan_files(targets)
+    for rel_path in orphans:
+        print(f"  [THỪA] {rel_path}  (không còn dataset/connection nào sinh ra file này)")
+
     print()
-    if drift:
-        print(f"KẾT QUẢ: {drift}/{len(targets)} artifact lệch.")
+    if orphans:
+        print(f"{len(orphans)} file THỪA: metadata/ không còn khai chúng nhưng file vẫn nằm trên đĩa.")
+        print("Chạy `cli write` để xoá — hoặc nếu file đó cần giữ, nó không thuộc control plane.")
+    if drift or orphans:
+        print(f"KẾT QUẢ: {drift}/{len(targets)} artifact lệch, {len(orphans)} file thừa.")
         print("Bản sinh CHƯA tái tạo đúng hiện trạng -> chưa được cắt chuyển.")
         return 1
 
-    print(f"KẾT QUẢ: {len(targets)}/{len(targets)} artifact khớp tuyệt đối.")
+    print(f"KẾT QUẢ: {len(targets)}/{len(targets)} artifact khớp tuyệt đối, 0 file thừa.")
     print("Contract mang đủ thông tin để sinh lại toàn bộ file viết tay.")
     return 0
 
@@ -207,7 +246,17 @@ def cmd_write() -> int:
         # đều phải LF. `check` không thấy khác biệt này vì read_text dịch ngược lúc đọc.
         path.write_text(_serialize(payload), encoding="utf-8", newline="\n")
         print(f"  đã ghi  {rel_path}")
-    print(f"\nĐã sinh {len(targets)} artifact từ metadata/.")
+
+    # Xoá file THỪA: đây là nửa còn thiếu để `metadata/` thật sự là nguồn sự thật duy
+    # nhất. Chỉ xoá trong OWNED_GLOBS — vùng control plane sở hữu trọn vẹn — và chỉ file
+    # SINH được, nên xoá nhầm thì `write` lại là có ngay. Không đụng gì mang dữ liệu.
+    orphans = _orphan_files(targets)
+    for rel_path in orphans:
+        (REPO_ROOT / rel_path).unlink()
+        print(f"  đã XOÁ  {rel_path}  (thừa — metadata/ không còn khai)")
+
+    print(f"\nĐã sinh {len(targets)} artifact từ metadata/"
+          + (f", xoá {len(orphans)} file thừa." if orphans else "."))
     return 0
 
 

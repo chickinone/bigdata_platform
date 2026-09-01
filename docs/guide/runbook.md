@@ -194,6 +194,8 @@ Dừng bớt để nhường RAM: `docker compose stop` (stack chính) / `... -f
 | Không biết Trino/ClickHouse có thật sự đúng không | Chỉ 4/19 container có healthcheck; không có verifier cho Trino | Chạy tay cả 6 verifier (xem mục dưới). Trino chưa có verifier — ADR-0043 việc #2 |
 | Docker khởi động lại, 15 service về nhưng Spark/Trino/iceberg-rest nằm im | Bốn service từng thiếu `restart:` nên mặc định `no` | Đã sửa thành `unless-stopped` ([ADR-0044](../decisions/0044-cli-apply-orchestrator.md)). Kiểm policy bằng `docker inspect` |
 | Không biết stack có thiếu container nào không | Chỉ 4/19 có healthcheck; `docker ps` chỉ nói tiến trình chưa chết | `cli apply` đi hết chuỗi và bắt buộc từng bước đậu — đây là thứ đã phát hiện Spark chết âm thầm 30 phút |
+| Xoá dataset khỏi `metadata/` mà connector cũ vẫn sống | Deployer trước đây chỉ biết cộng, không biết trừ | Đã vá ([ADR-0045](../decisions/0045-orphan-gc-state.md)): `cli write` xoá file thừa, `connectors apply` DELETE connector thừa theo `.platform-state.json` |
+| Bảng ClickHouse / topic thừa sau khi bỏ dataset | Chúng MANG DỮ LIỆU nên cố ý KHÔNG tự xoá | `clickhouse_schema` và `kafka_topics` chỉ **báo**; tự chạy `DROP TABLE` khi chắc chắn |
 
 ---
 

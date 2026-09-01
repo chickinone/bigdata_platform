@@ -10,7 +10,7 @@ import urllib.request
 
 from .. import compat
 from ..generators import debezium, es_sink, s3_sink
-from ..registry import ContractError, connections_by_name, load_datasets
+from ..registry import REPO_ROOT, ContractError, connections_by_name, load_datasets
 
 # Từ máy host, Connect REST ở localhost:8083 (cổng map trong docker-compose).
 # Bên trong mạng compose thì là http://kafka-connect:8083 — override bằng env.
@@ -18,6 +18,70 @@ CONNECT_URL = os.getenv("CONNECT_URL", "http://localhost:8083")
 
 # Thư mục chứa artifact connector đã commit (dùng cho rollback --ref).
 _CONNECTOR_DIRS = ("debezium", "kafka-connect/es-sinks", "kafka-connect/s3-sinks")
+
+
+# So ghi nhung connector CHINH TA da tao. Khong commit (moi moi truong mot ban, giong
+# state cua Terraform) — xem .gitignore.
+STATE_PATH = REPO_ROOT / ".platform-state.json"
+
+
+def _load_state() -> set:
+    """Ten connector da apply o lan chay truoc."""
+    if not STATE_PATH.exists():
+        return set()
+    try:
+        data = json.loads(STATE_PATH.read_text(encoding="utf-8"))
+    except (ValueError, OSError):
+        return set()
+    return set(data.get("kafka_connect", []))
+
+
+def _save_state(names) -> None:
+    data = {}
+    if STATE_PATH.exists():
+        try:
+            data = json.loads(STATE_PATH.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            data = {}
+    data["kafka_connect"] = sorted(names)
+    STATE_PATH.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+                          encoding="utf-8", newline="\n")
+
+
+def _prune(desired_names, dry: bool = False):
+    """Xoa connector TA da tao nhung metadata/ khong con khai.
+
+    Vi sao dua vao STATE chu khong so thang voi connector dang song tren Connect: so
+    thang se xoa ca connector nguoi khac tao tay de thu nghiem. Chi xoa thu MINH tao ra
+    la mo hinh cua Terraform, va no la lua chon an toan hon.
+
+    Day la nua con thieu cua "nguon su that duy nhat": truoc day xoa `transfers.yaml`
+    roi `apply` thi es-sink-transfers VAN song tren Kafka Connect mai mai, va khong cong
+    nao phat hien — `check` chi nhin dia, verifier chi doi chieu cai CO trong contract.
+
+    KHONG dung toi du lieu: xoa connector chi bo cau hinh, topic va ban ghi con nguyen.
+    Nhung thu mang du lieu (topic Kafka, bang ClickHouse, duong dan S3) KHONG BAO GIO
+    bi xoa tu dong — chung chi duoc BAO CAO, xem cmd_plan.
+    """
+    orphans = sorted(_load_state() - set(desired_names))
+    if not orphans:
+        return [], []
+    if dry:
+        return orphans, []
+
+    print(f"\nXoa {len(orphans)} connector THUA (metadata/ khong con khai):")
+    deleted = []
+    for name in orphans:
+        code, payload = _req("DELETE", f"/connectors/{name}")
+        # 404 = da bi xoa tay tu truoc; van coi la thanh cong de state duoc don sach.
+        ok = code in (200, 204, 404)
+        note = " (khong con tren Connect)" if code == 404 else ""
+        print(f"  [{'OK ' if ok else 'LOI'}] DELETE  {name}  (HTTP {code}){note}")
+        if ok:
+            deleted.append(name)
+        else:
+            print(f"          {payload}")
+    return orphans, deleted
 
 
 def desired_connectors(ref: str | None = None) -> dict[str, dict]:
@@ -150,12 +214,19 @@ def _wait_running(names: list[str], attempts: int = 10, delay: float = 2.0) -> d
 
 def cmd_apply(ref: str | None = None) -> int:
     plan = _plan(ref)
-    changed = [(n, a) for n, a, _ in plan if a in ("CREATE", "UPDATE")]
-    if not changed:
-        print("Mọi connector đã khớp desired state — không có gì để áp.")
-        return 0
-
     desired = desired_connectors(ref)
+    changed = [(n, a) for n, a, _ in plan if a in ("CREATE", "UPDATE")]
+
+    # Xoá THỪA chạy trước khi áp: nếu một dataset bị đổi tên, ta muốn bỏ connector cũ
+    # rồi mới tạo cái mới, thay vì để hai cái cùng đọc một topic một lúc.
+    orphans, deleted = _prune(desired)
+
+    if not changed:
+        if not orphans:
+            print("Mọi connector đã khớp desired state — không có gì để áp.")
+        _save_state(desired)
+        return 0 if len(deleted) == len(orphans) else 1
+
     tag = f" (ROLLBACK về `{ref}`)" if ref else ""
     print(f"Áp {len(changed)} connector lên {CONNECT_URL}{tag}:\n")
     applied = []
@@ -177,11 +248,16 @@ def cmd_apply(ref: str | None = None) -> int:
         if st != "RUNNING":
             bad += 1
 
+    # Ghi state SAU khi áp xong: state phản ánh cái ta thật sự đã tạo, không phải cái
+    # ta định tạo. Áp hỏng nửa chừng thì lần sau vẫn thấy đúng những gì còn tồn tại.
+    _save_state(desired)
+
     print()
     if bad:
         print(f"KẾT QUẢ: {bad}/{len(applied)} connector CHƯA RUNNING — xem status ở trên.")
         return 1
-    print(f"KẾT QUẢ: {len(applied)} connector đã áp và RUNNING.")
+    tail = f", xoá {len(deleted)} thừa" if deleted else ""
+    print(f"KẾT QUẢ: {len(applied)} connector đã áp và RUNNING{tail}.")
     return 0
 
 

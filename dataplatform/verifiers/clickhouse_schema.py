@@ -65,6 +65,37 @@ def verify_dataset(ds: Dataset) -> list[str]:
     return errors
 
 
+# Bang do runner/he thong tao, khong suy tu contract dataset — khong tinh la thua.
+_KHONG_TINH_THUA = {"schema_migrations", "dlq_events", "notification_events"}
+
+
+def _bang_thua(datasets) -> list:
+    """Bang trong `metrics` ma contract KHONG con khai.
+
+    CHI BAO CAO, khong bao gio tu xoa. Day la ranh gioi co chu dinh: connector va file
+    sinh thi xoa duoc vi tao lai tu metadata la co ngay, con DROP TABLE la mat du lieu
+    khong hoi phuc duoc. Tu dong hoa + khong hoi phuc duoc la ket hop toi te nhat.
+
+    Moi metric sinh ra 3 doi tuong (<ten>, <ten>_kafka, <ten>_mv) nen ta gom ho theo
+    ten goc truoc khi so, tranh bao thua gia.
+    """
+    goc = set()
+    for ds in datasets:
+        ten = ds.raw["sinks"]["clickhouse"]["table"]
+        goc.update({ten, f"{ten}_kafka", f"{ten}_mv"})
+
+    rows = _ch_query("SELECT name FROM system.tables WHERE database = 'metrics' ORDER BY name")
+    live = {r[0] for r in rows if r and r[0]}
+
+    thua = []
+    for ten in sorted(live - goc):
+        goc_ten = ten[:-6] if ten.endswith("_kafka") else (ten[:-3] if ten.endswith("_mv") else ten)
+        if goc_ten in _KHONG_TINH_THUA:
+            continue
+        thua.append(ten)
+    return thua
+
+
 def cmd_verify() -> int:
     datasets = clickhouse_ddl.ch_datasets(load_datasets())
     print(f"Đối chiếu {len(datasets)} contract metric với bảng ClickHouse thật "
@@ -81,8 +112,19 @@ def cmd_verify() -> int:
         for e in errors:
             print(f"          ✗ {e}")
 
+    thua = _bang_thua(datasets)
+
     print()
-    print(f"KẾT QUẢ: {total} lệch.")
+    if thua:
+        print(f"  [chú ý] {len(thua)} bảng có trong ClickHouse nhưng contract KHÔNG còn khai:")
+        for ten in thua:
+            print(f"          metrics.{ten}")
+        print("          KHÔNG tự xoá — DROP TABLE là mất dữ liệu không hồi phục được.")
+        print("          Nếu chắc chắn không cần: docker exec bigdata-clickhouse "
+              "clickhouse-client -q 'DROP TABLE metrics.<tên>'")
+        print()
+
+    print(f"KẾT QUẢ: {total} lệch, {len(thua)} bảng thừa (chỉ báo).")
     if total:
         print("Bảng ClickHouse đang chạy KHÔNG khớp contract — có drift thủ công, hoặc cần `write` + apply.")
         return 1
