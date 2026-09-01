@@ -9,6 +9,7 @@ import urllib.request
 
 import yaml
 
+from .. import state
 from ..registry import METADATA_DIR, REPO_ROOT, load_connections, load_datasets
 
 OM_URL = os.getenv("OM_URL", "http://localhost:8585")
@@ -105,6 +106,31 @@ def _table_name(node_id: str) -> str:
 
 def _fqn(schema: str, table: str) -> str:
     return f"{SERVICE}.{DATABASE}.{schema}.{table}"
+
+
+STATE_KEY = "openmetadata"
+GRAPH_PATH = REPO_ROOT / "lineage" / "graph.json"
+
+
+def graph_fingerprint() -> str:
+    """Vân tay của graph.json — thứ ĐÃ được đẩy lên OM.
+
+    Dùng để trả lời offline câu "catalog có đang cũ không" mà KHÔNG cần OM sống. Đây là
+    điểm mấu chốt: OM là phiên riêng (phải dừng stack chính để nhường RAM), nên nếu chỉ
+    kiểm được lúc OM chạy thì gần như không bao giờ kiểm.
+    """
+    import hashlib
+
+    return hashlib.sha256(GRAPH_PATH.read_bytes()).hexdigest()[:16]
+
+
+def _ghi_state() -> None:
+    from datetime import datetime, timezone
+
+    state.save(STATE_KEY, {
+        "graph_fingerprint": graph_fingerprint(),
+        "applied_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    })
 
 
 def apply() -> int:
@@ -444,6 +470,10 @@ def apply() -> int:
                 raise RuntimeError(f"kpi {name} ({code}): {json.dumps(payload)[:200]}")
         print("  [OK ] KPI insights: 2")
     _soft("kpis", _kpis, warnings)
+
+    # Ghi vân tay graph.json ĐÃ đẩy. Nhờ vậy verifier trả lời được "catalog có cũ
+    # không" mà KHÔNG cần OM sống — xem verifiers/om_catalog.py.
+    _ghi_state()
 
     status = "đủ" if not warnings else f"thiếu {len(warnings)} phần (xem [CHÚ Ý] trên)"
     print(f"\nKẾT QUẢ: lõi nạp xong ({added} cạnh, {col_pairs} liên kết cột); enrichment {status}. UI: {OM_URL}")

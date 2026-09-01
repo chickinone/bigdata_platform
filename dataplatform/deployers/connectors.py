@@ -10,7 +10,8 @@ import urllib.request
 
 from .. import compat
 from ..generators import debezium, es_sink, s3_sink
-from ..registry import REPO_ROOT, ContractError, connections_by_name, load_datasets
+from .. import state
+from ..registry import ContractError, connections_by_name, load_datasets
 
 # Từ máy host, Connect REST ở localhost:8083 (cổng map trong docker-compose).
 # Bên trong mạng compose thì là http://kafka-connect:8083 — override bằng env.
@@ -20,32 +21,18 @@ CONNECT_URL = os.getenv("CONNECT_URL", "http://localhost:8083")
 _CONNECTOR_DIRS = ("debezium", "kafka-connect/es-sinks", "kafka-connect/s3-sinks")
 
 
-# So ghi nhung connector CHINH TA da tao. Khong commit (moi moi truong mot ban, giong
-# state cua Terraform) — xem .gitignore.
-STATE_PATH = REPO_ROOT / ".platform-state.json"
+# Sổ state dùng chung với các deployer khác — xem dataplatform/state.py.
+STATE_KEY = "kafka_connect"
+STATE_PATH = state.STATE_PATH
 
 
 def _load_state() -> set:
-    """Ten connector da apply o lan chay truoc."""
-    if not STATE_PATH.exists():
-        return set()
-    try:
-        data = json.loads(STATE_PATH.read_text(encoding="utf-8"))
-    except (ValueError, OSError):
-        return set()
-    return set(data.get("kafka_connect", []))
+    """Tên connector đã apply ở lần chạy trước."""
+    return set(state.load(STATE_KEY, []))
 
 
 def _save_state(names) -> None:
-    data = {}
-    if STATE_PATH.exists():
-        try:
-            data = json.loads(STATE_PATH.read_text(encoding="utf-8"))
-        except (ValueError, OSError):
-            data = {}
-    data["kafka_connect"] = sorted(names)
-    STATE_PATH.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n",
-                          encoding="utf-8", newline="\n")
+    state.save(STATE_KEY, sorted(names))
 
 
 def _prune(desired_names, dry: bool = False):

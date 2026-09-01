@@ -196,6 +196,7 @@ Dừng bớt để nhường RAM: `docker compose stop` (stack chính) / `... -f
 | Không biết stack có thiếu container nào không | Chỉ 4/19 có healthcheck; `docker ps` chỉ nói tiến trình chưa chết | `cli apply` đi hết chuỗi và bắt buộc từng bước đậu — đây là thứ đã phát hiện Spark chết âm thầm 30 phút |
 | Xoá dataset khỏi `metadata/` mà connector cũ vẫn sống | Deployer trước đây chỉ biết cộng, không biết trừ | Đã vá ([ADR-0045](../decisions/0045-orphan-gc-state.md)): `cli write` xoá file thừa, `connectors apply` DELETE connector thừa theo `.platform-state.json` |
 | Bảng ClickHouse / topic thừa sau khi bỏ dataset | Chúng MANG DỮ LIỆU nên cố ý KHÔNG tự xoá | `clickhouse_schema` và `kafka_topics` chỉ **báo**; tự chạy `DROP TABLE` khi chắc chắn |
+| Catalog OM hiển thị thứ cũ | OM là phiên riêng, thường tắt; `apply` không tự chạy | `cli verify` nay báo `[chú ý] catalog ĐANG CŨ` mà không cần bật OM ([ADR-0046](../decisions/0046-om-catalog-verifier.md)). Đồng bộ: `python -m dataplatform.deployers.openmetadata apply` |
 
 ---
 
@@ -248,7 +249,7 @@ một chỗ thì dùng lệnh lẻ:
 python -m dataplatform.deployers.connectors apply
 ```
 
-**Chạy cả 7 verifier một lượt:**
+**Chạy cả 8 verifier một lượt:**
 
 ```bash
 python -m dataplatform.cli verify
