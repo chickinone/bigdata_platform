@@ -14,7 +14,7 @@
 4. git commit + mở PR
      CI tự chạy: check (drift) + compat (BACKWARD) + plan (hệ quả artifact)
 5. merge → python -m dataplatform.cli apply    # soạn 4 deployer đúng thứ tự + gate giữa các bước
-6. cli apply tự chạy `cli verify` ở cuối       # 7 verifier, một mã thoát
+6. cli apply tự chạy `cli verify` ở cuối       # 9 verifier, một mã thoát
 ```
 
 **Không bao giờ sửa tay file sinh** (connector JSON, DDL, catalog, DAG, lineage) — CI `check` sẽ đỏ. Sửa
@@ -191,12 +191,14 @@ Dừng bớt để nhường RAM: `docker compose stop` (stack chính) / `... -f
 | Trino `unhealthy` mãi nhưng query vẫn chạy | File `.properties` có CRLF → script `health-check` (bash) dựng URL `localhost:8080\r` → `curl: (3)`. Java trim được nên Trino vẫn sống | Đã chặn: `*.properties text eol=lf` ([ADR-0043](../decisions/0043-cold-rebuild-findings.md)). Kiểm: `tr -cd '\r' < trino/etc/config.properties \| wc -c` phải ra 0 |
 | ClickHouse 0 bảng sau khi dựng lạnh | compose KHÔNG mount `clickhouse/init/` — baseline DDL không tự chạy | Nạp tay: `for f in clickhouse/init/*.sql; do docker exec -i bigdata-clickhouse clickhouse-client --multiquery < $f; done` rồi `clickhouse_migrate apply` |
 | `cli check` báo khớp mà file vẫn sai | `read_text()` bật universal newlines → CRLF bị chuẩn hoá TRƯỚC khi so, nên check mù về nó | Chưa vá (ADR-0043 việc #1). Kiểm CRLF bằng `tr -cd '\r'`, đừng tin check cho việc này |
-| Không biết Trino/ClickHouse có thật sự đúng không | Chỉ 4/19 container có healthcheck; không có verifier cho Trino | Chạy tay cả 6 verifier (xem mục dưới). Trino chưa có verifier — ADR-0043 việc #2 |
+| Không biết Trino/ClickHouse có thật sự đúng không | Chỉ 4/19 container có healthcheck; `docker ps` chỉ nói tiến trình chưa chết | `python -m dataplatform.cli verify` — 9 verifier đối chiếu contract với engine sống, một mã thoát |
 | Docker khởi động lại, 15 service về nhưng Spark/Trino/iceberg-rest nằm im | Bốn service từng thiếu `restart:` nên mặc định `no` | Đã sửa thành `unless-stopped` ([ADR-0044](../decisions/0044-cli-apply-orchestrator.md)). Kiểm policy bằng `docker inspect` |
 | Không biết stack có thiếu container nào không | Chỉ 4/19 có healthcheck; `docker ps` chỉ nói tiến trình chưa chết | `cli apply` đi hết chuỗi và bắt buộc từng bước đậu — đây là thứ đã phát hiện Spark chết âm thầm 30 phút |
 | Xoá dataset khỏi `metadata/` mà connector cũ vẫn sống | Deployer trước đây chỉ biết cộng, không biết trừ | Đã vá ([ADR-0045](../decisions/0045-orphan-gc-state.md)): `cli write` xoá file thừa, `connectors apply` DELETE connector thừa theo `.platform-state.json` |
 | Bảng ClickHouse / topic thừa sau khi bỏ dataset | Chúng MANG DỮ LIỆU nên cố ý KHÔNG tự xoá | `clickhouse_schema` và `kafka_topics` chỉ **báo**; tự chạy `DROP TABLE` khi chắc chắn |
 | Catalog OM hiển thị thứ cũ | OM là phiên riêng, thường tắt; `apply` không tự chạy | `cli verify` nay báo `[chú ý] catalog ĐANG CŨ` mà không cần bật OM ([ADR-0046](../decisions/0046-om-catalog-verifier.md)). Đồng bộ: `python -m dataplatform.deployers.openmetadata apply` |
+| Dữ liệu ngừng chảy mà mọi thứ trông bình thường | Task connector FAILED nhưng `connector.state` vẫn RUNNING; Connect KHÔNG tự restart task chết | `cli verify` nay có `connect_health` bắt việc này ([ADR-0047](../decisions/0047-connect-task-health-verifier.md)). Khôi phục: `curl -X POST 'http://localhost:8083/connectors/<tên>/restart?includeTasks=true&onlyFailed=true'` |
+| ES sink chết hàng loạt khi tải cao | ES dội ngược, connector NPE lúc parse phản hồi bulk rồi chết hẳn thay vì thử lại | Giảm tải hoặc tăng `batch.size`/`max.retries` của sink; `connect_health` báo ngay |
 
 ---
 
@@ -249,7 +251,7 @@ một chỗ thì dùng lệnh lẻ:
 python -m dataplatform.deployers.connectors apply
 ```
 
-**Chạy cả 8 verifier một lượt:**
+**Chạy cả 9 verifier một lượt:**
 
 ```bash
 python -m dataplatform.cli verify

@@ -354,7 +354,7 @@ def cmd_compat(base: str) -> int:
 
 
 VERIFIERS = [
-    "postgres_schema", "postgres_publication", "kafka_topics",
+    "postgres_schema", "postgres_publication", "kafka_topics", "connect_health",
     "avro_schema", "clickhouse_schema", "trino_catalog", "om_catalog", "quality",
 ]
 
