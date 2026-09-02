@@ -22,6 +22,11 @@ PLAN_DIR_CONTAINER = "/opt/spark-jobs/generated"
 # exit 0 mà job không ghi gì. Orchestrator báo xanh sai tệ hơn không có orchestrator.
 SUCCESS_MARKER = "WROTE"
 
+# Ma thoat rieng cho "input chua co du lieu". KHONG phai loi: tren stack vua dung, S3
+# sink chua flush nen Bronze trong la trang thai binh thuong. Gop no vao ma loi se lam
+# `cli apply` do moi lan dung lanh — mot cong luon do la mot cong bi bo qua (ADR-0041).
+NOT_READY = 4
+
 
 def _stage(spec: dict) -> int:
     """Thứ tự chạy theo phụ thuộc INPUT, không theo layer: job đọc Bronze là nguồn
@@ -141,6 +146,11 @@ def _submit(spec: dict, as_of: str | None = None, full_refresh: bool = False) ->
     if proc.returncode == 0 and wrote:
         print(f"    {wrote[0]}")
         return True
+    if proc.returncode == NOT_READY:
+        # Input chua co du lieu — khac han voi loi. Xem medallion_runner.
+        chua = [ln for ln in out if ln.startswith("CHUA SAN SANG")]
+        print(f"    {chua[0] if chua else 'CHUA SAN SANG: input chua co du lieu'}")
+        return NOT_READY
     print(f"    LỖI (exit {proc.returncode}):")
     print("      " + "\n      ".join(out[-8:]))
     return False
@@ -151,12 +161,23 @@ def cmd_apply(as_of: str | None = None, full_refresh: bool = False) -> int:
     scope = "TOÀN BỘ (full refresh)" if full_refresh else f"cửa sổ tới {as_of or 'hôm nay'}"
     print(f"Chạy {len(specs)} batch job theo thứ tự layer — {scope}:\n")
     failed = 0
+    chua_san_sang = False
     for spec in specs:
-        if not _submit(spec, as_of, full_refresh):
+        kq = _submit(spec, as_of, full_refresh)
+        if kq is not True and kq == NOT_READY:
+            chua_san_sang = True
+            print("    -> dừng chuỗi: chưa có dữ liệu để tính (KHÔNG phải lỗi).")
+            break
+        if not kq:
             failed += 1
             print("    -> dừng chuỗi (job sau có thể phụ thuộc job này).")
             break
     print()
+    if chua_san_sang:
+        print("KẾT QUẢ: BỎ QUA — Bronze chưa có dữ liệu (S3 sink chưa flush).")
+        print("Không phải lỗi. Chạy lại sau vài phút; nếu sink HỎNG thì "
+              "`cli verify` (connect_health) mới là chỗ báo.")
+        return 0
     if failed:
         print(f"KẾT QUẢ: có job LỖI — xem trên.")
         return 1

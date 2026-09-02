@@ -119,7 +119,25 @@ def main():
 
     # Input: mỗi parquet -> view có tên (SQL tham chiếu tên này).
     for i in plan["inputs"]:
-        df = spark.read.parquet(i["path"])
+        try:
+            df = spark.read.parquet(i["path"])
+        except Exception as exc:
+            # Duong dan chua ton tai = S3 sink CHUA FLUSH, khong phai hong. Tren stack
+            # vua dung, Bronze trong la BINH THUONG: sink chi ghi khi du flush.size=1000
+            # ban ghi HOAC sau rotate.interval 5 phut.
+            # Tra ma RIENG (4) de deployer phan biet "chua san sang" voi "loi that" —
+            # gop hai thu nay se hoac bao dong gia moi lan dung lanh, hoac che mat loi
+            # that. Neu S3 sink HONG (khong phai cham) thi `connect_health` bat, khong
+            # phai viec cua buoc nay.
+            thong_diep = str(exc)
+            if ("Path does not exist" in thong_diep
+                    or "UNABLE_TO_INFER_SCHEMA" in thong_diep
+                    or "PATH_NOT_FOUND" in thong_diep):
+                print(f"CHUA SAN SANG: {i['path']} chua co du lieu "
+                      f"(S3 sink chua flush). Bo qua {plan['name']}.")
+                spark.stop()
+                raise SystemExit(4)
+            raise
         note = ""
         if i["view"] in windowed:
             missing = [c for c in inc["date_columns"] if c not in df.columns]

@@ -14,7 +14,7 @@
 4. git commit + mở PR
      CI tự chạy: check (drift) + compat (BACKWARD) + plan (hệ quả artifact)
 5. merge → python -m dataplatform.cli apply    # soạn 4 deployer đúng thứ tự + gate giữa các bước
-6. cli apply tự chạy `cli verify` ở cuối       # 9 verifier, một mã thoát
+6. cli apply tự chạy `cli verify` ở cuối       # 10 verifier, một mã thoát
 ```
 
 **Không bao giờ sửa tay file sinh** (connector JSON, DDL, catalog, DAG, lineage) — CI `check` sẽ đỏ. Sửa
@@ -191,7 +191,7 @@ Dừng bớt để nhường RAM: `docker compose stop` (stack chính) / `... -f
 | Trino `unhealthy` mãi nhưng query vẫn chạy | File `.properties` có CRLF → script `health-check` (bash) dựng URL `localhost:8080\r` → `curl: (3)`. Java trim được nên Trino vẫn sống | Đã chặn: `*.properties text eol=lf` ([ADR-0043](../decisions/0043-cold-rebuild-findings.md)). Kiểm: `tr -cd '\r' < trino/etc/config.properties \| wc -c` phải ra 0 |
 | ClickHouse 0 bảng sau khi dựng lạnh | compose KHÔNG mount `clickhouse/init/` — baseline DDL không tự chạy | Nạp tay: `for f in clickhouse/init/*.sql; do docker exec -i bigdata-clickhouse clickhouse-client --multiquery < $f; done` rồi `clickhouse_migrate apply` |
 | `cli check` báo khớp mà file vẫn sai | `read_text()` bật universal newlines → CRLF bị chuẩn hoá TRƯỚC khi so, nên check mù về nó | Chưa vá (ADR-0043 việc #1). Kiểm CRLF bằng `tr -cd '\r'`, đừng tin check cho việc này |
-| Không biết Trino/ClickHouse có thật sự đúng không | Chỉ 4/19 container có healthcheck; `docker ps` chỉ nói tiến trình chưa chết | `python -m dataplatform.cli verify` — 9 verifier đối chiếu contract với engine sống, một mã thoát |
+| Không biết Trino/ClickHouse có thật sự đúng không | Chỉ 4/19 container có healthcheck; `docker ps` chỉ nói tiến trình chưa chết | `python -m dataplatform.cli verify` — 10 verifier đối chiếu contract với engine sống, một mã thoát |
 | Docker khởi động lại, 15 service về nhưng Spark/Trino/iceberg-rest nằm im | Bốn service từng thiếu `restart:` nên mặc định `no` | Đã sửa thành `unless-stopped` ([ADR-0044](../decisions/0044-cli-apply-orchestrator.md)). Kiểm policy bằng `docker inspect` |
 | Không biết stack có thiếu container nào không | Chỉ 4/19 có healthcheck; `docker ps` chỉ nói tiến trình chưa chết | `cli apply` đi hết chuỗi và bắt buộc từng bước đậu — đây là thứ đã phát hiện Spark chết âm thầm 30 phút |
 | Xoá dataset khỏi `metadata/` mà connector cũ vẫn sống | Deployer trước đây chỉ biết cộng, không biết trừ | Đã vá ([ADR-0045](../decisions/0045-orphan-gc-state.md)): `cli write` xoá file thừa, `connectors apply` DELETE connector thừa theo `.platform-state.json` |
@@ -199,6 +199,9 @@ Dừng bớt để nhường RAM: `docker compose stop` (stack chính) / `... -f
 | Catalog OM hiển thị thứ cũ | OM là phiên riêng, thường tắt; `apply` không tự chạy | `cli verify` nay báo `[chú ý] catalog ĐANG CŨ` mà không cần bật OM ([ADR-0046](../decisions/0046-om-catalog-verifier.md)). Đồng bộ: `python -m dataplatform.deployers.openmetadata apply` |
 | Dữ liệu ngừng chảy mà mọi thứ trông bình thường | Task connector FAILED nhưng `connector.state` vẫn RUNNING; Connect KHÔNG tự restart task chết | `cli verify` nay có `connect_health` bắt việc này ([ADR-0047](../decisions/0047-connect-task-health-verifier.md)). Khôi phục: `curl -X POST 'http://localhost:8083/connectors/<tên>/restart?includeTasks=true&onlyFailed=true'` |
 | ES sink chết hàng loạt khi tải cao | ES dội ngược, connector NPE lúc parse phản hồi bulk rồi chết hẳn thay vì thử lại | Giảm tải hoặc tăng `batch.size`/`max.retries` của sink; `connect_health` báo ngay |
+| Metric ClickHouse cao gấp đôi thực tế | `flink_metrics apply` từng CỘNG THÊM job chứ không thay thế — hai bản cùng ghi một sink | Đã vá ([ADR-0048](../decisions/0048-flink-job-lifecycle.md)): apply huỷ job cũ theo state trước khi submit |
+| Job Flink `RUNNING` mà dữ liệu không tới | Crash loop: chết rồi tự restart, `flink list` vẫn thấy RUNNING giữa hai lần | `cli verify` (`flink_jobs`) đọc `exceptionHistory` — lịch sử cộng dồn nên không nói dối |
+| `cli apply` dừng ở bước spark ngay sau khi dựng stack | Bronze chưa có `customers`: bảng 100 dòng không bao giờ đạt `flush.size=1000` | KHÔNG phải lỗi — chờ ~10 phút (`rotate.schedule.interval.ms`) rồi `cli apply --only spark` |
 
 ---
 
@@ -251,7 +254,7 @@ một chỗ thì dùng lệnh lẻ:
 python -m dataplatform.deployers.connectors apply
 ```
 
-**Chạy cả 9 verifier một lượt:**
+**Chạy cả 10 verifier một lượt:**
 
 ```bash
 python -m dataplatform.cli verify

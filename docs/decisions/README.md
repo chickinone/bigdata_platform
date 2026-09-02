@@ -81,3 +81,4 @@
 | [0045](0045-orphan-gc-state.md) | State + thu gom rác — `metadata/` quyết định cả cái KHÔNG được tồn tại |
 | [0046](0046-om-catalog-verifier.md) | Verifier OpenMetadata — kéo mảnh cuối vào vòng lặp |
 | [0047](0047-connect-task-health-verifier.md) | Verifier sức khoẻ Kafka Connect — task, không phải connector |
+| [0048](0048-flink-job-lifecycle.md) | Vòng đời job Flink — apply là thay thế, và có verifier cho crash loop |

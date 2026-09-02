@@ -142,7 +142,7 @@ class FailedStormDetector(KeyedProcessFunction):
         if current_ts_ms is None:
             return
 
-        history = list(self.failed_history.get())
+        history = list(self.failed_history.get() or [])
         cutoff = current_ts_ms - self.window_ms
         history = [entry for entry in history if entry[0] >= cutoff]
         history.append((current_ts_ms, int(value.transaction_id), str(value.amount)))
@@ -166,13 +166,28 @@ class FailedStormDetector(KeyedProcessFunction):
         ctx.timer_service().register_event_time_timer(current_ts_ms + self.window_ms)
 
     def on_timer(self, timestamp, ctx):
-        history = list(self.failed_history.get())
+        """Dọn state hết hạn. KHÔNG phát alert, nhưng VẪN phải trả về iterable.
+
+        PyFlink gọi `yield from on_timer(...)` (input_handler.py:111). Hàm này không có
+        `yield` nào nên Python coi nó là hàm thường và trả `None` -> `yield from None`
+        -> TypeError: 'NoneType' object is not iterable.
+
+        Vì sao lâu mới lộ: job chạy bình thường cho tới khi timer ĐẦU TIÊN nổ (cần đủ
+        giao dịch failed dồn trong cửa sổ), rồi crash -> Flink restart -> lại chạy tới
+        timer sau -> crash. Vòng lặp âm thầm: `flink list` vẫn thấy RUNNING giữa hai
+        lần chết, và đã lặp 245 lần / 1016 lỗi trước khi bị phát hiện.
+
+        `process_element` không dính vì nó CÓ `yield` nên là generator sẵn.
+        """
+        # `get()` trả None khi state rỗng — cùng họ lỗi, chặn luôn.
+        history = list(self.failed_history.get() or [])
         cutoff = timestamp - self.window_ms
         kept = [entry for entry in history if entry[0] >= cutoff]
         if kept:
             self.failed_history.update(kept)
         else:
             self.failed_history.clear()
+        return []
 
 
 if __name__ == "__main__":
